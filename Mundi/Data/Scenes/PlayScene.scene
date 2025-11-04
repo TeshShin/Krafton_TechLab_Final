@@ -301,13 +301,13 @@
       "bActorIsActive" : true
     }
   },
-  "NextUUID" : 4372,
+  "NextUUID" : 8038,
   "PerspectiveCamera" : {
     "FOV" : [60.000000],
     "FarClip" : [1000.000000],
-    "Location" : [143.586807, 64.478096, 67.343925],
+    "Location" : [11.266682, -7.936222, 2.219761],
     "NearClip" : [0.100000],
-    "Rotation" : [0.000000, 24.251020, -174.262848]
+    "Rotation" : [0.000000, 9.144776, 115.164520]
   },
   "Version" : 1
 }
