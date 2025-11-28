@@ -472,3 +472,6 @@ __pycache__/
 *$py.class
 *.so
 .Python
+
+
+!/Mundi/ThirdParty/lib/PhysX/**
