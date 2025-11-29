@@ -5,6 +5,7 @@
 #include "FAudioDevice.h"
 #include "FbxLoader.h"
 #include "PlatformCrashHandler.h"
+#include "GameUI/SGameHUD.h"
 #include <ObjManager.h>
 
 #include "Source/Runtime/Physics/PhysicsSystem.h"
@@ -37,11 +38,11 @@ static void LoadIniFile()
     }
 }
 
-static void SaveIniFile()
+void UEditorEngine::SaveIniFile()
 {
-    std::ofstream outfile("editor.ini");
-    for (const auto& pair : EditorINI)
-        outfile << pair.first << " = " << pair.second << std::endl;
+    std::ofstream Outfile("editor.ini");
+    for (const auto& Pair : EditorINI)
+        Outfile << Pair.first << " = " << Pair.second << std::endl;
 }
 
 UEditorEngine::UEditorEngine()
@@ -212,6 +213,9 @@ bool UEditorEngine::Startup(HINSTANCE hInstance)
     FRect ScreenRect(0, 0, ClientWidth, ClientHeight);
     SLATE.Initialize(RHIDevice.GetDevice(), GWorld, ScreenRect);
 
+    // 최근에 사용한 레벨 불러오기를 시도합니다.
+    GWorld->TryLoadLastUsedLevel();
+
     bRunning = true;
     return true;
 }
@@ -312,6 +316,12 @@ void UEditorEngine::MainLoop()
             {
                 WorldContexts.pop_back();
                 ObjectFactory::DeleteObject(GWorld);
+            }
+
+            // PIE 종료 시 Game HUD 위젯 정리
+            if (SGameHUD::Get().IsInitialized())
+            {
+                SGameHUD::Get().ClearWidgets();
             }
 
             GWorld = WorldContexts[0].World;
