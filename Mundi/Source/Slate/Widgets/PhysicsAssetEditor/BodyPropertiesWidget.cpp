@@ -2,8 +2,8 @@
 #include "BodyPropertiesWidget.h"
 #include "ImGui/imgui.h"
 #include "Source/Runtime/Engine/Viewer/PhysicsAssetEditorState.h"
-#include "Source/Runtime/Engine/Physics/PhysicsAsset.h"
-#include "Source/Runtime/Engine/Physics/FBodySetup.h"
+#include "Source/Runtime/Engine/PhysicsEngine/PhysicsAsset.h"
+#include "Source/Runtime/Engine/PhysicsEngine/FBodySetup.h"
 
 IMPLEMENT_CLASS(UBodyPropertiesWidget);
 
