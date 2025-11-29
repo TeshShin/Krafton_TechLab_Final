@@ -934,6 +934,7 @@ xcopy /y /d "$(ProjectDir)ThirdParty\lib\Lua\lua54.dll" "$(OutDir)"</Command>
     <ClInclude Include="Source\Runtime\Engine\Viewer\SkeletalViewerBootstrap.h" />
     <ClInclude Include="Source\Runtime\Engine\Viewer\ViewerState.h" />
     <ClInclude Include="Source\Runtime\Physics\BodyInstance.h" />
+    <ClInclude Include="Source\Runtime\Physics\BoxElem.h" />
     <ClInclude Include="Source\Runtime\Physics\HitResult.h" />
     <ClInclude Include="Source\Runtime\Physics\PhysicalMaterial.h" />
     <ClInclude Include="Source\Runtime\Physics\PhysicsSystem.h" />
