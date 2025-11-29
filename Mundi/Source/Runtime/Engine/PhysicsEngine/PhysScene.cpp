@@ -1,6 +1,9 @@
 #include "pch.h"
 #include "PhysScene.h"
 
+#include "BodyInstance.h"
+#include "PrimitiveComponent.h"
+
 FPhysScene::FPhysScene(UWorld* InOwningWorld)
     : OwningWorld(InOwningWorld)
 {
@@ -55,7 +58,7 @@ void FPhysScene::InitPhysScene()
     SceneDesc.flags |= PxSceneFlag::eENABLE_ACTIVE_ACTORS;
     SceneDesc.flags |= PxSceneFlag::eENABLE_CCD;
 
-    SceneDesc.gravity = PxVec3(0, -9.81, 0);
+    SceneDesc.gravity = PxVec3(0, 0, -9.81);
 
     PhysXScene = GPhysXSDK->createScene(SceneDesc);
 
@@ -100,7 +103,7 @@ void FPhysScene::TickPhysScene(float DeltaTime)
 
 void FPhysScene::WaitPhysScene()
 {
-    if (PhysXScene) { return; }
+    if (!PhysXScene) { return; }
 
     if (bPhysXSceneExecuting)
     {
@@ -113,5 +116,32 @@ void FPhysScene::ProcessPhysScene()
 {
     if (!PhysXScene) { return; }
 
-    // @todo 결과 동기화
+    SyncComponentsToBodies();
+}
+
+void FPhysScene::SyncComponentsToBodies()
+{
+    if (!PhysXScene) { return; }
+
+    PxU32 NbActiveActors = 0;
+    PxActor** ActiveActors = PhysXScene->getActiveActors(NbActiveActors);
+
+    for (PxU32 i = 0; i < NbActiveActors; i++)
+    {
+        PxRigidActor* RigidActor = ActiveActors[i]->is<PxRigidActor>();
+
+        if (!RigidActor) { continue; }
+
+        if (RigidActor->userData)
+        {
+            FBodyInstance* BodyInstance = static_cast<FBodyInstance*>(RigidActor->userData);
+
+            if (BodyInstance && BodyInstance->OwnerComponent)
+            {
+                FTransform NewTransform = BodyInstance->GetUnrealWorldTransform();
+
+                BodyInstance->OwnerComponent->SetWorldTransform(NewTransform);
+            }
+        }
+    }
 }

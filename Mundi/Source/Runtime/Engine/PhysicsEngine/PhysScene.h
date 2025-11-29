@@ -49,6 +49,9 @@ private:
     /** 시뮬레이션 결과를 처리하고 동기화한다. */
     void ProcessPhysScene();
 
+    /** 컴포넌트의 트랜스폼에 시뮬레이션 결과를 동기화 */
+    void SyncComponentsToBodies();
+
     /** PhysX Scene */
     PxScene* PhysXScene;
 

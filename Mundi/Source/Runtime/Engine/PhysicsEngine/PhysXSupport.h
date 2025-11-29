@@ -1,8 +1,7 @@
 #pragma once
 
+#include "PhysXPublic.h"
 #include "PxPhysicsAPI.h"
-
-using namespace physx;
 
 /**
  * @note 현재는 PhysX에서 제공하는 디폴트 할당자를 사용한다.
@@ -30,7 +29,7 @@ public:
         case PxErrorCode::eINVALID_OPERATION: ErrorCodeStr = "Invalid Op"; break;
         case PxErrorCode::eOUT_OF_MEMORY:     ErrorCodeStr = "Out of Memory"; break;
         case PxErrorCode::eINTERNAL_ERROR:    ErrorCodeStr = "Internal Error"; break;
-        default:                                     ErrorCodeStr = "Unknown"; break;
+        default:                              ErrorCodeStr = "Unknown"; break;
         }
 
         UE_LOG("[PhysX Error] [%s] %s (%s:%d)\n", ErrorCodeStr.c_str(), message, file, line);
