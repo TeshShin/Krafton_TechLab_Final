@@ -15,6 +15,7 @@ class D3D11RHI;
 class UPrimitiveComponent;
 class UDecalComponent;
 class UHeightFogComponent;
+class UDepthOfFieldComponent;
 class UAmbientLightComponent;
 class UDirectionalLightComponent;
 class UPointLightComponent;
@@ -62,6 +63,7 @@ struct FSceneGlobals
 	TArray<UDirectionalLightComponent*> DirectionalLights;
 	TArray<UAmbientLightComponent*> AmbientLights;
 	TArray<UHeightFogComponent*> Fogs;	// 첫 번째로 찾은 Fog를 사용함
+	TArray<UDepthOfFieldComponent*> DepthOfFields;	// DoF 컴포넌트들 (Priority/BlendWeight로 블렌딩)
 };
 
 /**

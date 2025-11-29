@@ -27,6 +27,7 @@
 #include "OBB.h"
 #include "BoundingSphere.h"
 #include "HeightFogComponent.h"
+#include "DepthOfFieldComponent.h"
 #include "Gizmo/GizmoArrowComponent.h"
 #include "Gizmo/GizmoRotateComponent.h"
 #include "Gizmo/GizmoScaleComponent.h"
@@ -720,6 +721,7 @@ void FSceneRenderer::GatherVisibleProxies()
 	const bool bDrawSkeletalMeshes = World->GetRenderSettings().IsShowFlagEnabled(EEngineShowFlags::SF_SkeletalMeshes);
 	const bool bDrawDecals = World->GetRenderSettings().IsShowFlagEnabled(EEngineShowFlags::SF_Decals);
 	const bool bDrawFog = World->GetRenderSettings().IsShowFlagEnabled(EEngineShowFlags::SF_Fog);
+	const bool bDrawDepthOfField = World->GetRenderSettings().IsShowFlagEnabled(EEngineShowFlags::SF_DepthOfField);
 	const bool bDrawLight = World->GetRenderSettings().IsShowFlagEnabled(EEngineShowFlags::SF_Lighting);
 	const bool bUseAntiAliasing = World->GetRenderSettings().IsShowFlagEnabled(EEngineShowFlags::SF_FXAA);
 	const bool bUseBillboard = World->GetRenderSettings().IsShowFlagEnabled(EEngineShowFlags::SF_Billboard);
@@ -810,17 +812,18 @@ void FSceneRenderer::GatherVisibleProxies()
 					{
 						SceneGlobals.Fogs.Add(FogComponent);
 					}
-
+					else if (UDepthOfFieldComponent* DofComponent = Cast<UDepthOfFieldComponent>(Component); DofComponent && bDrawDepthOfField)
+					{
+						SceneGlobals.DepthOfFields.Add(DofComponent);
+					}
 					else if (UDirectionalLightComponent* LightComponent = Cast<UDirectionalLightComponent>(Component); LightComponent && bDrawLight)
 					{
 						SceneGlobals.DirectionalLights.Add(LightComponent);
 					}
-
 					else if (UAmbientLightComponent* LightComponent = Cast<UAmbientLightComponent>(Component); LightComponent && bDrawLight)
 					{
 						SceneGlobals.AmbientLights.Add(LightComponent);
 					}
-
 					else if (UPointLightComponent* LightComponent = Cast<UPointLightComponent>(Component); LightComponent && bDrawLight)
 					{
 						if (USpotLightComponent* SpotLightComponent = Cast<USpotLightComponent>(LightComponent); SpotLightComponent)
@@ -1266,7 +1269,23 @@ void FSceneRenderer::RenderPostProcessingPasses()
 			PostProcessModifiers.Add(FogPostProc);
 		}
 	}
-	
+
+	// Register Depth of Field Modifiers
+	// DoF는 Priority와 BlendWeight로 여러 컴포넌트를 블렌딩할 수 있음
+	for (UDepthOfFieldComponent* DofComponent : SceneGlobals.DepthOfFields)
+	{
+		if (DofComponent && DofComponent->IsDepthOfFieldEnabled())
+		{
+			FPostProcessModifier DofPostProc;
+			DofPostProc.Type = EPostProcessEffectType::DOF;
+			DofPostProc.bEnabled = true;
+			DofPostProc.SourceObject = DofComponent;
+			DofPostProc.Priority = DofComponent->GetDofPriority();
+			DofPostProc.Weight = DofComponent->GetBlendWeight();
+			PostProcessModifiers.Add(DofPostProc);
+		}
+	}
+
 	PostProcessModifiers.Sort([](const FPostProcessModifier& LHS, const FPostProcessModifier& RHS)
 	{
 		if (LHS.Priority == RHS.Priority)
