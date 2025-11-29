@@ -1,5 +1,5 @@
-﻿#pragma once
-#include "Object.h"
+#pragma once
+#include "BodySetupCore.h"
 #include "AggregateGeom.h"
 #include "PhysXConversion.h"
 #include "PhysicalMaterial.h"
@@ -11,8 +11,8 @@ struct FBodyInstance;
 /**
  * UBodySetup
  *
- * 물리 바디의 충돌 형태를 정의하는 기본 클래스.
- * StaticMesh 등의 단순 충돌 Shape 관리에 사용.
+ * 물리 바디의 충돌 형태를 정의하는 클래스.
+ * UBodySetupCore를 상속받아 충돌 Shape 관리 기능 추가.
  *
  * Unreal Engine의 UBodySetup과 유사한 역할:
  * - FKAggregateGeom을 통해 복합 충돌 Shape 관리
@@ -21,27 +21,25 @@ struct FBodyInstance;
  * SkeletalMesh용은 USkeletalBodySetup을 사용할 것.
  */
 UCLASS(DisplayName="바디 셋업", Description="물리 바디의 충돌 형태 정의")
-class UBodySetup : public UObject
+class UBodySetup : public UBodySetupCore
 {
     GENERATED_REFLECTION_BODY()
 
 public:
-    // --- 본 정보 ---
-
-    // 이 BodySetup이 연결된 본 이름 (스켈레탈 메시용)
-    UPROPERTY(EditAnywhere, Category="Bone")
-    FName BoneName = "None";
-
-    // --- 기본 설정 ---
+    // --- 충돌 Geometry ---
 
     // 충돌 Geometry 컨테이너 (Sphere, Box, Capsule 등)
+    UPROPERTY(EditAnywhere, Category="BodySetup")
     FKAggregateGeom AggGeom;
+
+    // --- 충돌 설정 ---
 
     // 기본 충돌 활성화 상태
     UPROPERTY(EditAnywhere, Category="Physics")
     ECollisionEnabled DefaultCollisionEnabled = ECollisionEnabled::QueryAndPhysics;
 
     // 물리 재질 (nullptr이면 기본 재질 사용)
+    UPROPERTY(EditAnywhere, Category="Physics")
     UPhysicalMaterial* PhysMaterial = nullptr;
 
     // --- 생성자/소멸자 ---

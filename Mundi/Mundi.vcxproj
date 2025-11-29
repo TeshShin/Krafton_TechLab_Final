@@ -426,6 +426,7 @@ xcopy /y /d "$(ProjectDir)ThirdParty\lib\Lua\lua54.dll" "$(OutDir)"</Command>
     <ClCompile Include="Source\Runtime\Engine\Viewer\ViewerState.cpp" />
     <ClCompile Include="Source\Runtime\Physics\BodyInstance.cpp" />
     <ClCompile Include="Source\Runtime\Physics\BodySetup.cpp" />
+    <ClCompile Include="Source\Runtime\Physics\BodySetupCore.cpp" />
     <ClCompile Include="Source\Runtime\Physics\PhysicalMaterial.cpp" />
     <ClCompile Include="Source\Runtime\Physics\PhysicsAsset.cpp" />
     <ClCompile Include="Source\Runtime\Physics\PhysicsConstraintTemplate.cpp" />
@@ -694,6 +695,7 @@ xcopy /y /d "$(ProjectDir)ThirdParty\lib\Lua\lua54.dll" "$(OutDir)"</Command>
     <ClCompile Include="Generated\USkeletalBodySetup.generated.cpp" />
     <ClCompile Include="Generated\UPhysicsConstraintTemplate.generated.cpp" />
     <ClCompile Include="Generated\FConstraintInstance.generated.cpp" />
+    <ClCompile Include="Generated\UBodySetupCore.generated.cpp" />
   </ItemGroup>
   <ItemGroup>
     <FxCompile Include="Shaders\Common\LightingBuffers.hlsl">
@@ -951,6 +953,7 @@ xcopy /y /d "$(ProjectDir)ThirdParty\lib\Lua\lua54.dll" "$(OutDir)"</Command>
     <ClInclude Include="Source\Runtime\Physics\AggregateGeom.h" />
     <ClInclude Include="Source\Runtime\Physics\BodyInstance.h" />
     <ClInclude Include="Source\Runtime\Physics\BodySetup.h" />
+    <ClInclude Include="Source\Runtime\Physics\BodySetupCore.h" />
     <ClInclude Include="Source\Runtime\Physics\BoxElem.h" />
     <ClInclude Include="Source\Runtime\Physics\ConstraintInstance.h" />
     <ClInclude Include="Source\Runtime\Physics\HitResult.h" />
@@ -1254,6 +1257,7 @@ xcopy /y /d "$(ProjectDir)ThirdParty\lib\Lua\lua54.dll" "$(OutDir)"</Command>
     <ClInclude Include="Generated\USkeletalBodySetup.generated.h" />
     <ClInclude Include="Generated\UPhysicsConstraintTemplate.generated.h" />
     <ClInclude Include="Generated\FConstraintInstance.generated.h" />
+    <ClInclude Include="Generated\UBodySetupCore.generated.h" />
   </ItemGroup>
   <ItemGroup>
     <None Include="BuildTools\CodeGenerator\generate.py" />
