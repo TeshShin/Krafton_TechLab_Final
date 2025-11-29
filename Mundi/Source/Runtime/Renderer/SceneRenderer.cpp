@@ -1293,6 +1293,9 @@ void FSceneRenderer::RenderPostProcessingPasses()
 		case EPostProcessEffectType::Gamma:
 			GammaPass.Execute(Modifier, View, RHIDevice);
 			break;
+		case EPostProcessEffectType::DOF:
+			DOFPass.Execute(Modifier, View, RHIDevice);
+			break;
 		}
 	}
 }
@@ -1321,7 +1324,7 @@ void FSceneRenderer::RenderSceneDepthPostProcess()
 	RHIDevice->OMSetBlendState(false);
 
 	// 쉐이더 설정
-	UShader* FullScreenTriangleVS = UResourceManager::GetInstance().Load<UShader>("Shaders/Utility/FullScreenTriangle_VS.hlsl");
+	UShader* FullScreenTriangleVS = UResourceManager::GetInstance().Load<UShader>(UResourceManager::FullScreenVSPath);
 	UShader* SceneDepthPS = UResourceManager::GetInstance().Load<UShader>("Shaders/Utility/SceneDepth_PS.hlsl");
 	if (!FullScreenTriangleVS || !FullScreenTriangleVS->GetVertexShader() || !SceneDepthPS || !SceneDepthPS->GetPixelShader())
 	{
@@ -1382,7 +1385,7 @@ void FSceneRenderer::RenderTileCullingDebug()
 	RHIDevice->OMSetBlendState(false);
 
 	// 셰이더 설정
-	UShader* FullScreenTriangleVS = UResourceManager::GetInstance().Load<UShader>("Shaders/Utility/FullScreenTriangle_VS.hlsl");
+	UShader* FullScreenTriangleVS = UResourceManager::GetInstance().Load<UShader>(UResourceManager::FullScreenVSPath);
 	UShader* TileDebugPS = UResourceManager::GetInstance().Load<UShader>("Shaders/PostProcess/TileDebugVisualization_PS.hlsl");
 	if (!FullScreenTriangleVS || !FullScreenTriangleVS->GetVertexShader() || !TileDebugPS || !TileDebugPS->GetPixelShader())
 	{
@@ -1793,7 +1796,7 @@ void FSceneRenderer::ApplyScreenEffectsPass()
 	RHIDevice->GetDeviceContext()->PSSetShaderResources(0, 1, &SourceSRV);
 	RHIDevice->GetDeviceContext()->PSSetSamplers(0, 1, &SamplerState);
 
-	UShader* FullScreenTriangleVS = UResourceManager::GetInstance().Load<UShader>("Shaders/Utility/FullScreenTriangle_VS.hlsl");
+	UShader* FullScreenTriangleVS = UResourceManager::GetInstance().Load<UShader>(UResourceManager::FullScreenVSPath);
 	UShader* CopyTexturePS = UResourceManager::GetInstance().Load<UShader>("Shaders/PostProcess/FXAA_PS.hlsl");
 	if (!FullScreenTriangleVS || !FullScreenTriangleVS->GetVertexShader() || !CopyTexturePS || !CopyTexturePS->GetPixelShader())
 	{
@@ -1853,8 +1856,8 @@ void FSceneRenderer::CompositeToBackBuffer()
 	RHIDevice->GetDeviceContext()->PSSetSamplers(0, 1, &SamplerState);
 
 	// 5. 셰이더 준비
-	UShader* FullScreenTriangleVS = UResourceManager::GetInstance().Load<UShader>("Shaders/Utility/FullScreenTriangle_VS.hlsl");
-	UShader* BlitPS = UResourceManager::GetInstance().Load<UShader>("Shaders/Utility/Blit_PS.hlsl");
+	UShader* FullScreenTriangleVS = UResourceManager::GetInstance().Load<UShader>(UResourceManager::FullScreenVSPath);
+	UShader* BlitPS = UResourceManager::GetInstance().Load<UShader>(UResourceManager::BlitPSPath);
 	if (!FullScreenTriangleVS || !FullScreenTriangleVS->GetVertexShader() || !BlitPS || !BlitPS->GetPixelShader())
 	{
 		UE_LOG("Blit용 셰이더 없음!\n");

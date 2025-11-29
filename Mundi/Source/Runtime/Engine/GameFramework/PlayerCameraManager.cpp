@@ -6,6 +6,7 @@
 #include "Camera/CamMod_LetterBox.h"
 #include "Camera/CamMod_Vignette.h"
 #include "Camera/CamMod_Gamma.h"
+#include "Camera/CamMod_DOF.h"
 #include "SceneView.h"
 #include "CameraActor.h"
 #include "CameraComponent.h"
@@ -76,6 +77,8 @@ void APlayerCameraManager::BeginPlay()
 	{
 		UE_LOG("[warning] 현재 월드에 카메라가 없습니다. (Editor에서만 Editor 전용 카메라로 Fallback 처리됨)");
 	}
+	UCamMod_DOF* DOF = new UCamMod_DOF();
+	ActiveModifiers.Add(DOF);
 }
 
 // 월드에 또 다른 APlayerCameraManager 가 있을 때만 삭제 가능

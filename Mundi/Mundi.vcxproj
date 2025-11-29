@@ -430,6 +430,8 @@ xcopy /y /d "$(ProjectDir)ThirdParty\lib\physx\$(Configuration)\*.dll" "$(OutDir
     <ClCompile Include="Source\Runtime\Engine\Viewer\ViewerState.cpp" />
     <ClCompile Include="Source\Runtime\Renderer\AnimationViewerViewportClient.cpp" />
     <ClCompile Include="Source\Runtime\Renderer\BlendSpaceEditorViewportClient.cpp" />
+    <ClCompile Include="Source\Runtime\Renderer\PostProcessing\DepthOfFieldPass.cpp" />
+    <ClCompile Include="Source\Runtime\Renderer\RenderTexture.cpp" />
     <ClCompile Include="Source\Runtime\Renderer\SkeletalViewerViewportClient.cpp" />
     <ClCompile Include="Source\Runtime\Renderer\LightManager.cpp" />
     <ClCompile Include="Source\Runtime\Renderer\PostProcessing\GammaPass.cpp" />
@@ -935,6 +937,8 @@ xcopy /y /d "$(ProjectDir)ThirdParty\lib\physx\$(Configuration)\*.dll" "$(OutDir
     <ClInclude Include="Source\Runtime\Engine\Viewer\ViewerState.h" />
     <ClInclude Include="Source\Runtime\Renderer\AnimationViewerViewportClient.h" />
     <ClInclude Include="Source\Runtime\Renderer\BlendSpaceEditorViewportClient.h" />
+    <ClInclude Include="Source\Runtime\Renderer\PostProcessing\DepthOfFieldPass.h" />
+    <ClInclude Include="Source\Runtime\Renderer\RenderTexture.h" />
     <ClInclude Include="Source\Runtime\Renderer\SkeletalViewerViewportClient.h" />
     <ClInclude Include="Source\Runtime\Renderer\LightManager.h" />
     <ClInclude Include="Source\Runtime\Engine\Components\AmbientLightComponent.h" />
