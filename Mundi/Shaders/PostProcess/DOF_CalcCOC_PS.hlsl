@@ -54,7 +54,7 @@ float GetLinearDepth(float NDCDepth)
 
 float4 mainPS(PS_INPUT input) : SV_Target
 {
-    float FocusDepth = 20.0f;
+    float FocusDepth = 5.0f;
     float CocScale = 1.0f;
     float Depth = g_DepthTex.Sample(g_LinearClampSample, input.texCoord).r;
     float ViewDepth = GetViewDepth(Depth);
