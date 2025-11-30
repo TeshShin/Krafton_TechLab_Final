@@ -96,6 +96,9 @@ struct PhysicsAssetEditorState : public ViewerState
 	/** 제약 조건 라인 배치 (DOD 기반) */
 	FLinesBatch ConstraintLinesBatch;
 
+	/** 제약 조건 삼각형 배치 (면 기반 시각화) */
+	FTrianglesBatch ConstraintTrianglesBatch;
+
 	// ────────────────────────────────────────────────
 	// 헬퍼 메서드
 	// ────────────────────────────────────────────────

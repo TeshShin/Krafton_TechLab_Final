@@ -8,7 +8,7 @@ UBodySetup::UBodySetup()
         // @todo 임시 머티리얼 사용, 이후 별도의 머티리얼 관리자가 필요함
         PhysMaterial = GPhysXSDK->createMaterial(0.5f, 0.5f, 0.5f);
     }
-}
+} 
 
 UBodySetup::~UBodySetup()
 {

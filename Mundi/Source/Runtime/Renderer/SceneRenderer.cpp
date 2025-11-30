@@ -1438,13 +1438,23 @@ void FSceneRenderer::RenderDebugPass()
 	{
 		if (!LineComponent || LineComponent->IsAlwaysOnTop())
 			continue;
-		
+
         if (World->GetRenderSettings().IsShowFlagEnabled(EEngineShowFlags::SF_Grid))
 		{
 			LineComponent->CollectLineBatches(OwnerRenderer);
 		}
 	}
 	OwnerRenderer->EndLineBatch(FMatrix::Identity());
+
+	// ULineComponent에서 삼각형 배치 수집 (constraint visualization 등)
+	for (ULineComponent* LineComponent : Proxies.EditorLines)
+	{
+		if (!LineComponent)
+			continue;
+
+		LineComponent->CollectTriangleBatches(OwnerRenderer);
+	}
+
 
 	// Always-on-top lines (e.g., skeleton bones), regardless of grid flag
 	OwnerRenderer->BeginLineBatch();

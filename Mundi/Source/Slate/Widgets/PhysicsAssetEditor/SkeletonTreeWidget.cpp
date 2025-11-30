@@ -214,6 +214,71 @@ void USkeletonTreeWidget::RenderBoneNode(int32 BoneIndex, int32 Depth)
 			{
 				// TODO: 바디 제거 기능
 			}
+
+			ImGui::Separator();
+
+			// Constraint 추가 메뉴
+			// 부모 본에 바디가 있으면 Constraint 추가 가능
+			int32 ParentBoneIndex = Bone.ParentIndex;
+			if (ParentBoneIndex >= 0)
+			{
+				// 부모 본에 바디가 있는지 확인
+				int32 ParentBodyIndex = -1;
+				auto ParentBodyIt = Cache.BoneToBodyMap.find(ParentBoneIndex);
+				if (ParentBodyIt != Cache.BoneToBodyMap.end())
+				{
+					ParentBodyIndex = ParentBodyIt->second;
+				}
+
+				if (ParentBodyIndex >= 0)
+				{
+					// 이미 Constraint가 있는지 확인
+					int32 ExistingConstraint = EditorState->EditingAsset->FindConstraintIndex(ParentBodyIndex, BodyIndex);
+
+					if (ExistingConstraint < 0)
+					{
+						// 부모 본 이름 가져오기
+						FString ParentBoneName = Skeleton->Bones[ParentBoneIndex].Name;
+						FString MenuLabel = "Add Constraint to " + ParentBoneName;
+
+						if (ImGui::MenuItem(MenuLabel.c_str()))
+						{
+							// Constraint 추가
+							FString JointName = Bone.Name + "_to_" + ParentBoneName;
+							int32 NewConstraintIdx = EditorState->EditingAsset->AddConstraint(
+								FName(JointName), ParentBodyIndex, BodyIndex);
+
+							if (NewConstraintIdx >= 0)
+							{
+								EditorState->SelectConstraint(NewConstraintIdx);
+								EditorState->bIsDirty = true;
+								EditorState->RequestLinesRebuild();
+								bCacheValid = false;  // 캐시 무효화
+							}
+						}
+					}
+					else
+					{
+						// 이미 Constraint 있음
+						if (ImGui::MenuItem("Select Constraint"))
+						{
+							EditorState->SelectConstraint(ExistingConstraint);
+						}
+						if (ImGui::MenuItem("Remove Constraint"))
+						{
+							EditorState->EditingAsset->RemoveConstraint(ExistingConstraint);
+							EditorState->ClearSelection();
+							EditorState->bIsDirty = true;
+							EditorState->RequestLinesRebuild();
+							bCacheValid = false;
+						}
+					}
+				}
+				else
+				{
+					ImGui::TextDisabled("Parent bone has no body");
+				}
+			}
 		}
 		ImGui::EndPopup();
 	}

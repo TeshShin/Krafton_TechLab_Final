@@ -56,3 +56,32 @@ struct FLinesBatch
 
 	int32 Num() const { return static_cast<int32>(StartPoints.size()); }
 };
+
+/**
+ * FTrianglesBatch - DOD 기반 삼각형 데이터 컨테이너
+ *
+ * 다수의 삼각형을 효율적으로 저장하기 위한 SoA(Structure of Arrays) 구조.
+ * Constraint 시각화 등 면 기반 렌더링에 사용.
+ */
+struct FTrianglesBatch
+{
+	TArray<FVector> Vertices;
+	TArray<uint32> Indices;
+	TArray<FVector4> Colors;
+
+	void Clear()
+	{
+		Vertices.clear();
+		Indices.clear();
+		Colors.clear();
+	}
+
+	void Reserve(int32 NumVertices, int32 NumIndices)
+	{
+		Vertices.reserve(NumVertices);
+		Indices.reserve(NumIndices);
+		Colors.reserve(NumVertices);
+	}
+
+	int32 Num() const { return static_cast<int32>(Vertices.size()); }
+};

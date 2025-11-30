@@ -39,6 +39,7 @@
 URenderer::URenderer(D3D11RHI* InDevice) : RHIDevice(InDevice)
 {
 	InitializeLineBatch();
+	InitializeTriangleBatch();
 
 	// GPU 타이머 초기화 (스키닝 성능 측정용)
 	FSkinningStatManager::GetInstance().InitializeGPUTimer(RHIDevice->GetDevice());
@@ -49,6 +50,11 @@ URenderer::~URenderer()
 	if (LineBatchData)
 	{
 		delete LineBatchData;
+	}
+
+	if (TriangleBatchData)
+	{
+		delete TriangleBatchData;
 	}
 
 	// 지연 해제 큐에 남아있는 모든 버퍼 해제
@@ -444,4 +450,277 @@ void URenderer::ProcessDeferredReleases()
 			DeferredReleaseQueue.RemoveAt(i);
 		}
 	}
+}
+
+// =============================================
+// Triangle Batch Rendering System
+// =============================================
+
+void URenderer::InitializeTriangleBatch()
+{
+	// Create UDynamicMesh for efficient triangle batching
+	DynamicTriangleMesh = UResourceManager::GetInstance().Load<ULineDynamicMesh>("Triangle");
+
+	// Initialize with maximum capacity (MAX_TRIANGLES * 3 vertices, MAX_TRIANGLES * 3 indices)
+	uint32 maxVertices = MAX_TRIANGLES * 3;
+	uint32 maxIndices = MAX_TRIANGLES * 3;
+	DynamicTriangleMesh->Load(maxVertices, maxIndices, RHIDevice->GetDevice());
+
+	// Create FMeshData for accumulating triangle data
+	TriangleBatchData = new FMeshData();
+}
+
+void URenderer::BeginTriangleBatch()
+{
+	if (!TriangleBatchData) return;
+
+	bTriangleBatchActive = true;
+
+	// Clear previous batch data
+	TriangleBatchData->Vertices.clear();
+	TriangleBatchData->Color.clear();
+	TriangleBatchData->Indices.clear();
+}
+
+void URenderer::AddTriangle(const FVector& V0, const FVector& V1, const FVector& V2, const FVector4& Color)
+{
+	if (!bTriangleBatchActive || !TriangleBatchData) return;
+
+	uint32 startIndex = static_cast<uint32>(TriangleBatchData->Vertices.size());
+
+	// Add vertices
+	TriangleBatchData->Vertices.push_back(V0);
+	TriangleBatchData->Vertices.push_back(V1);
+	TriangleBatchData->Vertices.push_back(V2);
+
+	// Add colors
+	TriangleBatchData->Color.push_back(Color);
+	TriangleBatchData->Color.push_back(Color);
+	TriangleBatchData->Color.push_back(Color);
+
+	// Add indices for triangle (3 vertices per triangle)
+	TriangleBatchData->Indices.push_back(startIndex);
+	TriangleBatchData->Indices.push_back(startIndex + 1);
+	TriangleBatchData->Indices.push_back(startIndex + 2);
+}
+
+void URenderer::AddTriangles(const TArray<FVector>& Vertices, const TArray<uint32>& Indices, const FVector4& Color)
+{
+	if (!bTriangleBatchActive || !TriangleBatchData) return;
+	if (Indices.size() % 3 != 0) return;
+
+	uint32 startIndex = static_cast<uint32>(TriangleBatchData->Vertices.size());
+
+	// Reserve space for efficiency
+	TriangleBatchData->Vertices.reserve(TriangleBatchData->Vertices.size() + Vertices.size());
+	TriangleBatchData->Color.reserve(TriangleBatchData->Color.size() + Vertices.size());
+	TriangleBatchData->Indices.reserve(TriangleBatchData->Indices.size() + Indices.size());
+
+	// Add all vertices
+	for (const FVector& V : Vertices)
+	{
+		TriangleBatchData->Vertices.push_back(V);
+		TriangleBatchData->Color.push_back(Color);
+	}
+
+	// Add indices (offset by startIndex)
+	for (uint32 Idx : Indices)
+	{
+		TriangleBatchData->Indices.push_back(startIndex + Idx);
+	}
+}
+
+void URenderer::AddTriangles(const TArray<FVector>& Vertices, const TArray<uint32>& Indices, const TArray<FVector4>& Colors)
+{
+	if (!bTriangleBatchActive || !TriangleBatchData) return;
+	if (Indices.size() % 3 != 0)
+	{
+		UE_LOG("[AddTriangles] FAIL: Indices %% 3 != 0 (%zu)", Indices.size());
+		return;
+	}
+	if (Vertices.size() != Colors.size())
+	{
+		UE_LOG("[AddTriangles] FAIL: Vertices(%zu) != Colors(%zu)", Vertices.size(), Colors.size());
+		return;
+	}
+
+	uint32 startIndex = static_cast<uint32>(TriangleBatchData->Vertices.size());
+
+	// Reserve space for efficiency
+	TriangleBatchData->Vertices.reserve(TriangleBatchData->Vertices.size() + Vertices.size());
+	TriangleBatchData->Color.reserve(TriangleBatchData->Color.size() + Colors.size());
+	TriangleBatchData->Indices.reserve(TriangleBatchData->Indices.size() + Indices.size());
+
+	// Add all vertices with their colors
+	for (size_t i = 0; i < Vertices.size(); ++i)
+	{
+		TriangleBatchData->Vertices.push_back(Vertices[i]);
+		TriangleBatchData->Color.push_back(Colors[i]);
+	}
+
+	// Add indices (offset by startIndex)
+	for (uint32 Idx : Indices)
+	{
+		TriangleBatchData->Indices.push_back(startIndex + Idx);
+	}
+
+	UE_LOG("[AddTriangles] OK: Added %zu verts, %zu indices", Vertices.size(), Indices.size());
+}
+
+void URenderer::EndTriangleBatch(const FMatrix& ModelMatrix)
+{
+	UE_LOG("[EndTriangleBatch] Active=%d, Data=%p, Mesh=%p, Verts=%zu, MeshInit=%d, MaxV=%u, MaxI=%u",
+		bTriangleBatchActive ? 1 : 0,
+		TriangleBatchData,
+		DynamicTriangleMesh,
+		TriangleBatchData ? TriangleBatchData->Vertices.size() : 0,
+		DynamicTriangleMesh ? (DynamicTriangleMesh->IsInitialized() ? 1 : 0) : -1,
+		DynamicTriangleMesh ? DynamicTriangleMesh->GetMaxVertices() : 0,
+		DynamicTriangleMesh ? DynamicTriangleMesh->GetMaxIndices() : 0);
+
+	if (!bTriangleBatchActive || !TriangleBatchData || !DynamicTriangleMesh || TriangleBatchData->Vertices.empty())
+	{
+		UE_LOG("[EndTriangleBatch] Early return - active=%d, data=%p, mesh=%p, empty=%d",
+			bTriangleBatchActive ? 1 : 0, TriangleBatchData, DynamicTriangleMesh,
+			TriangleBatchData ? (TriangleBatchData->Vertices.empty() ? 1 : 0) : -1);
+		bTriangleBatchActive = false;
+		return;
+	}
+
+	// Clamp to GPU buffer capacity
+	const uint32 totalTriangles = static_cast<uint32>(TriangleBatchData->Indices.size() / 3);
+	UE_LOG("[EndTriangleBatch] totalTriangles=%u, MAX=%u", totalTriangles, MAX_TRIANGLES);
+	if (totalTriangles > MAX_TRIANGLES)
+	{
+		const uint32 clampedTriangles = MAX_TRIANGLES;
+		const uint32 clampedVerts = clampedTriangles * 3;
+		const uint32 clampedIndices = clampedTriangles * 3;
+		TriangleBatchData->Vertices.resize(clampedVerts);
+		TriangleBatchData->Color.resize(clampedVerts);
+		TriangleBatchData->Indices.resize(clampedIndices);
+	}
+
+	UE_LOG("[EndTriangleBatch] Before UpdateData - DataVerts=%zu, DataIndices=%zu",
+		TriangleBatchData->Vertices.size(), TriangleBatchData->Indices.size());
+
+	// Efficiently update dynamic mesh data
+	bool updateResult = DynamicTriangleMesh->UpdateData(TriangleBatchData, RHIDevice->GetDeviceContext());
+	UE_LOG("[EndTriangleBatch] UpdateData returned %d", updateResult ? 1 : 0);
+	if (!updateResult)
+	{
+		UE_LOG("[EndTriangleBatch] UpdateData FAILED");
+		bTriangleBatchActive = false;
+		return;
+	}
+
+	// Set up rendering state
+	FMatrix ModelInvTranspose = ModelMatrix.InverseAffine().Transpose();
+	RHIDevice->SetAndUpdateConstantBuffer(ModelBufferType(ModelMatrix, ModelInvTranspose));
+	RHIDevice->PrepareShader(LineShader);
+
+	// Render using dynamic mesh
+	if (DynamicTriangleMesh->GetCurrentVertexCount() > 0 && DynamicTriangleMesh->GetCurrentIndexCount() > 0)
+	{
+		UE_LOG("[EndTriangleBatch] Drawing %d indices", DynamicTriangleMesh->GetCurrentIndexCount());
+
+		UINT stride = sizeof(FVertexSimple);
+		UINT offset = 0;
+
+		ID3D11Buffer* vertexBuffer = DynamicTriangleMesh->GetVertexBuffer();
+		ID3D11Buffer* indexBuffer = DynamicTriangleMesh->GetIndexBuffer();
+
+		RHIDevice->GetDeviceContext()->IASetVertexBuffers(0, 1, &vertexBuffer, &stride, &offset);
+		RHIDevice->GetDeviceContext()->IASetIndexBuffer(indexBuffer, DXGI_FORMAT_R32_UINT, 0);
+		RHIDevice->GetDeviceContext()->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+
+		// Disable backface culling for debug triangles (양면 렌더링)
+		RHIDevice->RSSetState(ERasterizerMode::Solid_NoCull);
+
+		// Enable blending for semi-transparent triangles
+		RHIDevice->OMSetBlendState(true);
+		// 깊이 테스트만 사용 (스텐실 제외)
+		RHIDevice->OMSetDepthStencilState(EComparisonFunc::LessEqual);
+		RHIDevice->GetDeviceContext()->DrawIndexed(DynamicTriangleMesh->GetCurrentIndexCount(), 0, 0);
+
+		// Restore state
+		RHIDevice->OMSetBlendState(false);
+		RHIDevice->RSSetState(ERasterizerMode::Solid);  // Restore culling
+	}
+	else
+	{
+		UE_LOG("[EndTriangleBatch] Skip draw - no data in mesh");
+	}
+
+	bTriangleBatchActive = false;
+}
+
+void URenderer::EndTriangleBatchAlwaysOnTop(const FMatrix& ModelMatrix)
+{
+	if (!bTriangleBatchActive || !TriangleBatchData || !DynamicTriangleMesh || TriangleBatchData->Vertices.empty())
+	{
+		bTriangleBatchActive = false;
+		return;
+	}
+
+	// Clamp to GPU buffer capacity
+	const uint32 totalTriangles = static_cast<uint32>(TriangleBatchData->Indices.size() / 3);
+	if (totalTriangles > MAX_TRIANGLES)
+	{
+		const uint32 clampedTriangles = MAX_TRIANGLES;
+		const uint32 clampedVerts = clampedTriangles * 3;
+		const uint32 clampedIndices = clampedTriangles * 3;
+		TriangleBatchData->Vertices.resize(clampedVerts);
+		TriangleBatchData->Color.resize(clampedVerts);
+		TriangleBatchData->Indices.resize(clampedIndices);
+	}
+
+	// Efficiently update dynamic mesh data
+	if (!DynamicTriangleMesh->UpdateData(TriangleBatchData, RHIDevice->GetDeviceContext()))
+	{
+		bTriangleBatchActive = false;
+		return;
+	}
+
+	// Set up rendering state
+	FMatrix ModelInvTranspose = ModelMatrix.InverseAffine().Transpose();
+	RHIDevice->SetAndUpdateConstantBuffer(ModelBufferType(ModelMatrix, ModelInvTranspose));
+	RHIDevice->PrepareShader(LineShader);
+
+	// Render using dynamic mesh
+	if (DynamicTriangleMesh->GetCurrentVertexCount() > 0 && DynamicTriangleMesh->GetCurrentIndexCount() > 0)
+	{
+		UINT stride = sizeof(FVertexSimple);
+		UINT offset = 0;
+
+		ID3D11Buffer* vertexBuffer = DynamicTriangleMesh->GetVertexBuffer();
+		ID3D11Buffer* indexBuffer = DynamicTriangleMesh->GetIndexBuffer();
+
+		RHIDevice->GetDeviceContext()->IASetVertexBuffers(0, 1, &vertexBuffer, &stride, &offset);
+		RHIDevice->GetDeviceContext()->IASetIndexBuffer(indexBuffer, DXGI_FORMAT_R32_UINT, 0);
+		RHIDevice->GetDeviceContext()->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+
+		// 양면 렌더링 + 깊이 테스트 비활성화
+		RHIDevice->RSSetState(ERasterizerMode::Solid_NoCull);
+		RHIDevice->OMSetDepthStencilState(EComparisonFunc::Disable);
+		RHIDevice->OMSetBlendState(true);
+		RHIDevice->GetDeviceContext()->DrawIndexed(DynamicTriangleMesh->GetCurrentIndexCount(), 0, 0);
+
+		// Restore state
+		RHIDevice->RSSetState(ERasterizerMode::Solid);
+		RHIDevice->OMSetBlendState(false);
+		RHIDevice->OMSetDepthStencilState(EComparisonFunc::LessEqual);
+	}
+
+	bTriangleBatchActive = false;
+}
+
+void URenderer::ClearTriangleBatch()
+{
+	if (!TriangleBatchData) return;
+
+	TriangleBatchData->Vertices.clear();
+	TriangleBatchData->Color.clear();
+	TriangleBatchData->Indices.clear();
+
+	bTriangleBatchActive = false;
 }

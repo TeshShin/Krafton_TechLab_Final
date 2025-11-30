@@ -1129,6 +1129,7 @@
     <ClCompile Include="Source\Runtime\Engine\PhysicsEngine\BodyInstance.cpp" />
     <ClCompile Include="Source\Runtime\Engine\PhysicsEngine\BodySetup.cpp" />
     <ClCompile Include="Source\Runtime\Engine\PhysicsEngine\BoxElem.cpp" />
+    <ClCompile Include="Source\Runtime\Engine\PhysicsEngine\ConstraintInstance.cpp" />
     <ClCompile Include="Source\Runtime\Engine\PhysicsEngine\PhysScene.cpp" />
     <ClCompile Include="Source\Runtime\Engine\PhysicsEngine\PhysXSupport.cpp" />
     <ClCompile Include="Source\Runtime\Engine\PhysicsEngine\ShapeElem.cpp" />
@@ -2392,6 +2393,7 @@
     <ClInclude Include="Source\Runtime\Engine\PhysicsEngine\BodyInstance.h" />
     <ClInclude Include="Source\Runtime\Engine\PhysicsEngine\BodySetup.h" />
     <ClInclude Include="Source\Runtime\Engine\PhysicsEngine\BoxElem.h" />
+    <ClInclude Include="Source\Runtime\Engine\PhysicsEngine\ConstraintInstance.h" />
     <ClInclude Include="Source\Runtime\Engine\PhysicsEngine\PhysScene.h" />
     <ClInclude Include="Source\Runtime\Engine\PhysicsEngine\PhysXPublic.h" />
     <ClInclude Include="Source\Runtime\Engine\PhysicsEngine\PhysXSupport.h" />

@@ -47,6 +47,9 @@ namespace
 	constexpr float M_PI = 3.14159265358979f;
 	constexpr int32 CircleSegments = 16;
 	constexpr int32 CapsuleVerticalLines = 8;
+	constexpr int32 ConeSegments = 12;        // 원뿔 세그먼트 수
+	constexpr int32 SphereRings = 3;          // 구체 링 수
+	constexpr float ConstraintSphereRadius = 0.02f;  // 조인트 구체 크기
 }
 
 /**
@@ -163,6 +166,395 @@ static void GenerateCapsuleLineCoordinates(
 		OutEndPoints.Add(Top + Dir2 * Radius);
 		OutStartPoints.Add(Bottom + Dir1 * Radius);
 		OutEndPoints.Add(Bottom + Dir2 * Radius);
+	}
+}
+
+// ────────────────────────────────────────────────────────────────
+// Constraint 시각화 헬퍼 함수들
+// ────────────────────────────────────────────────────────────────
+
+/**
+ * 조인트 위치에 작은 구체(Sphere) 와이어프레임 생성
+ */
+static void GenerateConstraintSphereLines(
+	const FVector& Center,
+	float Radius,
+	const FVector4& Color,
+	FLinesBatch& OutBatch)
+{
+	// 3개 평면에 원 그리기
+	for (int32 j = 0; j < CircleSegments; ++j)
+	{
+		float Angle1 = (j / static_cast<float>(CircleSegments)) * 2.0f * M_PI;
+		float Angle2 = ((j + 1) / static_cast<float>(CircleSegments)) * 2.0f * M_PI;
+		float Cos1 = cos(Angle1), Sin1 = sin(Angle1);
+		float Cos2 = cos(Angle2), Sin2 = sin(Angle2);
+
+		// XY 평면
+		OutBatch.Add(Center + FVector(Cos1 * Radius, Sin1 * Radius, 0),
+		             Center + FVector(Cos2 * Radius, Sin2 * Radius, 0), Color);
+		// XZ 평면
+		OutBatch.Add(Center + FVector(Cos1 * Radius, 0, Sin1 * Radius),
+		             Center + FVector(Cos2 * Radius, 0, Sin2 * Radius), Color);
+		// YZ 평면
+		OutBatch.Add(Center + FVector(0, Cos1 * Radius, Sin1 * Radius),
+		             Center + FVector(0, Cos2 * Radius, Sin2 * Radius), Color);
+	}
+}
+
+/**
+ * Swing Limit 원뿔(Cone) 시각화 생성
+ * @param JointPos 조인트 위치
+ * @param JointRotation 조인트 회전 (부모→자식 방향)
+ * @param Swing1Limit Y축 회전 제한 (degrees)
+ * @param Swing2Limit Z축 회전 제한 (degrees)
+ * @param ConeLength 원뿔 길이
+ */
+static void GenerateSwingConeLimitLines(
+	const FVector& JointPos,
+	const FQuat& JointRotation,
+	float Swing1Limit,
+	float Swing2Limit,
+	float ConeLength,
+	const FVector4& Color,
+	FLinesBatch& OutBatch)
+{
+	// 각도를 라디안으로 변환
+	float Swing1Rad = Swing1Limit * M_PI / 180.0f;
+	float Swing2Rad = Swing2Limit * M_PI / 180.0f;
+
+	// 원뿔 베이스 원의 점들 계산
+	TArray<FVector> ConeBasePoints;
+	ConeBasePoints.Reserve(ConeSegments);
+
+	for (int32 i = 0; i < ConeSegments; ++i)
+	{
+		float Angle = (i / static_cast<float>(ConeSegments)) * 2.0f * M_PI;
+
+		// 타원형 원뿔 (Swing1 = Y축, Swing2 = Z축)
+		float RadiusY = ConeLength * tan(Swing1Rad);
+		float RadiusZ = ConeLength * tan(Swing2Rad);
+
+		// 로컬 좌표에서 원뿔 베이스 점
+		FVector LocalPoint(
+			ConeLength,  // X축 방향이 원뿔 축
+			RadiusY * cos(Angle),
+			RadiusZ * sin(Angle)
+		);
+
+		// 월드 좌표로 변환
+		FVector WorldPoint = JointPos + JointRotation.RotateVector(LocalPoint);
+		ConeBasePoints.Add(WorldPoint);
+	}
+
+	// 원뿔 베이스 원 그리기
+	for (int32 i = 0; i < ConeSegments; ++i)
+	{
+		int32 NextIdx = (i + 1) % ConeSegments;
+		OutBatch.Add(ConeBasePoints[i], ConeBasePoints[NextIdx], Color);
+	}
+
+	// 조인트에서 원뿔 베이스까지 선 그리기 (4개 주요 방향)
+	for (int32 i = 0; i < ConeSegments; i += ConeSegments / 4)
+	{
+		OutBatch.Add(JointPos, ConeBasePoints[i], Color);
+	}
+}
+
+/**
+ * Twist Limit 원호(Arc) 시각화 생성
+ * @param JointPos 조인트 위치
+ * @param JointRotation 조인트 회전
+ * @param TwistMin 최소 회전 (degrees)
+ * @param TwistMax 최대 회전 (degrees)
+ * @param ArcRadius 원호 반지름
+ */
+static void GenerateTwistLimitLines(
+	const FVector& JointPos,
+	const FQuat& JointRotation,
+	float TwistMin,
+	float TwistMax,
+	float ArcRadius,
+	const FVector4& Color,
+	FLinesBatch& OutBatch)
+{
+	// 각도를 라디안으로 변환
+	float TwistMinRad = TwistMin * M_PI / 180.0f;
+	float TwistMaxRad = TwistMax * M_PI / 180.0f;
+
+	// Twist 각도 범위
+	float TwistRange = TwistMaxRad - TwistMinRad;
+	int32 NumSegments = FMath::Max(4, static_cast<int32>(TwistRange / (M_PI / 8.0f)));
+
+	// X축 기준으로 YZ 평면에 원호 그리기
+	TArray<FVector> ArcPoints;
+	ArcPoints.Reserve(NumSegments + 1);
+
+	for (int32 i = 0; i <= NumSegments; ++i)
+	{
+		float T = static_cast<float>(i) / static_cast<float>(NumSegments);
+		float Angle = TwistMinRad + T * TwistRange;
+
+		// 로컬 좌표에서 원호 점 (X축이 Twist 축)
+		FVector LocalPoint(
+			0.0f,
+			ArcRadius * cos(Angle),
+			ArcRadius * sin(Angle)
+		);
+
+		// 월드 좌표로 변환
+		FVector WorldPoint = JointPos + JointRotation.RotateVector(LocalPoint);
+		ArcPoints.Add(WorldPoint);
+	}
+
+	// 원호 그리기
+	for (int32 i = 0; i < ArcPoints.Num() - 1; ++i)
+	{
+		OutBatch.Add(ArcPoints[i], ArcPoints[i + 1], Color);
+	}
+
+	// 시작/끝 라인 (조인트 중심에서)
+	if (ArcPoints.Num() >= 2)
+	{
+		OutBatch.Add(JointPos, ArcPoints[0], Color);
+		OutBatch.Add(JointPos, ArcPoints.Last(), Color);
+	}
+}
+
+/**
+ * Constraint 전체 시각화 생성 (라인 기반 - 와이어프레임)
+ */
+static void GenerateConstraintVisualization(
+	const FConstraintSetup& Constraint,
+	const FVector& ParentPos,
+	const FVector& ChildPos,
+	const FQuat& JointRotation,
+	bool bSelected,
+	FLinesBatch& OutBatch)
+{
+	// 색상 설정
+	FVector4 SphereColor = bSelected ? FVector4(1.0f, 1.0f, 0.0f, 1.0f) : FVector4(1.0f, 0.6f, 0.0f, 1.0f);  // 노란/주황
+	FVector4 SwingColor = bSelected ? FVector4(0.0f, 1.0f, 0.5f, 1.0f) : FVector4(0.0f, 0.8f, 0.4f, 1.0f);   // 초록 (Swing)
+	FVector4 TwistColor = bSelected ? FVector4(0.5f, 0.5f, 1.0f, 1.0f) : FVector4(0.3f, 0.3f, 0.8f, 1.0f);   // 파랑 (Twist)
+	FVector4 LineColor = bSelected ? FVector4(1.0f, 1.0f, 0.0f, 1.0f) : FVector4(1.0f, 0.5f, 0.0f, 1.0f);    // 연결선
+
+	// 조인트 위치 = 자식 본 위치
+	FVector JointPos = ChildPos;
+
+	// 1. 조인트 위치에 구체 그리기
+	float SphereRadius = bSelected ? ConstraintSphereRadius * 1.5f : ConstraintSphereRadius;
+	GenerateConstraintSphereLines(JointPos, SphereRadius, SphereColor, OutBatch);
+
+	// 2. 부모-자식 연결선
+	OutBatch.Add(ParentPos, ChildPos, LineColor);
+
+	// 3. 원뿔 길이 계산 (부모-자식 거리의 30%)
+	float Distance = (ChildPos - ParentPos).Size();
+	float ConeLength = FMath::Max(0.05f, Distance * 0.3f);
+
+	// 4. Swing Limit 원뿔 (각도가 유의미할 때만)
+	if (Constraint.Swing1Limit > 1.0f || Constraint.Swing2Limit > 1.0f)
+	{
+		GenerateSwingConeLimitLines(JointPos, JointRotation,
+			Constraint.Swing1Limit, Constraint.Swing2Limit, ConeLength, SwingColor, OutBatch);
+	}
+
+	// 5. Twist Limit 원호 (각도가 유의미할 때만)
+	float TwistRange = Constraint.TwistLimitMax - Constraint.TwistLimitMin;
+	if (TwistRange > 1.0f && TwistRange < 359.0f)
+	{
+		float ArcRadius = ConeLength * 0.5f;
+		GenerateTwistLimitLines(JointPos, JointRotation,
+			Constraint.TwistLimitMin, Constraint.TwistLimitMax, ArcRadius, TwistColor, OutBatch);
+	}
+}
+
+// ────────────────────────────────────────────────────────────────
+// Constraint 면(삼각형) 기반 시각화 헬퍼 함수들
+// ────────────────────────────────────────────────────────────────
+
+/**
+ * Swing Limit 원뿔(Cone) 면 기반 시각화 생성
+ */
+static void GenerateSwingConeMesh(
+	const FVector& JointPos,
+	const FQuat& JointRotation,
+	float Swing1Limit,
+	float Swing2Limit,
+	float ConeLength,
+	const FVector4& Color,
+	TArray<FVector>& OutVertices,
+	TArray<uint32>& OutIndices,
+	TArray<FVector4>& OutColors)
+{
+	// 각도를 라디안으로 변환 (89도로 클램프하여 tan 폭발 방지)
+	float Swing1Rad = FMath::Min(Swing1Limit, 89.0f) * M_PI / 180.0f;
+	float Swing2Rad = FMath::Min(Swing2Limit, 89.0f) * M_PI / 180.0f;
+
+	// 원뿔 베이스 원의 점들 계산
+	uint32 BaseVertexIndex = static_cast<uint32>(OutVertices.size());
+
+	// 원뿔 꼭지점 (조인트 위치)
+	OutVertices.push_back(JointPos);
+	OutColors.push_back(Color);
+	uint32 ApexIndex = BaseVertexIndex;
+
+	// 원뿔 베이스 점들
+	for (int32 i = 0; i <= ConeSegments; ++i)
+	{
+		float Angle = (i / static_cast<float>(ConeSegments)) * 2.0f * M_PI;
+
+		// 타원형 원뿔 (Swing1 = Y축, Swing2 = Z축)
+		float RadiusY = ConeLength * tan(Swing1Rad);
+		float RadiusZ = ConeLength * tan(Swing2Rad);
+
+		// 로컬 좌표에서 원뿔 베이스 점
+		FVector LocalPoint(
+			ConeLength,  // X축 방향이 원뿔 축
+			RadiusY * cos(Angle),
+			RadiusZ * sin(Angle)
+		);
+
+		// 월드 좌표로 변환
+		FVector WorldPoint = JointPos + JointRotation.RotateVector(LocalPoint);
+		OutVertices.push_back(WorldPoint);
+		OutColors.push_back(Color);
+	}
+
+	// 원뿔 측면 삼각형 (꼭지점 → 베이스 원 순환)
+	for (int32 i = 0; i < ConeSegments; ++i)
+	{
+		uint32 BaseI = BaseVertexIndex + 1 + i;
+		uint32 BaseNext = BaseVertexIndex + 1 + ((i + 1) % (ConeSegments + 1));
+
+		// 삼각형: Apex → BaseI → BaseNext
+		OutIndices.push_back(ApexIndex);
+		OutIndices.push_back(BaseI);
+		OutIndices.push_back(BaseNext);
+	}
+}
+
+/**
+ * Twist Limit 부채꼴(Fan) 면 기반 시각화 생성
+ */
+static void GenerateTwistFanMesh(
+	const FVector& JointPos,
+	const FQuat& JointRotation,
+	float TwistMin,
+	float TwistMax,
+	float ArcRadius,
+	const FVector4& Color,
+	TArray<FVector>& OutVertices,
+	TArray<uint32>& OutIndices,
+	TArray<FVector4>& OutColors)
+{
+	// 각도를 라디안으로 변환
+	float TwistMinRad = TwistMin * M_PI / 180.0f;
+	float TwistMaxRad = TwistMax * M_PI / 180.0f;
+
+	// Twist 각도 범위
+	float TwistRange = TwistMaxRad - TwistMinRad;
+	int32 NumSegments = FMath::Max(4, static_cast<int32>(TwistRange / (M_PI / 8.0f)));
+
+	uint32 BaseVertexIndex = static_cast<uint32>(OutVertices.size());
+
+	// 중심점 (조인트 위치)
+	OutVertices.push_back(JointPos);
+	OutColors.push_back(Color);
+	uint32 CenterIndex = BaseVertexIndex;
+
+	// 원호 점들
+	for (int32 i = 0; i <= NumSegments; ++i)
+	{
+		float T = static_cast<float>(i) / static_cast<float>(NumSegments);
+		float Angle = TwistMinRad + T * TwistRange;
+
+		// 로컬 좌표에서 원호 점 (X축이 Twist 축)
+		FVector LocalPoint(
+			0.0f,
+			ArcRadius * cos(Angle),
+			ArcRadius * sin(Angle)
+		);
+
+		// 월드 좌표로 변환
+		FVector WorldPoint = JointPos + JointRotation.RotateVector(LocalPoint);
+		OutVertices.push_back(WorldPoint);
+		OutColors.push_back(Color);
+	}
+
+	// 부채꼴 삼각형들 (중심 → 원호 점들)
+	for (int32 i = 0; i < NumSegments; ++i)
+	{
+		uint32 ArcI = BaseVertexIndex + 1 + i;
+		uint32 ArcNext = BaseVertexIndex + 1 + i + 1;
+
+		// 삼각형: Center → ArcI → ArcNext
+		OutIndices.push_back(CenterIndex);
+		OutIndices.push_back(ArcI);
+		OutIndices.push_back(ArcNext);
+	}
+}
+
+/**
+ * Constraint 전체 면 기반 시각화 생성
+ */
+static void GenerateConstraintMeshVisualization(
+	const FConstraintSetup& Constraint,
+	const FVector& ParentPos,
+	const FVector& ChildPos,
+	const FQuat& JointRotation,
+	bool bSelected,
+	TArray<FVector>& OutVertices,
+	TArray<uint32>& OutIndices,
+	TArray<FVector4>& OutColors,
+	FLinesBatch& OutLineBatch)
+{
+	// 색상 설정 (반투명)
+	FVector4 SwingColor = bSelected
+		? FVector4(0.0f, 1.0f, 0.5f, 0.4f)   // 선택: 밝은 초록
+		: FVector4(0.0f, 0.8f, 0.4f, 0.25f);  // 기본: 초록 (25% 투명)
+	FVector4 TwistColor = bSelected
+		? FVector4(0.5f, 0.5f, 1.0f, 0.4f)   // 선택: 밝은 파랑
+		: FVector4(0.3f, 0.3f, 0.8f, 0.25f);  // 기본: 파랑 (25% 투명)
+	FVector4 LineColor = bSelected
+		? FVector4(1.0f, 1.0f, 0.0f, 1.0f)   // 선택: 노랑
+		: FVector4(1.0f, 0.5f, 0.0f, 1.0f);  // 기본: 주황
+
+	// 조인트 위치 = 자식 본 위치
+	FVector JointPos = ChildPos;
+
+	// 1. 부모-자식 연결선 (라인으로 유지)
+	OutLineBatch.Add(ParentPos, ChildPos, LineColor);
+
+	// 2. 조인트 위치에 십자 마커 (라인)
+	float MarkerSize = bSelected ? 0.03f : 0.02f;
+	FVector XAxis = JointRotation.RotateVector(FVector(1, 0, 0)) * MarkerSize;
+	FVector YAxis = JointRotation.RotateVector(FVector(0, 1, 0)) * MarkerSize;
+	FVector ZAxis = JointRotation.RotateVector(FVector(0, 0, 1)) * MarkerSize;
+	OutLineBatch.Add(JointPos - XAxis, JointPos + XAxis, FVector4(1, 0, 0, 1));  // X축: 빨강
+	OutLineBatch.Add(JointPos - YAxis, JointPos + YAxis, FVector4(0, 1, 0, 1));  // Y축: 초록
+	OutLineBatch.Add(JointPos - ZAxis, JointPos + ZAxis, FVector4(0, 0, 1, 1));  // Z축: 파랑
+
+	// 3. 원뿔 길이 계산 (부모-자식 거리 기반)
+	float Distance = (ChildPos - ParentPos).Size();
+	float ConeLength = FMath::Max(0.02f, Distance * 0.3f);  // 본 거리의 30%
+
+	// 4. Swing Limit 원뿔 면 (각도가 유의미할 때만)
+	if (Constraint.Swing1Limit > 1.0f || Constraint.Swing2Limit > 1.0f)
+	{
+		GenerateSwingConeMesh(JointPos, JointRotation,
+			Constraint.Swing1Limit, Constraint.Swing2Limit, ConeLength, SwingColor,
+			OutVertices, OutIndices, OutColors);
+	}
+
+	// 5. Twist Limit 부채꼴 면 (각도가 유의미할 때만)
+	float TwistRange = Constraint.TwistLimitMax - Constraint.TwistLimitMin;
+	if (TwistRange > 1.0f && TwistRange < 359.0f)
+	{
+		float ArcRadius = ConeLength * 0.5f;
+		GenerateTwistFanMesh(JointPos, JointRotation,
+			Constraint.TwistLimitMin, Constraint.TwistLimitMax, ArcRadius, TwistColor,
+			OutVertices, OutIndices, OutColors);
 	}
 }
 
@@ -570,7 +962,8 @@ void SPhysicsAssetEditorWindow::OnUpdate(float DeltaSeconds)
 
 void SPhysicsAssetEditorWindow::PreRenderViewportUpdate()
 {
-	// 뷰포트 렌더 전 처리
+	// 삼각형 배치는 ULineComponent를 통해 처리됨 (RebuildShapeLines에서 설정)
+	// 별도 처리 불필요
 }
 
 void SPhysicsAssetEditorWindow::OnSave()
@@ -1094,39 +1487,84 @@ void SPhysicsAssetEditorWindow::RebuildShapeLines()
 	}
 
 	// ─────────────────────────────────────────────────
-	// 제약 조건 라인 재구성 (FLinesBatch 기반 - DOD)
+	// 제약 조건 시각화 재구성 (면 기반 + 라인)
 	// ─────────────────────────────────────────────────
 	State->ConstraintLinesBatch.Clear();
-	State->ConstraintLinesBatch.Reserve(static_cast<int32>(State->EditingAsset->ConstraintSetups.size()));
+	State->ConstraintTrianglesBatch.Clear();
 
-	for (int32 i = 0; i < static_cast<int32>(State->EditingAsset->ConstraintSetups.size()); ++i)
+	// 예상 크기 예약
+	int32 NumConstraints = static_cast<int32>(State->EditingAsset->ConstraintSetups.size());
+	State->ConstraintLinesBatch.Reserve(NumConstraints * 10);  // 연결선 + 축 마커
+	State->ConstraintTrianglesBatch.Reserve(NumConstraints * 50, NumConstraints * 100);  // 원뿔 + 부채꼴
+
+	for (int32 i = 0; i < NumConstraints; ++i)
 	{
 		const FConstraintSetup& Constraint = State->EditingAsset->ConstraintSetups[i];
 		if (Constraint.ParentBodyIndex < 0 || Constraint.ChildBodyIndex < 0) continue;
 		if (Constraint.ParentBodyIndex >= static_cast<int32>(State->EditingAsset->BodySetups.size())) continue;
 		if (Constraint.ChildBodyIndex >= static_cast<int32>(State->EditingAsset->BodySetups.size())) continue;
 
-		FVector4 Color = (!State->bBodySelectionMode && State->SelectedConstraintIndex == i)
-			? FVector4(1.0f, 1.0f, 0.0f, 1.0f) : FVector4(1.0f, 0.5f, 0.0f, 1.0f);
-
-		FVector ParentPos, ChildPos;
 		UBodySetup* ParentBody = State->EditingAsset->BodySetups[Constraint.ParentBodyIndex];
 		UBodySetup* ChildBody = State->EditingAsset->BodySetups[Constraint.ChildBodyIndex];
+		if (!ParentBody || !ChildBody) continue;
 
-		if (MeshComp && ParentBody && ChildBody)
+		FVector ParentPos = FVector::Zero();
+		FVector ChildPos = FVector::Zero();
+		FQuat JointRotation = FQuat::Identity();
+
+		if (MeshComp)
 		{
-			ParentPos = MeshComp->GetBoneWorldTransform(ParentBody->BoneIndex).Translation;
-			ChildPos = MeshComp->GetBoneWorldTransform(ChildBody->BoneIndex).Translation;
+			FTransform ParentTransform = MeshComp->GetBoneWorldTransform(ParentBody->BoneIndex);
+			FTransform ChildTransform = MeshComp->GetBoneWorldTransform(ChildBody->BoneIndex);
+
+			ParentPos = ParentTransform.Translation;
+			ChildPos = ChildTransform.Translation;
+
+			// 조인트 회전 계산: 부모→자식 방향을 X축으로
+			FVector Direction = (ChildPos - ParentPos);
+			if (Direction.SizeSquared() > KINDA_SMALL_NUMBER)
+			{
+				Direction = Direction.GetNormalized();
+				// 기본 X축(1,0,0)을 Direction으로 회전하는 쿼터니언 계산
+				FVector From(1.0f, 0.0f, 0.0f);
+				FVector To = Direction;
+				float Dot = FVector::Dot(From, To);
+
+				if (Dot > 0.9999f)
+				{
+					JointRotation = FQuat::Identity();
+				}
+				else if (Dot < -0.9999f)
+				{
+					// 반대 방향: Y축 기준 180도 회전
+					JointRotation = FQuat(0.0f, 1.0f, 0.0f, 0.0f);
+				}
+				else
+				{
+					FVector Cross = FVector::Cross(From, To);
+					JointRotation = FQuat(Cross.X, Cross.Y, Cross.Z, 1.0f + Dot);
+					JointRotation.Normalize();
+				}
+			}
 		}
 
-		State->ConstraintLinesBatch.Add(ParentPos, ChildPos, Color);
+		bool bSelected = (!State->bBodySelectionMode && State->SelectedConstraintIndex == i);
+
+		// 면 기반 시각화 사용
+		GenerateConstraintMeshVisualization(
+			Constraint, ParentPos, ChildPos, JointRotation, bSelected,
+			State->ConstraintTrianglesBatch.Vertices,
+			State->ConstraintTrianglesBatch.Indices,
+			State->ConstraintTrianglesBatch.Colors,
+			State->ConstraintLinesBatch);
 	}
 
-	// ULineComponent에 배치 데이터 설정
+	// ULineComponent에 라인 배치 데이터 설정 (연결선 + 축 마커)
 	if (ConstraintLineComp)
 	{
 		ConstraintLineComp->ClearLines();  // 기존 ULine 정리
 		ConstraintLineComp->SetDirectBatch(State->ConstraintLinesBatch);
+		ConstraintLineComp->SetTriangleBatch(State->ConstraintTrianglesBatch);  // 삼각형 배치도 설정
 		ConstraintLineComp->SetLineVisible(State->bShowConstraints);
 	}
 }

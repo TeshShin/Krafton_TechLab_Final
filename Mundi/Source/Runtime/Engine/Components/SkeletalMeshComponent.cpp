@@ -7,6 +7,14 @@
 #include "AnimSingleNodeInstance.h"
 #include "AnimStateMachineInstance.h"
 #include "AnimBlendSpaceInstance.h"
+#include "PhysicsAsset.h"
+#include "BodyInstance.h"
+#include "ConstraintInstance.h"
+#include "PhysScene.h"
+#include "FBodySetup.h"
+#include "PhysXPublic.h"
+#include "AggregateGeom.h"
+#include "World.h"
 
 USkeletalMeshComponent::USkeletalMeshComponent()
 {
@@ -26,7 +34,15 @@ void USkeletalMeshComponent::TickComponent(float DeltaTime)
     Super::TickComponent(DeltaTime);
 
     if (!SkeletalMesh) { return; }
-    // Drive animation instance if present
+
+    // 랙돌 시뮬레이션 중일 때: 물리 결과를 본에 동기화
+    if (bSimulatePhysics && bRagdollInitialized)
+    {
+        SyncBonesFromPhysics();
+        return;
+    }
+
+    // 애니메이션 모드: 기존 로직
     if (bUseAnimation && AnimInstance && SkeletalMesh && SkeletalMesh->GetSkeleton())
     {
         AnimInstance->NativeUpdateAnimation(DeltaTime);
@@ -40,7 +56,7 @@ void USkeletalMeshComponent::TickComponent(float DeltaTime)
         BaseAnimationPose = OutputPose.LocalSpacePose;
         CurrentLocalSpacePose = OutputPose.LocalSpacePose;
         ForceRecomputePose();
-        return; // skip test code when animation is active
+        return;
     }
 }
 
@@ -388,4 +404,487 @@ void USkeletalMeshComponent::TriggerAnimNotify(const FAnimNotifyEvent& NotifyEve
     {
         Owner->HandleAnimNotify(NotifyEvent);
     }
+}
+
+// ============================================================================
+// Ragdoll Physics Implementation
+// ============================================================================
+
+void USkeletalMeshComponent::SetPhysicsAsset(UPhysicsAsset* InPhysicsAsset)
+{
+    if (PhysicsAsset == InPhysicsAsset)
+    {
+        return;
+    }
+
+    // 기존 랙돌 해제
+    if (bRagdollInitialized)
+    {
+        TermRagdoll();
+    }
+
+    PhysicsAsset = InPhysicsAsset;
+}
+
+void USkeletalMeshComponent::SetSimulatePhysics(bool bEnable)
+{
+    if (bSimulatePhysics == bEnable)
+    {
+        return;
+    }
+
+    bSimulatePhysics = bEnable;
+
+    if (bSimulatePhysics)
+    {
+        // 랙돌 활성화: 현재 포즈를 물리 바디에 동기화
+        if (bRagdollInitialized)
+        {
+            SyncPhysicsFromBones();
+        }
+        // 애니메이션 비활성화
+        bUseAnimation = false;
+    }
+    else
+    {
+        // 랙돌 비활성화: 애니메이션 모드로 복귀
+        bUseAnimation = true;
+    }
+}
+
+void USkeletalMeshComponent::InitRagdoll(FPhysScene* InPhysScene)
+{
+    if (!PhysicsAsset || !SkeletalMesh || !InPhysScene)
+    {
+        UE_LOG("[Ragdoll] InitRagdoll failed: missing PhysicsAsset, SkeletalMesh, or PhysScene");
+        return;
+    }
+
+    if (bRagdollInitialized)
+    {
+        TermRagdoll();
+    }
+
+    PhysScene = InPhysScene;
+    const FSkeleton* Skeleton = SkeletalMesh->GetSkeleton();
+    if (!Skeleton)
+    {
+        UE_LOG("[Ragdoll] InitRagdoll failed: no skeleton");
+        return;
+    }
+
+    const int32 NumBones = Skeleton->Bones.Num();
+
+    // Bodies 배열 초기화 (본 개수만큼, nullptr로)
+    Bodies.SetNum(NumBones);
+    for (int32 i = 0; i < NumBones; ++i)
+    {
+        Bodies[i] = nullptr;
+    }
+
+    // PhysicsAsset의 각 BodySetup에 대해 FBodyInstance 생성
+    for (int32 BodyIdx = 0; BodyIdx < PhysicsAsset->BodySetups.Num(); ++BodyIdx)
+    {
+        UBodySetup* BodySetup = PhysicsAsset->BodySetups[BodyIdx];
+        if (!BodySetup)
+        {
+            continue;
+        }
+
+        // FBodySetup에서 BoneIndex 찾기 (PhysicsAsset 에디터에서 설정된 데이터)
+        int32 BoneIndex = PhysicsAsset->FindBodyIndexByBone(BodyIdx);
+        if (BoneIndex < 0 || BoneIndex >= NumBones)
+        {
+            // BodySetup 자체에 BoneIndex 정보가 있을 수 있음
+            // 여기서는 BodyIdx를 BoneIndex로 사용 (에디터에서 본 순서대로 생성했다고 가정)
+            continue;
+        }
+
+        // 본의 월드 트랜스폼 계산
+        FTransform BoneWorldTransform = GetBoneWorldTransform(BoneIndex);
+
+        // FBodyInstance 생성
+        FBodyInstance* NewBody = new FBodyInstance();
+        NewBody->bSimulatePhysics = true;  // 랙돌은 동적 시뮬레이션
+        NewBody->LinearDamping = 0.1f;     // 기본 감쇠
+        NewBody->AngularDamping = 0.05f;
+
+        // 바디 초기화
+        NewBody->InitBody(BodySetup, BoneWorldTransform, this, PhysScene);
+
+        Bodies[BoneIndex] = NewBody;
+    }
+
+    // Constraints 생성
+    for (int32 ConstraintIdx = 0; ConstraintIdx < PhysicsAsset->ConstraintSetups.Num(); ++ConstraintIdx)
+    {
+        const FConstraintSetup& Setup = PhysicsAsset->ConstraintSetups[ConstraintIdx];
+
+        // 부모/자식 바디 인덱스로 FBodyInstance 찾기
+        FBodyInstance* ParentBody = nullptr;
+        FBodyInstance* ChildBody = nullptr;
+
+        if (Setup.ParentBodyIndex >= 0 && Setup.ParentBodyIndex < Bodies.Num())
+        {
+            ParentBody = Bodies[Setup.ParentBodyIndex];
+        }
+        if (Setup.ChildBodyIndex >= 0 && Setup.ChildBodyIndex < Bodies.Num())
+        {
+            ChildBody = Bodies[Setup.ChildBodyIndex];
+        }
+
+        if (!ParentBody && !ChildBody)
+        {
+            continue;  // 최소 하나의 바디 필요
+        }
+
+        FConstraintInstance* NewConstraint = new FConstraintInstance();
+        NewConstraint->InitConstraint(Setup, ParentBody, ChildBody, PhysScene);
+
+        Constraints.Add(NewConstraint);
+    }
+
+    bRagdollInitialized = true;
+    UE_LOG("[Ragdoll] Initialized with %d bodies and %d constraints",
+           PhysicsAsset->BodySetups.Num(), Constraints.Num());
+}
+
+void USkeletalMeshComponent::TermRagdoll()
+{
+    // Constraints 해제
+    for (FConstraintInstance* Constraint : Constraints)
+    {
+        if (Constraint)
+        {
+            Constraint->TermConstraint();
+            delete Constraint;
+        }
+    }
+    Constraints.Empty();
+
+    // Bodies 해제
+    for (FBodyInstance* Body : Bodies)
+    {
+        if (Body)
+        {
+            Body->TermBody();
+            delete Body;
+        }
+    }
+    Bodies.Empty();
+
+    bRagdollInitialized = false;
+    PhysScene = nullptr;
+
+    UE_LOG("[Ragdoll] Terminated");
+}
+
+FBodyInstance* USkeletalMeshComponent::GetBodyInstance(int32 BoneIndex) const
+{
+    if (BoneIndex >= 0 && BoneIndex < Bodies.Num())
+    {
+        return Bodies[BoneIndex];
+    }
+    return nullptr;
+}
+
+void USkeletalMeshComponent::AddImpulse(const FVector& Impulse, const FName& BoneName)
+{
+    if (!bRagdollInitialized)
+    {
+        return;
+    }
+
+    if (BoneName.ToString().empty())
+    {
+        // 모든 바디에 충격 적용
+        for (FBodyInstance* Body : Bodies)
+        {
+            if (Body && Body->IsDynamic())
+            {
+                Body->AddForce(Impulse, true);  // bAccelChange = true for impulse
+            }
+        }
+    }
+    else
+    {
+        // 특정 본에만 적용
+        const FSkeleton* Skeleton = SkeletalMesh->GetSkeleton();
+        if (Skeleton)
+        {
+            for (int32 i = 0; i < Skeleton->Bones.Num(); ++i)
+            {
+                if (Skeleton->Bones[i].Name == BoneName)
+                {
+                    FBodyInstance* Body = GetBodyInstance(i);
+                    if (Body && Body->IsDynamic())
+                    {
+                        Body->AddForce(Impulse, true);
+                    }
+                    break;
+                }
+            }
+        }
+    }
+}
+
+void USkeletalMeshComponent::AddForce(const FVector& Force, const FName& BoneName)
+{
+    if (!bRagdollInitialized)
+    {
+        return;
+    }
+
+    if (BoneName.ToString().empty())
+    {
+        // 모든 바디에 힘 적용
+        for (FBodyInstance* Body : Bodies)
+        {
+            if (Body && Body->IsDynamic())
+            {
+                Body->AddForce(Force, false);
+            }
+        }
+    }
+    else
+    {
+        // 특정 본에만 적용
+        const FSkeleton* Skeleton = SkeletalMesh->GetSkeleton();
+        if (Skeleton)
+        {
+            for (int32 i = 0; i < Skeleton->Bones.Num(); ++i)
+            {
+                if (Skeleton->Bones[i].Name == BoneName)
+                {
+                    FBodyInstance* Body = GetBodyInstance(i);
+                    if (Body && Body->IsDynamic())
+                    {
+                        Body->AddForce(Force, false);
+                    }
+                    break;
+                }
+            }
+        }
+    }
+}
+
+void USkeletalMeshComponent::SyncBonesFromPhysics()
+{
+    if (!bRagdollInitialized || !bSimulatePhysics)
+    {
+        return;
+    }
+
+    const FSkeleton* Skeleton = SkeletalMesh->GetSkeleton();
+    if (!Skeleton)
+    {
+        return;
+    }
+
+    // 각 바디의 물리 트랜스폼을 본에 적용
+    for (int32 BoneIndex = 0; BoneIndex < Bodies.Num(); ++BoneIndex)
+    {
+        FBodyInstance* Body = Bodies[BoneIndex];
+        if (!Body || !Body->IsValidBodyInstance())
+        {
+            continue;
+        }
+
+        // 물리 바디의 월드 트랜스폼 가져오기
+        FTransform BodyWorldTransform = Body->GetUnrealWorldTransform();
+
+        // 월드 → 로컬 변환
+        const int32 ParentIndex = Skeleton->Bones[BoneIndex].ParentIndex;
+        if (ParentIndex == -1)
+        {
+            // 루트 본: 컴포넌트 기준 로컬
+            FTransform ComponentWorldTransform = GetWorldTransform();
+            CurrentLocalSpacePose[BoneIndex] = ComponentWorldTransform.GetRelativeTransform(BodyWorldTransform);
+        }
+        else
+        {
+            // 자식 본: 부모 본 기준 로컬
+            FTransform ParentWorldTransform = GetBoneWorldTransform(ParentIndex);
+            CurrentLocalSpacePose[BoneIndex] = ParentWorldTransform.GetRelativeTransform(BodyWorldTransform);
+        }
+    }
+
+    // 포즈 재계산
+    ForceRecomputePose();
+}
+
+void USkeletalMeshComponent::SyncPhysicsFromBones()
+{
+    if (!bRagdollInitialized)
+    {
+        return;
+    }
+
+    // 각 본의 현재 월드 트랜스폼을 물리 바디에 적용
+    for (int32 BoneIndex = 0; BoneIndex < Bodies.Num(); ++BoneIndex)
+    {
+        FBodyInstance* Body = Bodies[BoneIndex];
+        if (!Body || !Body->IsValidBodyInstance())
+        {
+            continue;
+        }
+
+        FTransform BoneWorldTransform = GetBoneWorldTransform(BoneIndex);
+
+        // PhysX 액터의 글로벌 포즈 설정
+        if (Body->RigidActor)
+        {
+            PxTransform PxPose = U2PTransform(BoneWorldTransform);
+            Body->RigidActor->setGlobalPose(PxPose);
+        }
+    }
+}
+
+// ============================================================================
+// Test Ragdoll Implementation (Hardcoded - No PhysicsAsset)
+// ============================================================================
+
+void USkeletalMeshComponent::InitTestRagdoll(FPhysScene* InPhysScene)
+{
+    if (!SkeletalMesh || !InPhysScene)
+    {
+        UE_LOG("[TestRagdoll] InitTestRagdoll failed: missing SkeletalMesh or PhysScene");
+        return;
+    }
+
+    if (bRagdollInitialized)
+    {
+        TermRagdoll();
+    }
+
+    PhysScene = InPhysScene;
+    const FSkeleton* Skeleton = SkeletalMesh->GetSkeleton();
+    if (!Skeleton)
+    {
+        UE_LOG("[TestRagdoll] InitTestRagdoll failed: no skeleton");
+        return;
+    }
+
+    const int32 NumBones = Skeleton->Bones.Num();
+    UE_LOG("[TestRagdoll] Creating ragdoll for %d bones", NumBones);
+
+    // Bodies 배열 초기화
+    Bodies.SetNum(NumBones);
+    for (int32 i = 0; i < NumBones; ++i)
+    {
+        Bodies[i] = nullptr;
+    }
+
+    // 각 본에 대해 UBodySetup을 동적으로 생성하고 FBodyInstance 생성
+    TArray<UBodySetup*> TempBodySetups;
+    TempBodySetups.SetNum(NumBones);
+
+    for (int32 BoneIndex = 0; BoneIndex < NumBones; ++BoneIndex)
+    {
+        const FBone& Bone = Skeleton->Bones[BoneIndex];
+
+        // 본의 월드 트랜스폼
+        FTransform BoneWorldTransform = GetBoneWorldTransform(BoneIndex);
+
+        // 본 길이 계산 (자식 본까지의 거리 또는 기본값)
+        float BoneLength = 0.1f;  // 기본 길이
+
+        // 자식 본 찾아서 길이 계산
+        for (int32 ChildIndex = 0; ChildIndex < NumBones; ++ChildIndex)
+        {
+            if (Skeleton->Bones[ChildIndex].ParentIndex == BoneIndex)
+            {
+                FTransform ChildWorldTransform = GetBoneWorldTransform(ChildIndex);
+                FVector Diff = ChildWorldTransform.Translation - BoneWorldTransform.Translation;
+                float ChildDistance = Diff.Size();
+                if (ChildDistance > BoneLength)
+                {
+                    BoneLength = ChildDistance;
+                }
+            }
+        }
+
+        // UBodySetup 생성
+        UBodySetup* BodySetup = NewObject<UBodySetup>();
+        BodySetup->BoneName = Bone.Name;
+        BodySetup->BoneIndex = BoneIndex;
+
+        // 캡슐 shape 추가 (본 길이 기반)
+        float CapsuleRadius = FMath::Max(0.02f, BoneLength * 0.15f);
+        float CapsuleLength = FMath::Max(0.06f, BoneLength * 0.8f);  // 전체 길이
+
+        FKSphylElem Capsule;
+        Capsule.Radius = CapsuleRadius;
+        Capsule.Length = CapsuleLength;
+        // 캡슐을 본 방향(보통 X축)으로 정렬
+        Capsule.Center = FVector(CapsuleLength * 0.5f, 0.0f, 0.0f);
+        Capsule.Rotation = FQuat::Identity();
+        BodySetup->AggGeom.SphylElems.Add(Capsule);
+
+        TempBodySetups[BoneIndex] = BodySetup;
+
+        // FBodyInstance 생성
+        FBodyInstance* NewBody = new FBodyInstance();
+        NewBody->bSimulatePhysics = true;
+        NewBody->LinearDamping = 0.1f;
+        NewBody->AngularDamping = 0.05f;
+
+        // 바디 초기화
+        NewBody->InitBody(BodySetup, BoneWorldTransform, this, PhysScene);
+
+        Bodies[BoneIndex] = NewBody;
+
+        UE_LOG("[TestRagdoll] Created body for bone[%d] '%s' (len=%.3f, r=%.3f, capsuleLen=%.3f)",
+               BoneIndex, Bone.Name.c_str(), BoneLength, CapsuleRadius, CapsuleLength);
+    }
+
+    // TODO: Constraints 생성 - Local Frame 설정 필요
+    // 현재는 바디만 테스트 (조인트 없이 각 본이 독립적으로 떨어짐)
+    #if 0  // 조인트 비활성화 - Local Frame 문제 해결 후 활성화
+    for (int32 BoneIndex = 0; BoneIndex < NumBones; ++BoneIndex)
+    {
+        const FBone& Bone = Skeleton->Bones[BoneIndex];
+        int32 ParentIndex = Bone.ParentIndex;
+
+        if (ParentIndex < 0)
+        {
+            // 루트 본은 조인트 없음
+            continue;
+        }
+
+        FBodyInstance* ParentBody = Bodies[ParentIndex];
+        FBodyInstance* ChildBody = Bodies[BoneIndex];
+
+        if (!ParentBody || !ChildBody)
+        {
+            continue;
+        }
+
+        // FConstraintSetup 생성
+        FConstraintSetup Setup;
+        Setup.JointName = FName(Bone.Name + "_Joint");
+        Setup.ParentBodyIndex = ParentIndex;
+        Setup.ChildBodyIndex = BoneIndex;
+        Setup.ConstraintType = EConstraintType::BallAndSocket;
+
+        // 기본 각도 제한 설정
+        Setup.Swing1Limit = 30.0f;
+        Setup.Swing2Limit = 30.0f;
+        Setup.TwistLimitMin = -20.0f;
+        Setup.TwistLimitMax = 20.0f;
+        Setup.Stiffness = 100.0f;
+        Setup.Damping = 10.0f;
+
+        FConstraintInstance* NewConstraint = new FConstraintInstance();
+        NewConstraint->InitConstraint(Setup, ParentBody, ChildBody, PhysScene);
+
+        Constraints.Add(NewConstraint);
+
+        UE_LOG("[TestRagdoll] Created constraint '%s' (parent=%d, child=%d)",
+               Setup.JointName.ToString().c_str(), ParentIndex, BoneIndex);
+    }
+    #endif
+
+    bRagdollInitialized = true;
+    UE_LOG("[TestRagdoll] Initialized with %d bodies and %d constraints", Bodies.Num(), Constraints.Num());
 }

@@ -186,6 +186,39 @@ private:
     // Per-frame processed overlap pairs (A,B) keyed canonically
     TSet<uint64> FrameOverlapPairs;
 
+public:
+    // Debug triangle batch (for constraint visualization etc.)
+    // Set this before viewport render, SceneRenderer will draw it
+    struct FDebugTrianglesBatch
+    {
+        TArray<FVector>* Vertices = nullptr;
+        TArray<uint32>* Indices = nullptr;
+        TArray<FVector4>* Colors = nullptr;
+
+        bool IsValid() const
+        {
+            return Vertices && Indices && Colors &&
+                   !Vertices->empty() && !Indices->empty();
+        }
+    };
+    FDebugTrianglesBatch DebugTrianglesBatch;
+
+    void SetDebugTrianglesBatch(TArray<FVector>* V, TArray<uint32>* I, TArray<FVector4>* C)
+    {
+        DebugTrianglesBatch.Vertices = V;
+        DebugTrianglesBatch.Indices = I;
+        DebugTrianglesBatch.Colors = C;
+    }
+
+    void ClearDebugTrianglesBatch()
+    {
+        DebugTrianglesBatch.Vertices = nullptr;
+        DebugTrianglesBatch.Indices = nullptr;
+        DebugTrianglesBatch.Colors = nullptr;
+    }
+
+private:
+
     //Timinig
     float UnscaledDelta;
     float SlomoOnlyDelta;

@@ -1,5 +1,6 @@
 ﻿#pragma once
 #include "SkinnedMeshComponent.h"
+#include "PhysicsAsset.h"
 #include "USkeletalMeshComponent.generated.h"
 
 class UAnimInstance;
@@ -7,6 +8,9 @@ class UAnimationAsset;
 class UAnimSequence;
 class UAnimStateMachineInstance;
 class UAnimBlendSpaceInstance;
+struct FBodyInstance;
+struct FConstraintInstance;
+class FPhysScene;
 
 UCLASS(DisplayName="스켈레탈 메시 컴포넌트", Description="스켈레탈 메시를 렌더링하는 컴포넌트입니다")
 class USkeletalMeshComponent : public USkinnedMeshComponent
@@ -132,4 +136,108 @@ private:
     // Animation state
     UAnimInstance* AnimInstance = nullptr;
     bool bUseAnimation = true;
+
+// ============================================================================
+// Ragdoll Physics Section
+// ============================================================================
+public:
+    /**
+     * @brief 물리 에셋 설정 (랙돌 데이터)
+     * @param InPhysicsAsset 적용할 물리 에셋
+     */
+    void SetPhysicsAsset(UPhysicsAsset* InPhysicsAsset);
+
+    /**
+     * @brief 현재 연결된 물리 에셋 반환
+     */
+    UPhysicsAsset* GetPhysicsAsset() const { return PhysicsAsset; }
+
+    /**
+     * @brief 랙돌 시뮬레이션 활성화/비활성화
+     * @param bEnable true: 랙돌 활성화 (물리 시뮬레이션), false: 애니메이션 모드
+     */
+    void SetSimulatePhysics(bool bEnable);
+
+    /**
+     * @brief 랙돌 시뮬레이션 중인지 확인
+     */
+    bool IsSimulatingPhysics() const { return bSimulatePhysics; }
+
+    /**
+     * @brief 랙돌 초기화 (PhysicsAsset 기반으로 바디/제약조건 생성)
+     * @param InPhysScene 물리 씬
+     */
+    void InitRagdoll(FPhysScene* InPhysScene);
+
+    /**
+     * @brief 랙돌 해제 (모든 바디/제약조건 제거)
+     */
+    void TermRagdoll();
+
+    /**
+     * @brief 특정 본의 바디 인스턴스 반환
+     * @param BoneIndex 본 인덱스
+     * @return 바디 인스턴스 (없으면 nullptr)
+     */
+    FBodyInstance* GetBodyInstance(int32 BoneIndex) const;
+
+    /**
+     * @brief 랙돌에 충격 적용
+     * @param Impulse 충격 벡터
+     * @param BoneName 적용할 본 이름 (빈 문자열이면 모든 바디에 적용)
+     */
+    void AddImpulse(const FVector& Impulse, const FName& BoneName = FName());
+
+    /**
+     * @brief 랙돌에 힘 적용
+     * @param Force 힘 벡터
+     * @param BoneName 적용할 본 이름 (빈 문자열이면 모든 바디에 적용)
+     */
+    void AddForce(const FVector& Force, const FName& BoneName = FName());
+
+    // ============================================================================
+    // 테스트용 하드코딩 랙돌 (PhysicsAsset 없이 테스트)
+    // ============================================================================
+
+    /**
+     * @brief 테스트용 하드코딩 랙돌 생성
+     * @param InPhysScene 물리 씬
+     *
+     * PhysicsAsset 없이 코드에서 직접 바디/조인트를 생성하여 테스트
+     * 스켈레탈 메시의 본 구조를 기반으로 자동 생성
+     */
+    void InitTestRagdoll(FPhysScene* InPhysScene);
+
+protected:
+    /**
+     * @brief 물리 시뮬레이션 결과를 본 트랜스폼에 동기화
+     */
+    void SyncBonesFromPhysics();
+
+    /**
+     * @brief 현재 본 트랜스폼을 물리 바디에 동기화 (랙돌 시작 시)
+     */
+    void SyncPhysicsFromBones();
+
+public:
+    
+    /** 연결된 물리 에셋 */
+    UPROPERTY(EditAnywhere, Category="[피직스 에셋]")
+    UPhysicsAsset* PhysicsAsset = nullptr;
+
+    /** 물리 시뮬레이션 활성화 여부 */
+    UPROPERTY(EditAnywhere, Category="[피직스]")
+    bool bSimulatePhysics = false;
+
+    /** 본별 바디 인스턴스 (BoneIndex -> FBodyInstance) */
+    TArray<FBodyInstance*> Bodies;
+
+    /** 제약 조건 인스턴스 */
+    TArray<FConstraintInstance*> Constraints;
+
+    /** 랙돌이 초기화되었는지 여부 */
+    bool bRagdollInitialized = false;
+
+    /** 물리 씬 참조 */
+    FPhysScene* PhysScene = nullptr;
 };
