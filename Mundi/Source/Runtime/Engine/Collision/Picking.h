@@ -56,11 +56,41 @@ bool IntersectRayTriangleMT(const FRay& InRay,
 
 // Ray-line segment distance.
 // Returns the shortest distance and outputs the parameters (OutRayT, OutSegmentT) for the closest points.
-float DistanceRayToLineSegment(const FRay& Ray, 
+float DistanceRayToLineSegment(const FRay& Ray,
                                const FVector& LineStart,
                                const FVector& LineEnd,
                                float& OutRayT,
                                float& OutSegmentT);
+
+// Ray-capsule intersection.
+// Capsule is defined by two endpoints (start, end) and radius.
+// Returns true and the closest positive T if the ray hits the capsule.
+bool IntersectRayCapsule(const FRay& InRay,
+                         const FVector& InCapsuleStart,
+                         const FVector& InCapsuleEnd,
+                         float InRadius,
+                         float& OutT);
+
+// Ray-OBB (Oriented Bounding Box) intersection.
+// Box is defined by center, half-extents, and orientation (rotation matrix or quaternion).
+// Returns true and the closest positive T if the ray hits the OBB.
+bool IntersectRayOBB(const FRay& InRay,
+                     const FVector& InCenter,
+                     const FVector& InHalfExtent,
+                     const FQuat& InOrientation,
+                     float& OutT);
+
+// Forward declaration
+class UBodySetup;
+struct FTransform;
+
+// Ray-Body intersection (tests against all shapes in AggGeom).
+// Transforms ray to body's local space and tests against all shapes.
+// Returns true and the closest positive T if the ray hits any shape in the body.
+bool IntersectRayBody(const FRay& WorldRay,
+                      const UBodySetup* Body,
+                      const FTransform& BoneWorldTransform,
+                      float& OutT);
 
 /**
  * PickingSystem

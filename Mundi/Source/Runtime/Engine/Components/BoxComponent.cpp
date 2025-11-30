@@ -19,15 +19,31 @@ UBoxComponent::UBoxComponent()
 {
 	BoxExtent = FVector(0.5f, 0.5f, 0.5f);
 	UpdateBounds();
+
+	BoxBodySetup = NewObject<UBodySetup>();
+	UpdateBodySetup();
 }
 
 UBoxComponent::~UBoxComponent()
 {
+	if (BoxBodySetup)
+	{
+		DeleteObject(BoxBodySetup);
+		BoxBodySetup = nullptr;
+	}
 }
 
 void UBoxComponent::DuplicateSubObjects()
 {
 	Super::DuplicateSubObjects();
+
+	if (BoxBodySetup)
+	{
+		// BoxBodySetup 깊은 복사: 새 객체 생성 후 AggGeom 복사
+		UBodySetup* OldSetup = BoxBodySetup;
+		BoxBodySetup = NewObject<UBodySetup>();
+		BoxBodySetup->AggGeom = OldSetup->AggGeom;
+	}
 }
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -36,7 +52,14 @@ void UBoxComponent::DuplicateSubObjects()
 
 void UBoxComponent::SetBoxExtent(const FVector& InExtent, bool bUpdateBoundsNow)
 {
+	if (BoxExtent == InExtent)
+	{
+		return;
+	}
+	
 	BoxExtent = InExtent;
+
+	UpdateBodySetup();
 
 	if (bUpdateBoundsNow)
 	{
@@ -70,6 +93,31 @@ FVector UBoxComponent::GetScaledBoxExtent() const
 FVector UBoxComponent::GetBoxCenter() const
 {
 	return GetWorldLocation();
+}
+
+// ────────────────────────────────────────────────
+// UPrimitiveComponent 인터페이스 구현
+// ────────────────────────────────────────────────
+
+void UBoxComponent::UpdateBodySetup()
+{
+	if (!BoxBodySetup)
+	{
+		return;
+	}
+
+	BoxBodySetup->AggGeom.EmptyElements();
+
+	FKBoxElem BoxElem;
+
+	BoxElem.X = BoxExtent.X * 2.0f;
+	BoxElem.Y = BoxExtent.Y * 2.0f;
+	BoxElem.Z = BoxExtent.Z * 2.0f;
+
+	BoxElem.Center = FVector::Zero();
+	BoxElem.Rotation = FQuat::Identity();
+
+	BoxBodySetup->AggGeom.BoxElems.Add(BoxElem);
 }
 
 // ────────────────────────────────────────────────────────────────────────────

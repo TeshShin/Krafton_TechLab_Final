@@ -2,6 +2,7 @@
 
 #include "SceneComponent.h"
 #include "Material.h"
+#include "Source/Runtime/Engine/PhysicsEngine/BodyInstance.h"
 #include "UPrimitiveComponent.generated.h"
 
 // 전방 선언
@@ -34,11 +35,18 @@ public:
     UPROPERTY(EditAnywhere, Category="Shape")
     bool bBlockComponent;
 
-    UPrimitiveComponent();
-    virtual ~UPrimitiveComponent() = default;
+    UPROPERTY(EditAnywhere, Category="Physics")
+    bool bSimulatePhysics;
 
+    FBodyInstance BodyInstance;
+
+    UPrimitiveComponent();
+    virtual ~UPrimitiveComponent();
+
+    void OnPropertyChanged(const FProperty& Prop) override;
     void OnRegister(UWorld* InWorld) override;
     void OnUnregister() override;
+    void OnTransformUpdated() override;
 
     virtual FAABB GetWorldAABB() const { return FAABB(); }
 
@@ -67,6 +75,14 @@ public:
     {
         return bIsCulled;
     }
+    
+    // ───── 물리 관련 ────────────────────────────
+    virtual void OnCreatePhysicsState();
+    virtual void OnDestroyPhysicsState();
+
+    virtual UBodySetup* GetBodySetup() { return nullptr; }
+
+    void SetSimulatePhysics(bool bInSimulatePhysics);
 
     // ───── 충돌 관련 ──────────────────────────── 
     bool IsOverlappingActor(const AActor* Other) const;

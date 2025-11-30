@@ -8,6 +8,8 @@
 #include "GameUI/SGameHUD.h"
 #include <ObjManager.h>
 
+#include "Source/Runtime/Engine/PhysicsEngine/PhysXSupport.h"
+
 float UEditorEngine::ClientWidth = 1024.0f;
 float UEditorEngine::ClientHeight = 1024.0f;
 
@@ -198,6 +200,9 @@ bool UEditorEngine::Startup(HINSTANCE hInstance)
 
     FAudioDevice::Preload();
 
+    //FPhysX 초기화
+    InitGamePhys();
+
     ///////////////////////////////////
     WorldContexts.Add(FWorldContext(NewObject<UWorld>(), EWorldType::Editor));
     GWorld = WorldContexts[0].World;
@@ -362,6 +367,9 @@ void UEditorEngine::Shutdown()
 
     // AudioDevice 종료
     FAudioDevice::Shutdown();
+
+    // PhysX 종료
+    TermGamePhys();
      
     // IMPORTANT: Explicitly release Renderer before RHIDevice destructor runs
     // Renderer may hold references to D3D resources

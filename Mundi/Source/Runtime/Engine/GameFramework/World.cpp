@@ -33,6 +33,7 @@
 #include "PlayerCameraManager.h"
 #include "Hash.h"
 #include "ParticleEventManager.h"
+#include "Source/Runtime/Engine/PhysicsEngine/PhysScene.h"
 
 IMPLEMENT_CLASS(UWorld)
 
@@ -101,6 +102,10 @@ void UWorld::Initialize()
 		// Collision Manager 생성 (ShapeComponent용 BVH)
 		CollisionManager = std::make_unique<UCollisionManager>();
 		CollisionManager->SetWorld(this);
+
+		// PhysX Scene 초기화
+		PhysScene = std::make_unique<FPhysScene>(this);
+		PhysScene->InitPhysScene();
 	}
 
 	// 기본 씬을 생성합니다.
@@ -204,6 +209,12 @@ void UWorld::Tick(float DeltaSeconds)
     SlomoOnlyDelta = UnscaledDeltaSeconds * TimeDilation;
     GameDelta = UnscaledDeltaSeconds * TimeDilation * TimeStopDilation;
 
+	// 물리 시뮬레이션 시작 (비동기)
+	if (PhysScene)
+	{
+		PhysScene->StartFrame();
+	}
+
 	// Actor 별로 Dilation의 Duration을 처리하는 부분
 	if (!ActorTimingMap.IsEmpty())
 	{
@@ -278,6 +289,13 @@ void UWorld::Tick(float DeltaSeconds)
 	// 지연 삭제 처리
 	ProcessPendingKillActors();
 
+	// 물리 시뮬레이션 종료 및 동기화
+	if (PhysScene)
+	{
+		// @todo 디버그용 라인 컴포넌트 전달
+		PhysScene->EndFrame(nullptr);
+	}
+
 	// 충돌 BVH 업데이트 (에디터/PIE 모두에서 호출 - Partition과 동일)
 	if (CollisionManager)
 	{
@@ -307,6 +325,13 @@ UWorld* UWorld::DuplicateWorldForPIE(UWorld* InEditorWorld)
 	PIEWorld->Partition = std::make_unique<UWorldPartitionManager>();
 	PIEWorld->CollisionManager = std::make_unique<UCollisionManager>();
 	PIEWorld->CollisionManager->SetWorld(PIEWorld);
+
+	// PIE 월드에 PhysX Scene 생성 및 초기화
+	if (InEditorWorld->GetPhysicsScene())
+	{
+		PIEWorld->PhysScene = std::make_unique<FPhysScene>(PIEWorld);
+		PIEWorld->PhysScene->InitPhysScene();
+	}
 
 	// PIE 월드에 파티클 이벤트 매니저 생성
 	PIEWorld->ParticleEventManager = PIEWorld->SpawnActor<AParticleEventManager>();

@@ -1122,7 +1122,29 @@
     <ClCompile Include="Generated\ARibbonActor.generated.cpp">
       <Filter>Generated</Filter>
     </ClCompile>
+    <ClCompile Include="Generated\UBodySetup.generated.cpp">
+      <Filter>Generated</Filter>
+    </ClCompile>
+    <ClCompile Include="Source\Runtime\Engine\PhysicsEngine\AggregateGeom.cpp" />
+    <ClCompile Include="Source\Runtime\Engine\PhysicsEngine\BodyInstance.cpp" />
+    <ClCompile Include="Source\Runtime\Engine\PhysicsEngine\BodySetup.cpp" />
+    <ClCompile Include="Source\Runtime\Engine\PhysicsEngine\BoxElem.cpp" />
+    <ClCompile Include="Source\Runtime\Engine\PhysicsEngine\PhysScene.cpp" />
+    <ClCompile Include="Source\Runtime\Engine\PhysicsEngine\PhysXSupport.cpp" />
+    <ClCompile Include="Source\Runtime\Engine\PhysicsEngine\ShapeElem.cpp" />
+    <ClCompile Include="Generated\FBodyInstance.generated.cpp">
+      <Filter>Generated</Filter>
+    </ClCompile>
     <ClCompile Include="Generated\AHudExampleGameMode.generated.cpp">
+      <Filter>Generated</Filter>
+    </ClCompile>
+    <ClCompile Include="Generated\UPhysicsAsset.generated.cpp">
+      <Filter>Generated</Filter>
+    </ClCompile>
+    <ClCompile Include="Generated\FBodySetup.generated.cpp">
+      <Filter>Generated</Filter>
+    </ClCompile>
+    <ClCompile Include="Generated\FConstraintSetup.generated.cpp">
       <Filter>Generated</Filter>
     </ClCompile>
   </ItemGroup>
@@ -2363,7 +2385,30 @@
     <ClInclude Include="Generated\ARibbonActor.generated.h">
       <Filter>Generated</Filter>
     </ClInclude>
+    <ClInclude Include="Generated\UBodySetup.generated.h">
+      <Filter>Generated</Filter>
+    </ClInclude>
+    <ClInclude Include="Source\Runtime\Engine\PhysicsEngine\AggregateGeom.h" />
+    <ClInclude Include="Source\Runtime\Engine\PhysicsEngine\BodyInstance.h" />
+    <ClInclude Include="Source\Runtime\Engine\PhysicsEngine\BodySetup.h" />
+    <ClInclude Include="Source\Runtime\Engine\PhysicsEngine\BoxElem.h" />
+    <ClInclude Include="Source\Runtime\Engine\PhysicsEngine\PhysScene.h" />
+    <ClInclude Include="Source\Runtime\Engine\PhysicsEngine\PhysXPublic.h" />
+    <ClInclude Include="Source\Runtime\Engine\PhysicsEngine\PhysXSupport.h" />
+    <ClInclude Include="Source\Runtime\Engine\PhysicsEngine\ShapeElem.h" />
+    <ClInclude Include="Generated\FBodyInstance.generated.h">
+      <Filter>Generated</Filter>
+    </ClInclude>
     <ClInclude Include="Generated\AHudExampleGameMode.generated.h">
+      <Filter>Generated</Filter>
+    </ClInclude>
+    <ClInclude Include="Generated\UPhysicsAsset.generated.h">
+      <Filter>Generated</Filter>
+    </ClInclude>
+    <ClInclude Include="Generated\FBodySetup.generated.h">
+      <Filter>Generated</Filter>
+    </ClInclude>
+    <ClInclude Include="Generated\FConstraintSetup.generated.h">
       <Filter>Generated</Filter>
     </ClInclude>
   </ItemGroup>

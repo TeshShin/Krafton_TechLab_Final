@@ -6,6 +6,7 @@
 #include "Gizmo/GizmoActor.h"
 #include "LightManager.h"
 
+class FPhysScene;
 // Forward Declarations
 class UResourceManager;
 class UUIManager;
@@ -130,6 +131,7 @@ public:
     UWorldPartitionManager* GetPartitionManager() { return Partition.get(); }
     AParticleEventManager* GetParticleEventManager() { return ParticleEventManager; }
     UCollisionManager* GetCollisionManager() { return CollisionManager.get(); }
+    FPhysScene* GetPhysicsScene() { return PhysScene.get(); }
 
     // PIE용 World 생성
     static UWorld* DuplicateWorldForPIE(UWorld* InEditorWorld);
@@ -163,9 +165,11 @@ private:
     /** === 루아 매니저 ===*/
     std::unique_ptr<FLuaManager> LuaManager;
     
+    /** === PhysX Scene ===*/
+    std::unique_ptr<FPhysScene> PhysScene;
+    
     // Object naming system
     TMap<FString, int32> ObjectTypeCounts;
-
 
     // Per-world render settings
     URenderSettings RenderSettings;

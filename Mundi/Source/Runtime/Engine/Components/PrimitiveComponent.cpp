@@ -4,8 +4,30 @@
 #include "Actor.h"
 #include "WorldPartitionManager.h"
 // IMPLEMENT_CLASS is now auto-generated in .generated.cpp
-UPrimitiveComponent::UPrimitiveComponent() : bGenerateOverlapEvents(true)
+UPrimitiveComponent::UPrimitiveComponent()
+    : bGenerateOverlapEvents(true)
+    , bSimulatePhysics(false)
 {
+}
+
+UPrimitiveComponent::~UPrimitiveComponent()
+{
+    // @todo OnDestroyPhysicsState는 가상 함수이므로 소멸자에서 호출 불가능
+    //       OnUnregister가 항상 PrimitiveComponent에 소멸 이전의 호출되는지 확인 필요함
+}
+
+void UPrimitiveComponent::OnPropertyChanged(const FProperty& Prop)
+{
+    USceneComponent::OnPropertyChanged(Prop);
+
+    if (Prop.Name == "bSimulatePhysics")
+    {
+        if (BodyInstance.IsValidBodyInstance())
+        {
+            OnDestroyPhysicsState();
+            OnCreatePhysicsState();
+        }
+    }
 }
 
 void UPrimitiveComponent::OnRegister(UWorld* InWorld)
@@ -19,11 +41,18 @@ void UPrimitiveComponent::OnRegister(UWorld* InWorld)
         {
             Partition->Register(this);
         }
+
+        if (InWorld->GetPhysicsScene())
+        {
+            OnCreatePhysicsState();
+        }
     }
 }
 
 void UPrimitiveComponent::OnUnregister()
 {
+    OnDestroyPhysicsState();
+    
     if (UWorld* World = GetWorld())
     {
         if (UWorldPartitionManager* Partition = World->GetPartitionManager())
@@ -35,11 +64,57 @@ void UPrimitiveComponent::OnUnregister()
     Super::OnUnregister();
 }
 
+void UPrimitiveComponent::OnTransformUpdated()
+{
+    USceneComponent::OnTransformUpdated();
+
+    // @todo 
+}
+
 void UPrimitiveComponent::SetMaterialByName(uint32 InElementIndex, const FString& InMaterialName)
 {
     SetMaterial(InElementIndex, UResourceManager::GetInstance().Load<UMaterial>(InMaterialName));
-} 
- 
+}
+
+void UPrimitiveComponent::OnCreatePhysicsState()
+{
+    if (BodyInstance.IsValidBodyInstance())
+    {
+        return;
+    }
+
+    UBodySetup* Setup = GetBodySetup();
+    if (!Setup)
+    {
+        return;
+    }
+
+    UWorld* World = GetWorld();
+    if (!World)
+    {
+        return;
+    }
+
+    FPhysScene* PhysScene = World->GetPhysicsScene();
+    if (!PhysScene)
+    {
+        return;
+    }
+
+    BodyInstance.bSimulatePhysics = bSimulatePhysics;
+    BodyInstance.Scale3D = GetRelativeScale();
+
+    BodyInstance.InitBody(Setup, GetWorldTransform(), this, PhysScene);
+}
+
+void UPrimitiveComponent::OnDestroyPhysicsState()
+{
+    if (BodyInstance.IsValidBodyInstance())
+    {
+        BodyInstance.TermBody();
+    }
+}
+
 void UPrimitiveComponent::DuplicateSubObjects()
 {
     Super::DuplicateSubObjects();
@@ -48,6 +123,20 @@ void UPrimitiveComponent::DuplicateSubObjects()
 void UPrimitiveComponent::Serialize(const bool bInIsLoading, JSON& InOutHandle)
 {
     Super::Serialize(bInIsLoading, InOutHandle);
+}
+
+void UPrimitiveComponent::SetSimulatePhysics(bool bInSimulatePhysics)
+{
+    if (bSimulatePhysics != bInSimulatePhysics)
+    {
+        bSimulatePhysics = bInSimulatePhysics;
+
+        if (BodyInstance.IsValidBodyInstance())
+        {
+            OnDestroyPhysicsState();
+            OnCreatePhysicsState();
+        }
+    }
 }
 
 bool UPrimitiveComponent::IsOverlappingActor(const AActor* Other) const
