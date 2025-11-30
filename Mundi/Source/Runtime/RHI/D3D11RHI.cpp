@@ -436,6 +436,12 @@ ID3D11ShaderResourceView* D3D11RHI::GetSRV(RHI_SRV_Index SRVIndex) const
     case RHI_SRV_Index::DofBlurMap:
         TempSRV = DofBlurMapSRV;
         break;
+    case RHI_SRV_Index::DofNearMap:
+        TempSRV = DofNearMapSRV;
+        break;
+    case RHI_SRV_Index::DofFarMap:
+        TempSRV = DofFarMapSRV;
+        break;
     default:
         TempSRV = nullptr;
         break;
@@ -519,6 +525,16 @@ void D3D11RHI::OMSetRenderTargets(ERTVMode RTVMode)
     case ERTVMode::DofBlurTarget:
     {
         DeviceContext->OMSetRenderTargets(1, &DofBlurRTV, nullptr);
+        break;
+    }
+    case ERTVMode::DofNearTarget:
+    {
+        DeviceContext->OMSetRenderTargets(1, &DofNearRTV, nullptr);
+        break;
+    }
+    case ERTVMode::DofFarTarget:
+    {
+        DeviceContext->OMSetRenderTargets(1, &DofFarRTV, nullptr);
         break;
     }
     default:
@@ -836,6 +852,100 @@ void D3D11RHI::CreateDepthOfFieldBuffers()
 	{
 		UE_LOG("DeviceResources: DoF Blur SRV 생성 실패");
 	}
+
+	// =====================================
+	// DoF Near Map
+	// =====================================
+	D3D11_TEXTURE2D_DESC NearDesc = {};
+	NearDesc.Width = SwapDesc.BufferDesc.Width;
+	NearDesc.Height = SwapDesc.BufferDesc.Height;
+	NearDesc.MipLevels = 1;
+	NearDesc.ArraySize = 1;
+	NearDesc.Format = DXGI_FORMAT_R16G16B16A16_FLOAT;
+	NearDesc.SampleDesc.Count = 1;
+	NearDesc.SampleDesc.Quality = 0;
+	NearDesc.Usage = D3D11_USAGE_DEFAULT;
+	NearDesc.BindFlags = D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE;
+	NearDesc.CPUAccessFlags = 0;
+	NearDesc.MiscFlags = 0;
+
+	Result = Device->CreateTexture2D(&NearDesc, nullptr, &DofNearTexture);
+	if (FAILED(Result))
+	{
+		UE_LOG("DeviceResources: DoF Near Texture 생성 실패");
+		return;
+	}
+
+	D3D11_RENDER_TARGET_VIEW_DESC NearRtvDesc = {};
+	NearRtvDesc.ViewDimension = D3D11_RTV_DIMENSION_TEXTURE2D;
+	NearRtvDesc.Format = DXGI_FORMAT_R16G16B16A16_FLOAT;
+	NearRtvDesc.Texture2D.MipSlice = 0;
+
+	Result = Device->CreateRenderTargetView(DofNearTexture, &NearRtvDesc, &DofNearRTV);
+	if (FAILED(Result))
+	{
+		UE_LOG("DeviceResources: DoF Near RTV 생성 실패");
+		return;
+	}
+
+	D3D11_SHADER_RESOURCE_VIEW_DESC NearSrvDesc = {};
+	NearSrvDesc.Format = DXGI_FORMAT_R16G16B16A16_FLOAT;
+	NearSrvDesc.ViewDimension = D3D11_SRV_DIMENSION_TEXTURE2D;
+	NearSrvDesc.Texture2D.MostDetailedMip = 0;
+	NearSrvDesc.Texture2D.MipLevels = 1;
+
+	Result = Device->CreateShaderResourceView(DofNearTexture, &NearSrvDesc, &DofNearMapSRV);
+	if (FAILED(Result))
+	{
+		UE_LOG("DeviceResources: DoF Near SRV 생성 실패");
+	}
+
+	// =====================================
+	// DoF Far Map
+	// =====================================
+	D3D11_TEXTURE2D_DESC FarDesc = {};
+	FarDesc.Width = SwapDesc.BufferDesc.Width;
+	FarDesc.Height = SwapDesc.BufferDesc.Height;
+	FarDesc.MipLevels = 1;
+	FarDesc.ArraySize = 1;
+	FarDesc.Format = DXGI_FORMAT_R16G16B16A16_FLOAT;
+	FarDesc.SampleDesc.Count = 1;
+	FarDesc.SampleDesc.Quality = 0;
+	FarDesc.Usage = D3D11_USAGE_DEFAULT;
+	FarDesc.BindFlags = D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE;
+	FarDesc.CPUAccessFlags = 0;
+	FarDesc.MiscFlags = 0;
+
+	Result = Device->CreateTexture2D(&FarDesc, nullptr, &DofFarTexture);
+	if (FAILED(Result))
+	{
+		UE_LOG("DeviceResources: DoF Far Texture 생성 실패");
+		return;
+	}
+
+	D3D11_RENDER_TARGET_VIEW_DESC FarRtvDesc = {};
+	FarRtvDesc.ViewDimension = D3D11_RTV_DIMENSION_TEXTURE2D;
+	FarRtvDesc.Format = DXGI_FORMAT_R16G16B16A16_FLOAT;
+	FarRtvDesc.Texture2D.MipSlice = 0;
+
+	Result = Device->CreateRenderTargetView(DofFarTexture, &FarRtvDesc, &DofFarRTV);
+	if (FAILED(Result))
+	{
+		UE_LOG("DeviceResources: DoF Far RTV 생성 실패");
+		return;
+	}
+
+	D3D11_SHADER_RESOURCE_VIEW_DESC FarSrvDesc = {};
+	FarSrvDesc.Format = DXGI_FORMAT_R16G16B16A16_FLOAT;
+	FarSrvDesc.ViewDimension = D3D11_SRV_DIMENSION_TEXTURE2D;
+	FarSrvDesc.Texture2D.MostDetailedMip = 0;
+	FarSrvDesc.Texture2D.MipLevels = 1;
+
+	Result = Device->CreateShaderResourceView(DofFarTexture, &FarSrvDesc, &DofFarMapSRV);
+	if (FAILED(Result))
+	{
+		UE_LOG("DeviceResources: DoF Far SRV 생성 실패");
+	}
 }
 
 void D3D11RHI::CreateRasterizerState()
@@ -1111,6 +1221,38 @@ void D3D11RHI::ReleaseDepthOfFieldBuffers()
     {
         DofBlurTexture->Release();
         DofBlurTexture = nullptr;
+    }
+
+    if (DofNearMapSRV)
+    {
+        DofNearMapSRV->Release();
+        DofNearMapSRV = nullptr;
+    }
+    if (DofNearRTV)
+    {
+        DofNearRTV->Release();
+        DofNearRTV = nullptr;
+    }
+    if (DofNearTexture)
+    {
+        DofNearTexture->Release();
+        DofNearTexture = nullptr;
+    }
+
+    if (DofFarMapSRV)
+    {
+        DofFarMapSRV->Release();
+        DofFarMapSRV = nullptr;
+    }
+    if (DofFarRTV)
+    {
+        DofFarRTV->Release();
+        DofFarRTV = nullptr;
+    }
+    if (DofFarTexture)
+    {
+        DofFarTexture->Release();
+        DofFarTexture = nullptr;
     }
 }
 

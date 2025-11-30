@@ -197,6 +197,8 @@ public:
 
     // RTV Getters
     ID3D11RenderTargetView* GetBackBufferRTV() const { return BackBufferRTV; }
+    ID3D11RenderTargetView* GetDofNearRTV() const { return DofNearRTV; }
+    ID3D11RenderTargetView* GetDofFarRTV() const { return DofFarRTV; }
 
 private:
 	void CreateDeviceAndSwapChain(HWND hWindow); // 여기서 디바이스, 디바이스 컨택스트, 스왑체인, 뷰포트를 초기화한다
@@ -269,10 +271,18 @@ private:
 	ID3D11Texture2D* DofCoCTexture = nullptr;
 	ID3D11RenderTargetView* DofCoCRTV = nullptr;
 	ID3D11ShaderResourceView* DofCoCMapSRV = nullptr;
-	
+
 	ID3D11Texture2D* DofBlurTexture = nullptr;
 	ID3D11RenderTargetView* DofBlurRTV = nullptr;
 	ID3D11ShaderResourceView* DofBlurMapSRV = nullptr;
+
+	ID3D11Texture2D* DofNearTexture = nullptr;
+	ID3D11RenderTargetView* DofNearRTV = nullptr;
+	ID3D11ShaderResourceView* DofNearMapSRV = nullptr;
+
+	ID3D11Texture2D* DofFarTexture = nullptr;
+	ID3D11RenderTargetView* DofFarRTV = nullptr;
+	ID3D11ShaderResourceView* DofFarMapSRV = nullptr;
 
 	// 현재 소스(읽기)와 타겟(쓰기)을 가리키는 인덱스
 	int32 SourceIndex = 0;
