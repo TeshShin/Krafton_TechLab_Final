@@ -1,4 +1,4 @@
-#include "pch.h"
+﻿#include "pch.h"
 #include "BodyInstance.h"
 #include "PhysicalMaterial.h"
 #include "PhysXConversion.h"
@@ -165,6 +165,9 @@ void FBodyInstance::InitBodyFromSetup(const FTransform& Transform, UBodySetup* I
 
     // BodySetup에서 모든 Shape 생성 및 부착
     InBodySetup->CreatePhysicsShapes(this, Scale3D, PhysMat);
+
+    // UBodySetupCore 설정 적용 (PhysicsType, CollisionResponse, CollisionTraceFlag)
+    ApplyBodySetupSettings(InBodySetup);
 
     // 질량 계산
     UpdateMassProperties();
@@ -450,6 +453,104 @@ void FBodyInstance::SetEnableGravity(bool bNewEnableGravity)
     if (RigidActor)
     {
         RigidActor->setActorFlag(PxActorFlag::eDISABLE_GRAVITY, !bNewEnableGravity);
+    }
+}
+
+// --- UBodySetupCore 설정 적용 ---
+
+void FBodyInstance::ApplyBodySetupSettings(const UBodySetupCore* BodySetupCore)
+{
+    if (!BodySetupCore) return;
+
+    // 1. PhysicsType 적용 (Simulated/Kinematic/Default)
+    ApplyPhysicsType(BodySetupCore->PhysicsType);
+
+    // 2. CollisionResponse 적용 (충돌 활성/비활성)
+    ApplyCollisionResponse(BodySetupCore->CollisionResponse);
+
+    // 3. CollisionTraceFlag 저장 (Shape 플래그에 적용)
+    CollisionTraceFlag = BodySetupCore->CollisionTraceFlag;
+
+    // Shape 플래그 적용
+    for (int32 i = 0; i < Shapes.Num(); ++i)
+    {
+        if (!Shapes[i]) continue;
+
+        switch (CollisionTraceFlag)
+        {
+        case ECollisionTraceFlag::UseSimpleCollision:
+            // 단순 충돌만: 시뮬레이션 O, 쿼리 X
+            Shapes[i]->setFlag(PxShapeFlag::eSIMULATION_SHAPE, !bIsTrigger);
+            Shapes[i]->setFlag(PxShapeFlag::eSCENE_QUERY_SHAPE, false);
+            break;
+
+        case ECollisionTraceFlag::UseComplexCollision:
+            // 복잡 충돌만: 시뮬레이션 X, 쿼리 O
+            Shapes[i]->setFlag(PxShapeFlag::eSIMULATION_SHAPE, false);
+            Shapes[i]->setFlag(PxShapeFlag::eSCENE_QUERY_SHAPE, true);
+            break;
+
+        case ECollisionTraceFlag::UseSimpleAsComplex:
+        case ECollisionTraceFlag::UseComplexAsSimple:
+        case ECollisionTraceFlag::UseDefault:
+        default:
+            // 기본: 둘 다 활성
+            Shapes[i]->setFlag(PxShapeFlag::eSIMULATION_SHAPE, !bIsTrigger);
+            Shapes[i]->setFlag(PxShapeFlag::eSCENE_QUERY_SHAPE, true);
+            break;
+        }
+    }
+}
+
+void FBodyInstance::ApplyPhysicsType(EPhysicsType PhysicsType)
+{
+    PxRigidDynamic* DynamicActor = GetDynamicActor();
+    if (!DynamicActor) return;
+
+    switch (PhysicsType)
+    {
+    case EPhysicsType::Simulated:
+        // 물리 시뮬레이션 활성화 (Kinematic 플래그 해제)
+        DynamicActor->setRigidBodyFlag(PxRigidBodyFlag::eKINEMATIC, false);
+        bSimulatePhysics = true;
+        break;
+
+    case EPhysicsType::Kinematic:
+        // 키네마틱 모드 (물리 시뮬레이션 비활성화, 직접 제어)
+        DynamicActor->setRigidBodyFlag(PxRigidBodyFlag::eKINEMATIC, true);
+        bSimulatePhysics = false;
+        break;
+
+    case EPhysicsType::Default:
+    default:
+        // 기존 bSimulatePhysics 값 유지
+        DynamicActor->setRigidBodyFlag(PxRigidBodyFlag::eKINEMATIC, !bSimulatePhysics);
+        break;
+    }
+}
+
+void FBodyInstance::ApplyCollisionResponse(EBodyCollisionResponse::Type Response)
+{
+    if (!RigidActor) return;
+
+    bool bEnableCollision = (Response == EBodyCollisionResponse::BodyCollision_Enabled);
+
+    for (int32 i = 0; i < Shapes.Num(); ++i)
+    {
+        if (!Shapes[i]) continue;
+
+        if (bEnableCollision)
+        {
+            // 충돌 활성화
+            Shapes[i]->setFlag(PxShapeFlag::eSIMULATION_SHAPE, !bIsTrigger);
+            Shapes[i]->setFlag(PxShapeFlag::eSCENE_QUERY_SHAPE, true);
+        }
+        else
+        {
+            // 충돌 비활성화 (오버랩만 감지)
+            Shapes[i]->setFlag(PxShapeFlag::eSIMULATION_SHAPE, false);
+            Shapes[i]->setFlag(PxShapeFlag::eSCENE_QUERY_SHAPE, false);
+        }
     }
 }
 

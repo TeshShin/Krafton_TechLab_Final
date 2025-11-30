@@ -1,5 +1,6 @@
 ﻿#pragma once
 #include "PhysicsSystem.h"
+#include "BodySetupCore.h"
 
 // 전방 선언
 class UPrimitiveComponent;
@@ -49,6 +50,7 @@ public:
     bool bIsTrigger = false;
     bool bNotifyRigidBodyCollision = true;  // 충돌 이벤트 발생 여부
     bool bUseCCD = false;                    // Continuous Collision Detection
+    ECollisionTraceFlag CollisionTraceFlag = ECollisionTraceFlag::UseDefault;
 
     // --- DOF 잠금 ---
     EDOFMode DOFMode = EDOFMode::None;
@@ -126,6 +128,11 @@ public:
     void SetCollisionEnabled(bool bEnabled);
     void SetSimulatePhysics(bool bNewSimulate);
     void SetEnableGravity(bool bNewEnableGravity);
+
+    // --- UBodySetupCore 설정 적용 ---
+    void ApplyBodySetupSettings(const UBodySetupCore* BodySetupCore);
+    void ApplyPhysicsType(EPhysicsType PhysicsType);
+    void ApplyCollisionResponse(EBodyCollisionResponse::Type Response);
 
     // --- DOF 잠금 적용 ---
     // init 전에 설정해주면 설정된 잠금 축 이외의 모든 움직임을 강제로 막음
