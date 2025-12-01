@@ -194,13 +194,14 @@ void USkeletonTreeWidget::RenderBoneNode(int32 BoneIndex, int32 Depth)
 		ImGui::PopStyleColor();
 	}
 
-	// 클릭 처리: 본 선택 시 해당 바디도 함께 선택
+	// 클릭 처리: 본 선택 시 해당 바디도 함께 선택 + 그래프 기준 변경
 	if (ImGui::IsItemClicked() && !ImGui::IsItemToggledOpen())
 	{
 		EditorState->SelectedBoneIndex = BoneIndex;
 		if (bHasBody)
 		{
 			EditorState->SelectBody(BodyIndex);
+			EditorState->GraphPivotBodyIndex = BodyIndex;  // 그래프 기준도 변경
 		}
 	}
 
@@ -212,6 +213,7 @@ void USkeletonTreeWidget::RenderBoneNode(int32 BoneIndex, int32 Depth)
 		if (bHasBody)
 		{
 			EditorState->SelectBody(BodyIndex);
+			EditorState->GraphPivotBodyIndex = BodyIndex;  // 그래프 기준도 변경
 		}
 
 		if (!bHasBody)
@@ -231,6 +233,7 @@ void USkeletonTreeWidget::RenderBoneNode(int32 BoneIndex, int32 Depth)
 			if (ImGui::MenuItem("Select Body"))
 			{
 				EditorState->SelectBody(BodyIndex);
+				EditorState->GraphPivotBodyIndex = BodyIndex;  // 그래프 기준도 변경
 			}
 
 			ImGui::Separator();
@@ -327,6 +330,7 @@ void USkeletonTreeWidget::RenderBodyNode(int32 BodyIndex)
 	if (ImGui::IsItemClicked())
 	{
 		EditorState->SelectBody(BodyIndex);
+		EditorState->GraphPivotBodyIndex = BodyIndex;  // 그래프 기준도 변경
 	}
 
 	if (bNodeOpen)
