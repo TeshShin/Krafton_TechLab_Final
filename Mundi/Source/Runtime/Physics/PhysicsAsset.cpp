@@ -6,7 +6,7 @@
 
 UPhysicsAsset::UPhysicsAsset()
     : DefaultPhysMaterial(nullptr)
-    , bEnablePhysicsSimulation(true)
+    //, bEnablePhysicsSimulation(true)
 {
 }
 

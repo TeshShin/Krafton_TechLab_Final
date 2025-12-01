@@ -31,6 +31,11 @@ USkeletalMeshComponent::USkeletalMeshComponent()
 }
 
 
+void USkeletalMeshComponent::BeginPlay()
+{
+    Super::BeginPlay();
+}
+
 void USkeletalMeshComponent::TickComponent(float DeltaTime)
 {
     Super::TickComponent(DeltaTime);
@@ -133,6 +138,9 @@ void USkeletalMeshComponent::SetSkeletalMesh(const FString& PathFileName)
         {
             AnimInstance->InitializeAnimation(this);
         }
+
+        // 메시의 PhysicsAsset 동기화
+        SyncPhysicsAssetFromMesh();
     }
     else
     {
@@ -140,6 +148,33 @@ void USkeletalMeshComponent::SetSkeletalMesh(const FString& PathFileName)
         CurrentLocalSpacePose.Empty();
         CurrentComponentSpacePose.Empty();
         TempFinalSkinningMatrices.Empty();
+        PhysicsAsset = nullptr;
+    }
+}
+
+void USkeletalMeshComponent::SyncPhysicsAssetFromMesh()
+{
+    if (SkeletalMesh)
+    {
+        PhysicsAsset = SkeletalMesh->GetPhysicsAsset();
+    }
+    else
+    {
+        PhysicsAsset = nullptr;
+    }
+}
+
+void USkeletalMeshComponent::OnPropertyChanged(const FProperty& Property)
+{
+    Super::OnPropertyChanged(Property);
+
+    // PhysicsAsset 프로퍼티가 변경되면 메시에도 반영
+    if (strcmp(Property.Name, "PhysicsAsset") == 0)
+    {
+        if (SkeletalMesh)
+        {
+            SkeletalMesh->SetPhysicsAsset(PhysicsAsset);
+        }
     }
 }
 
@@ -505,6 +540,17 @@ void USkeletalMeshComponent::InitRagdoll()
         // 본의 현재 월드 트랜스폼으로 초기화
         FTransform BoneWorldTM = GetBoneWorldTransform(BoneIndex);
         Body->InitBody(BodySetup, BoneWorldTM, this, PhysScene);
+
+        // 컴포넌트의 BodyInstance에서 전역 설정 적용
+        Body->SetEnableGravity(BodyInstance.IsEnabledGravity());
+
+        // DOF Lock 설정 복사
+        bool bLockLinearX, bLockLinearY, bLockLinearZ;
+        bool bLockAngularX, bLockAngularY, bLockAngularZ;
+        BodyInstance.GetLinearLock(bLockLinearX, bLockLinearY, bLockLinearZ);
+        BodyInstance.GetAngularLock(bLockAngularX, bLockAngularY, bLockAngularZ);
+        Body->SetLinearLock(bLockLinearX, bLockLinearY, bLockLinearZ);
+        Body->SetAngularLock(bLockAngularX, bLockAngularY, bLockAngularZ);
 
         // 초기 상태는 Kinematic (비활성)
         Body->SetSimulatePhysics(false);

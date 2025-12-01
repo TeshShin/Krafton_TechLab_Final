@@ -36,6 +36,7 @@ public:
     USkeletalMeshComponent();
     ~USkeletalMeshComponent() override = default;
 
+    void BeginPlay() override;
     void TickComponent(float DeltaTime) override;
     void SetSkeletalMesh(const FString& PathFileName) override;
 
@@ -151,6 +152,21 @@ private:
     // Animation state
     UAnimInstance* AnimInstance = nullptr;
     bool bUseAnimation = true;
+
+// ===========================
+// Physics Asset Section
+// ===========================
+public:
+    // 메시의 PhysicsAsset을 편집하기 위한 프로퍼티
+    // 변경 시 메시의 PhysicsAsset도 함께 변경됨
+    UPROPERTY(EditAnywhere, Category="Physics")
+    UPhysicsAsset* PhysicsAsset = nullptr;
+
+    // PhysicsAsset 동기화 (메시 변경 시 호출)
+    void SyncPhysicsAssetFromMesh();
+
+    // 프로퍼티 변경 시 메시에 반영
+    virtual void OnPropertyChanged(const FProperty& Property) override;
 
 // ===========================
 // Ragdoll Physics Section

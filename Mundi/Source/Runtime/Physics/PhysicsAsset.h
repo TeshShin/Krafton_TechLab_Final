@@ -82,8 +82,8 @@ public:
     UPhysicalMaterial* DefaultPhysMaterial = nullptr;
 
     // 전체 시뮬레이션 활성화 여부
-    UPROPERTY(EditAnywhere, Category="Physics")
-    bool bEnablePhysicsSimulation = true;
+    //UPROPERTY(EditAnywhere, Category="Physics")
+    //bool bEnablePhysicsSimulation = true;
 
     // --- 캐시/최적화 ---
 

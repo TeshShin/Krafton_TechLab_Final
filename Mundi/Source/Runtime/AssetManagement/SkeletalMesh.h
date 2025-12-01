@@ -1,12 +1,14 @@
 ﻿#pragma once
 #include "ResourceBase.h"
+#include "USkeletalMesh.generated.h"
 
 class UPhysicsAsset;
 
+UCLASS()
 class USkeletalMesh : public UResourceBase
 {
 public:
-    DECLARE_CLASS(USkeletalMesh, UResourceBase)
+    GENERATED_REFLECTION_BODY()
 
     USkeletalMesh();
     virtual ~USkeletalMesh() override;
@@ -40,6 +42,10 @@ public:
 
     // GPU 스키닝용 버텍스 버퍼 생성 (FSkinnedVertex 그대로 사용)
     void CreateGPUSkinnedVertexBuffer(ID3D11Buffer** InVertexBuffer);
+
+    // 물리 에셋 (랙돌용 본별 충돌 Shape + Constraint 정의)
+    UPROPERTY(EditAnywhere, Category = "Physics")
+    UPhysicsAsset* PhysicsAsset = nullptr;
     
 private:
     void CreateIndexBuffer(FSkeletalMeshData* InSkeletalMesh, ID3D11Device* InDevice);
@@ -55,7 +61,4 @@ private:
     
     // CPU 리소스
     FSkeletalMeshData* Data = nullptr;
-
-    // 물리 에셋 (랙돌용 본별 충돌 Shape + Constraint 정의)
-    UPhysicsAsset* PhysicsAsset = nullptr;
 };
