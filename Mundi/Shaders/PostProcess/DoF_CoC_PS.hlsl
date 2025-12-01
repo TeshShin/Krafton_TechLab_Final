@@ -47,18 +47,42 @@ float4 mainPS(float4 position : SV_Position, float2 texcoord : TEXCOORD0) : SV_T
     if (viewZ > FDepthOfFieldBuffer.FocalDistance)
     {
         // Far 영역: FocalDistance부터 멀어질수록 CoC 증가
-        // Transition Range를 사용하여 부드럽게 블렌딩
+        // Transition Range: 초점 영역 경계를 부드럽게 전환
+        // - TransitionRange 이전: 부드럽게 페이드 (0 → coc)
+        // - TransitionRange 이후: 원래 CoC 값 그대로 사용
         float distanceFromFocus = viewZ - FDepthOfFieldBuffer.FocalDistance;
-        float transitionFactor = smoothstep(0.0, FDepthOfFieldBuffer.FarTransitionRange, distanceFromFocus);
-        farCoC = coc * transitionFactor;
+
+        if (FDepthOfFieldBuffer.FarTransitionRange > 0.001)
+        {
+            // Transition Range 내에서 smoothstep으로 부드럽게 전환
+            float transitionFactor = smoothstep(0.0, FDepthOfFieldBuffer.FarTransitionRange, distanceFromFocus);
+            farCoC = coc * transitionFactor;
+        }
+        else
+        {
+            // Transition Range가 0이면 즉시 적용
+            farCoC = coc;
+        }
     }
     else if (viewZ < FDepthOfFieldBuffer.FocalDistance)
     {
         // Near 영역: FocalDistance부터 가까워질수록 CoC 증가
-        // Transition Range를 사용하여 부드럽게 블렌딩
+        // Transition Range: 초점 영역 경계를 부드럽게 전환
+        // - TransitionRange 이전: 부드럽게 페이드 (0 → coc)
+        // - TransitionRange 이후: 원래 CoC 값 그대로 사용
         float distanceFromFocus = FDepthOfFieldBuffer.FocalDistance - viewZ;
-        float transitionFactor = smoothstep(0.0, FDepthOfFieldBuffer.NearTransitionRange, distanceFromFocus);
-        nearCoC = coc * transitionFactor;
+
+        if (FDepthOfFieldBuffer.NearTransitionRange > 0.001)
+        {
+            // Transition Range 내에서 smoothstep으로 부드럽게 전환
+            float transitionFactor = smoothstep(0.0, FDepthOfFieldBuffer.NearTransitionRange, distanceFromFocus);
+            nearCoC = coc * transitionFactor;
+        }
+        else
+        {
+            // Transition Range가 0이면 즉시 적용
+            nearCoC = coc;
+        }
     }
 
     // R: Far CoC, G: Near CoC, B: 0, A: RawDepth
