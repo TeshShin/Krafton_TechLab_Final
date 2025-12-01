@@ -1264,14 +1264,13 @@ void SPhysicsAssetEditorWindow::RenderLeftPanel(float PanelWidth)
 		ImNodes::BeginNodeEditor();
 
 		// 레이아웃 상수
-		const float ColumnSpacing1 = 150.0f;   // Body → Constraint 간격
-		const float ColumnSpacing2 = 200.0f;   // Constraint → Body 간격 (Constraint가 더 넓음)
+		const float ColumnSpacing = 200.0f;
 		const float RowSpacing = 100.0f;
-		const float ConstraintWrapWidth = 140.0f;  // Constraint 텍스트 줄바꿈 너비
+		const float TextWrapWidth = 140.0f;  // 텍스트 줄바꿈 너비
 
 		float col1X = 50.0f;
-		float col2X = col1X + ColumnSpacing1;
-		float col3X = col2X + ColumnSpacing2;
+		float col2X = col1X + ColumnSpacing;
+		float col3X = col2X + ColumnSpacing;
 		float centerY = (connectedConstraints.size() * RowSpacing) / 2.0f;
 
 		// ─────────────────────────────────────────────────
@@ -1298,9 +1297,11 @@ void SPhysicsAssetEditorWindow::RenderLeftPanel(float PanelWidth)
 
 		// 바디 이름과 Shape 개수 + 오른쪽 핀
 		ImNodes::BeginOutputAttribute(pivotBodyIdx * 2);
-		ImGui::TextUnformatted(pivotBody->BoneName.ToString().c_str());
+		ImGui::PushTextWrapPos(ImGui::GetCursorPos().x + TextWrapWidth);
+		ImGui::TextWrapped("%s", pivotBody->BoneName.ToString().c_str());
 		int32 shapeCount = pivotBody->AggGeom.GetElementCount();
 		ImGui::Text("%d shape(s)", shapeCount);
+		ImGui::PopTextWrapPos();
 		ImNodes::EndOutputAttribute();
 
 		ImNodes::EndNode();
@@ -1353,7 +1354,7 @@ void SPhysicsAssetEditorWindow::RenderLeftPanel(float PanelWidth)
 			}
 			// 핀과 내용을 같은 줄에 배치 (긴 이름은 줄바꿈)
 			ImNodes::BeginInputAttribute(constraintInputAttr);
-			ImGui::PushTextWrapPos(ImGui::GetCursorPos().x + ConstraintWrapWidth);
+			ImGui::PushTextWrapPos(ImGui::GetCursorPos().x + TextWrapWidth);
 			ImGui::TextWrapped("%s : %s", parentName.c_str(), childName.c_str());
 			ImGui::PopTextWrapPos();
 			ImNodes::EndInputAttribute();
@@ -1394,9 +1395,11 @@ void SPhysicsAssetEditorWindow::RenderLeftPanel(float PanelWidth)
 
 					// 바디 이름과 Shape 개수 + 왼쪽 핀
 					ImNodes::BeginInputAttribute(40000 + static_cast<int32>(i) * 2 + 1);
-					ImGui::TextUnformatted(otherBody->BoneName.ToString().c_str());
+					ImGui::PushTextWrapPos(ImGui::GetCursorPos().x + TextWrapWidth);
+					ImGui::TextWrapped("%s", otherBody->BoneName.ToString().c_str());
 					int32 otherShapeCount = otherBody->AggGeom.GetElementCount();
 					ImGui::Text("%d shape(s)", otherShapeCount);
+					ImGui::PopTextWrapPos();
 					ImNodes::EndInputAttribute();
 
 					ImNodes::EndNode();

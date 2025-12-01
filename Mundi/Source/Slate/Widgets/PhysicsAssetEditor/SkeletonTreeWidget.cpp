@@ -106,10 +106,20 @@ void USkeletonTreeWidget::RebuildCache()
 			}
 		}
 
-		// 본 -> 제약조건 맵 구축 (자식 바디의 본 인덱스 기준)
+		// 본 -> 제약조건 맵 구축 (부모/자식 바디 모두에 표시)
 		for (int32 i = 0; i < static_cast<int32>(EditorState->EditingAsset->ConstraintSetups.size()); ++i)
 		{
 			const FConstraintSetup& Constraint = EditorState->EditingAsset->ConstraintSetups[i];
+			// 부모 바디의 본에 추가
+			if (Constraint.ParentBodyIndex >= 0 && Constraint.ParentBodyIndex < static_cast<int32>(EditorState->EditingAsset->BodySetups.size()))
+			{
+				UBodySetup* ParentBody = EditorState->EditingAsset->BodySetups[Constraint.ParentBodyIndex];
+				if (ParentBody && ParentBody->BoneIndex >= 0)
+				{
+					Cache.BoneToConstraintMap[ParentBody->BoneIndex].push_back(i);
+				}
+			}
+			// 자식 바디의 본에 추가
 			if (Constraint.ChildBodyIndex >= 0 && Constraint.ChildBodyIndex < static_cast<int32>(EditorState->EditingAsset->BodySetups.size()))
 			{
 				UBodySetup* ChildBody = EditorState->EditingAsset->BodySetups[Constraint.ChildBodyIndex];
