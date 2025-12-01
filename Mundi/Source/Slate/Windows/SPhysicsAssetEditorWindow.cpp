@@ -1156,41 +1156,6 @@ void SPhysicsAssetEditorWindow::RenderLeftPanel(float PanelWidth)
 	ImGui::Dummy(ImVec2(0, 8));
 
 	// ─────────────────────────────────────────────────
-	// DISPLAY OPTIONS 섹션
-	// ─────────────────────────────────────────────────
-	ImGui::Text("DISPLAY OPTIONS");
-	ImGui::Dummy(ImVec2(0, 4));
-
-	ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(1.5f, 1.5f));
-	ImGui::PushStyleColor(ImGuiCol_FrameBg, ImVec4(0.23f, 0.25f, 0.27f, 0.80f));
-	ImGui::PushStyleColor(ImGuiCol_CheckMark, ImVec4(0.75f, 0.80f, 0.90f, 1.00f));
-
-	if (ImGui::Checkbox("Show Mesh", &State->bShowMesh))
-	{
-		if (auto* comp = State->PreviewActor->GetSkeletalMeshComponent())
-			comp->SetVisibility(State->bShowMesh);
-	}
-	ImGui::SameLine(0.0f, 12.0f);
-	if (ImGui::Checkbox("Show Bodies", &State->bShowBodies))
-	{
-		if (State->BodyPreviewLineComponent)
-			State->BodyPreviewLineComponent->SetLineVisible(State->bShowBodies);
-	}
-	ImGui::SameLine(0.0f, 12.0f);
-	if (ImGui::Checkbox("Show Constraints", &State->bShowConstraints))
-	{
-		if (State->ConstraintPreviewLineComponent)
-			State->ConstraintPreviewLineComponent->SetLineVisible(State->bShowConstraints);
-	}
-
-	ImGui::PopStyleColor(2);
-	ImGui::PopStyleVar();
-
-	ImGui::Dummy(ImVec2(0, 8));
-	ImGui::Separator();
-	ImGui::Dummy(ImVec2(0, 8));
-
-	// ─────────────────────────────────────────────────
 	// 남은 높이 계산 (Skeleton 60%, Graph 40%)
 	// ─────────────────────────────────────────────────
 	float remainingHeight = ImGui::GetContentRegionAvail().y;
@@ -1577,7 +1542,26 @@ void SPhysicsAssetEditorWindow::RenderToolbar()
 	ImGui::SeparatorEx(ImGuiSeparatorFlags_Vertical);
 	ImGui::SameLine();
 
-	// 표시 옵션만 유지 (Add Body, Remove Body, Auto-Generate 등은 Tools 패널과 컨텍스트 메뉴로 이동)
+	// Simulate 버튼 (placeholder)
+	if (ImGui::Button("Simulate"))
+	{
+		// TODO: 시뮬레이션 기능 구현
+	}
+	ImGui::SameLine();
+
+	ImGui::SeparatorEx(ImGuiSeparatorFlags_Vertical);
+	ImGui::SameLine();
+
+	// 표시 옵션
+	if (ImGui::Checkbox("Meshes", &State->bShowMesh))
+	{
+		// 메시 가시성 토글
+		if (auto* comp = State->PreviewActor->GetSkeletalMeshComponent())
+		{
+			comp->SetVisibility(State->bShowMesh);
+		}
+	}
+	ImGui::SameLine();
 	if (ImGui::Checkbox("Bodies", &State->bShowBodies))
 	{
 		if (State->BodyPreviewLineComponent)
