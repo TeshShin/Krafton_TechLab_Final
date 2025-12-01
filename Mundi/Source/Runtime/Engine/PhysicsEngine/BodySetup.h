@@ -53,4 +53,14 @@ public:
 
 	/** 테스트용 함수 (캡슐 추가) */
 	void AddCapsuleTest(float Radius, float Length);
+
+	// ====================================================================
+	// 직렬화
+	// ====================================================================
+
+	/** 직렬화 - UPROPERTY는 자동, AggGeom은 수동 처리 */
+	virtual void Serialize(const bool bInIsLoading, JSON& InOutHandle) override;
+
+	/** 서브 객체 복제 */
+	virtual void DuplicateSubObjects() override;
 };
