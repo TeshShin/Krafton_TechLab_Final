@@ -22,59 +22,36 @@ private:
     // (1) CoC 단계
     // ============================================================
 
-    // [선택] A. Downscale
-    //  Blur 계산량 대폭 감소를 위해 해상도를 1/2 또는 1/4로 줄입니다.
+    // [선택] A. Downscale - Blur 계산량 대폭 감소를 위해 해상도를 1/2 또는 1/4로 줄입니다.
     void ExecuteDownscalePass(FSceneView* View, D3D11RHI* RHIDevice);
 
-    // [필수] B. CoC 계산
-    // DOF의 핵심: 초점거리/조리개/피사체 거리로 Blur 반경(CoC)을 생성.
+    // [필수] B. CoC 계산 - 초점거리/조리개/피사체 거리로 Blur 반경(CoC)을 생성.
     void ExecuteCoCPass(const FPostProcessModifier& M, FSceneView* View, D3D11RHI* RHIDevice);
 
-    // [선택] E. Foreground Dilation
-    // 전경 픽셀을 외곽으로 확대하여 경계 씹힘/배경 침투 제거.
+    // [선택] C. Foreground Dilation - 전경 픽셀을 외곽으로 확대하여 경계 씹힘/배경 침투 제거.
     void ExecuteDilationPass(FSceneView* View, D3D11RHI* RHIDevice);
 
     // ============================================================
     // (2) Blur 단계
     // ============================================================
 
-    // [선택] C. Prefilter
-    // 빛 강조, 마스크 정제, 하이라이트 보정 등 Blur 이전 단계 품질 향상.
+    // [선택] D. Prefilter - 빛 강조, 마스크 정제, 하이라이트 보정 등 Blur 이전 단계 품질 향상.
     void ExecutePreFilterPass(FSceneView* View, D3D11RHI* RHIDevice);
 
-    // [선택] D. Near/Far Split
-    // 전경/배경을 분리하여 Bleeding(Halo) 아티팩트를 제거하여 품질 향상.
+    // [필수] E. Near/Far Split - 전경과 배경을 분리하여 Bleeding(Halo) 아티팩트를 제거하여 품질 향상.
     void ExecuteNearFarSplitPass(FSceneView* View, D3D11RHI* RHIDevice);
 
-    // [필수] F. Hex Blur (3-pass)
-    // DOF Blur의 핵심. Hexagonal kernel을 3-pass로 분해하여 Blur 생성.
-    // Gaussian, Poisson 등으로 교체 가능하나 Blur는 필수.
-    
-    // Near 필드에 대해 독립적으로 블러 적용
-    void ExecuteNearHexBlurPass1(FSceneView* View, D3D11RHI* RHIDevice);
-    void ExecuteNearHexBlurPass2(FSceneView* View, D3D11RHI* RHIDevice);
-    void ExecuteNearHexBlurPass3(FSceneView* View, D3D11RHI* RHIDevice);
+    // [필수] F. Hex Blur - Hexagonal kernel을 3-pass로 분해하여 Near와 Far Blur 텍스처 생성.
+    void ExecuteHexBlurPass(FSceneView* View, D3D11RHI* RHIDevice, RHI_SRV_Index InputSRV, 
+        ERTVMode FinalRTV, RHI_SRV_Index FinalSRV);
 
-    // Far 필드에 대해 독립적으로 블러 적용
-    void ExecuteFarHexBlurPass1(FSceneView* View, D3D11RHI* RHIDevice);
-    void ExecuteFarHexBlurPass2(FSceneView* View, D3D11RHI* RHIDevice);
-    void ExecuteFarHexBlurPass3(FSceneView* View, D3D11RHI* RHIDevice);
-
-    // [선택] F-3. Merge Near/Far
-    // Near와 Far 블러 결과를 병합
+    // [필수] G. Merge Near/Far -  분리된 Near와 Far 블러 텍스처 결과를 병합
     void ExecuteMergeNearFarPass(FSceneView* View, D3D11RHI* RHIDevice);
 
-    // [임시] Float 타겟 유지를 위한 복사 패스
-    void ExecuteCopyBlurToNearTarget(FSceneView* View, D3D11RHI* RHIDevice);
-    void ExecuteCopyBlurToFarTarget(FSceneView* View, D3D11RHI* RHIDevice);
-
-    // [선택] G. Upscale
-    // Downscale Blur 결과를 원본 해상도로 복원.
-    // Bilateral 방식으로 경계 유지. Blur 품질 유지에 필수.
+    // [선택] H. Upscale - Downscale Blur 결과를 원본 해상도로 복원.
     void ExecuteUpscalePass(FSceneView* View, D3D11RHI* RHIDevice);
 
-    // [선택] T. Temporal Blend1
-    // 이전 프레임 DOF와 현재 프레임 DOF를 블렌딩하여 노이즈/깜빡임 제거.
+    // [선택] I. Temporal Blend - 이전 프레임 DOF와 현재 프레임 DOF를 블렌딩하여 노이즈/깜빡임 제거.
     void ExecuteTemporalBlendPass(FSceneView* View, D3D11RHI* RHIDevice);
 
 
@@ -82,7 +59,7 @@ private:
     // (3) Composite 단계
     // ============================================================
 
-    // [필수] H. Composite
+    // [필수] J. Composite
     // 원본 SceneColor와 Blur를 CoC 기반으로 혼합하여 최종 DOF 결과 생성
     void ExecuteCompositePass(const FPostProcessModifier& M, FSceneView* View, D3D11RHI* RHIDevice);
 };

@@ -484,10 +484,10 @@
       "bActorHiddenInGame" : false,
       "bActorIsActive" : true
     },
-    "1064" : {
+    "1055" : {
       "ObjectName" : "AParticleEventManager_6",
       "OwnedComponents" : [{
-          "Id" : 1065,
+          "Id" : 1056,
           "ObjectName" : "USceneComponent_7",
           "ParentId" : 0,
           "RelativeLocation" : [0.000000, 0.000000, 0.000000],
@@ -500,16 +500,16 @@
           "bTickEnabled" : true,
           "bTickInEditor" : false
         }],
-      "RootComponentId" : 1065,
+      "RootComponentId" : 1056,
       "Tag" : "",
       "Type" : "AParticleEventManager",
       "bActorHiddenInGame" : false,
       "bActorIsActive" : true
     },
-    "1074" : {
+    "1057" : {
       "ObjectName" : "AStaticMeshActor_0",
       "OwnedComponents" : [{
-          "Id" : 1075,
+          "Id" : 1059,
           "MaterialSlots" : [{
               "Overrides" : {
                 "Scalars" : {
@@ -541,16 +541,16 @@
           "bTickEnabled" : true,
           "bTickInEditor" : false
         }],
-      "RootComponentId" : 1075,
+      "RootComponentId" : 1059,
       "Tag" : "",
       "Type" : "AStaticMeshActor",
       "bActorHiddenInGame" : false,
       "bActorIsActive" : true
     },
-    "1077" : {
+    "1061" : {
       "ObjectName" : "AStaticMeshActor_1",
       "OwnedComponents" : [{
-          "Id" : 1078,
+          "Id" : 1063,
           "MaterialSlots" : [{
               "Overrides" : {
                 "Scalars" : {
@@ -582,16 +582,16 @@
           "bTickEnabled" : true,
           "bTickInEditor" : false
         }],
-      "RootComponentId" : 1078,
+      "RootComponentId" : 1063,
       "Tag" : "",
       "Type" : "AStaticMeshActor",
       "bActorHiddenInGame" : false,
       "bActorIsActive" : true
     },
-    "1080" : {
+    "1065" : {
       "ObjectName" : "AStaticMeshActor_2",
       "OwnedComponents" : [{
-          "Id" : 1081,
+          "Id" : 1067,
           "MaterialSlots" : [{
               "Overrides" : {
                 "Scalars" : {
@@ -623,16 +623,16 @@
           "bTickEnabled" : true,
           "bTickInEditor" : false
         }],
-      "RootComponentId" : 1081,
+      "RootComponentId" : 1067,
       "Tag" : "",
       "Type" : "AStaticMeshActor",
       "bActorHiddenInGame" : false,
       "bActorIsActive" : true
     },
-    "1083" : {
+    "1069" : {
       "ObjectName" : "AStaticMeshActor_3",
       "OwnedComponents" : [{
-          "Id" : 1084,
+          "Id" : 1071,
           "MaterialSlots" : [{
               "Overrides" : {
                 "Scalars" : {
@@ -664,16 +664,16 @@
           "bTickEnabled" : true,
           "bTickInEditor" : false
         }],
-      "RootComponentId" : 1084,
+      "RootComponentId" : 1071,
       "Tag" : "",
       "Type" : "AStaticMeshActor",
       "bActorHiddenInGame" : false,
       "bActorIsActive" : true
     },
-    "1086" : {
+    "1073" : {
       "ObjectName" : "AStaticMeshActor_4",
       "OwnedComponents" : [{
-          "Id" : 1087,
+          "Id" : 1075,
           "MaterialSlots" : [{
               "Overrides" : {
                 "Scalars" : {
@@ -705,20 +705,614 @@
           "bTickEnabled" : true,
           "bTickInEditor" : false
         }],
-      "RootComponentId" : 1087,
+      "RootComponentId" : 1075,
       "Tag" : "",
       "Type" : "AStaticMeshActor",
       "bActorHiddenInGame" : false,
       "bActorIsActive" : true
+    },
+    "1077" : {
+      "ObjectName" : "AParticleEventManager_7",
+      "OwnedComponents" : [{
+          "Id" : 1078,
+          "ObjectName" : "USceneComponent_8",
+          "ParentId" : 0,
+          "RelativeLocation" : [0.000000, 0.000000, 0.000000],
+          "RelativeRotationEuler" : [0.000000, 0.000000, 0.000000],
+          "RelativeScale" : [1.000000, 1.000000, 1.000000],
+          "Type" : "USceneComponent",
+          "bHiddenInGame" : false,
+          "bIsActive" : true,
+          "bIsVisible" : true,
+          "bTickEnabled" : true,
+          "bTickInEditor" : false
+        }],
+      "RootComponentId" : 1078,
+      "Tag" : "",
+      "Type" : "AParticleEventManager",
+      "bActorHiddenInGame" : false,
+      "bActorIsActive" : true
+    },
+    "1079" : {
+      "ObjectName" : "AStaticMeshActor_0",
+      "OwnedComponents" : [{
+          "Id" : 1081,
+          "MaterialSlots" : [{
+              "Overrides" : {
+                "Scalars" : {
+
+                },
+                "Textures" : {
+                  "0" : "None"
+                },
+                "Vectors" : {
+
+                }
+              },
+              "ParentPath" : "texture",
+              "Type" : "UMaterialInstanceDynamic"
+            }],
+          "ObjectName" : "UStaticMeshComponent_2",
+          "ParentId" : 0,
+          "RelativeLocation" : [193.514069, 0.168510, 128.387802],
+          "RelativeRotationEuler" : [0.000000, -0.000000, 0.000000],
+          "RelativeScale" : [5.000000, 555.248108, 451.102356],
+          "StaticMesh" : "Data/cube-tex.obj",
+          "Type" : "UStaticMeshComponent",
+          "bBlockComponent" : false,
+          "bCastShadows" : true,
+          "bGenerateOverlapEvents" : true,
+          "bHiddenInGame" : false,
+          "bIsActive" : true,
+          "bIsVisible" : true,
+          "bTickEnabled" : true,
+          "bTickInEditor" : false
+        }],
+      "RootComponentId" : 1081,
+      "Tag" : "",
+      "Type" : "AStaticMeshActor",
+      "bActorHiddenInGame" : false,
+      "bActorIsActive" : true
+    },
+    "1083" : {
+      "ObjectName" : "포인트 라이트_0",
+      "OwnedComponents" : [{
+          "AttenuationRadius" : 44.000000,
+          "FalloffExponent" : 2.059000,
+          "Id" : 1085,
+          "Intensity" : 11.500000,
+          "LightColor" : [0.000000, 0.554077, 0.779923, 1.000000],
+          "ObjectName" : "UPointLightComponent_1",
+          "OverrideCameraLightNum" : 0,
+          "ParentId" : 0,
+          "RelativeLocation" : [155.382294, -21.187723, 107.626617],
+          "RelativeRotationEuler" : [0.000000, -0.000000, 0.000000],
+          "RelativeScale" : [1.000000, 1.000000, 1.000000],
+          "ShadowBias" : 0.000010,
+          "ShadowResolutionScale" : 1024,
+          "ShadowSharpen" : 0.500000,
+          "ShadowSlopeBias" : 0.000010,
+          "SourceRadius" : 0.000000,
+          "Temperature" : 6500.000000,
+          "Type" : "UPointLightComponent",
+          "bCastShadows" : true,
+          "bHiddenInGame" : false,
+          "bIsActive" : true,
+          "bIsVisible" : true,
+          "bOverrideCameraLightPerspective" : false,
+          "bTickEnabled" : true,
+          "bTickInEditor" : false,
+          "bUseInverseSquareFalloff" : false
+        }],
+      "RootComponentId" : 1085,
+      "Tag" : "",
+      "Type" : "APointLightActor",
+      "bActorHiddenInGame" : false,
+      "bActorIsActive" : true
+    },
+    "1086" : {
+      "ObjectName" : "AStaticMeshActor_1",
+      "OwnedComponents" : [{
+          "Id" : 1088,
+          "MaterialSlots" : [{
+              "Overrides" : {
+                "Scalars" : {
+
+                },
+                "Textures" : {
+                  "0" : "Data/Model/bathroom_floor_Base_Color.png"
+                },
+                "Vectors" : {
+
+                }
+              },
+              "ParentPath" : "texture",
+              "Type" : "UMaterialInstanceDynamic"
+            }],
+          "ObjectName" : "UStaticMeshComponent_2",
+          "ParentId" : 0,
+          "RelativeLocation" : [105.998154, -16.704353, 14.239621],
+          "RelativeRotationEuler" : [44.997623, -0.000000, 0.000000],
+          "RelativeScale" : [5.000000, 55.832478, 59.531700],
+          "StaticMesh" : "Data/cube-tex.obj",
+          "Type" : "UStaticMeshComponent",
+          "bBlockComponent" : false,
+          "bCastShadows" : true,
+          "bGenerateOverlapEvents" : true,
+          "bHiddenInGame" : false,
+          "bIsActive" : true,
+          "bIsVisible" : true,
+          "bTickEnabled" : true,
+          "bTickInEditor" : false
+        }],
+      "RootComponentId" : 1088,
+      "Tag" : "",
+      "Type" : "AStaticMeshActor",
+      "bActorHiddenInGame" : false,
+      "bActorIsActive" : true
+    },
+    "1090" : {
+      "ObjectName" : "APointLightActor_0",
+      "OwnedComponents" : [{
+          "AttenuationRadius" : 94.800003,
+          "FalloffExponent" : 2.059000,
+          "Id" : 1092,
+          "Intensity" : 11.500000,
+          "LightColor" : [0.000000, 0.554077, 0.779923, 1.000000],
+          "ObjectName" : "UPointLightComponent_1",
+          "OverrideCameraLightNum" : 0,
+          "ParentId" : 0,
+          "RelativeLocation" : [190.904907, 42.623276, 174.567169],
+          "RelativeRotationEuler" : [0.000000, -0.000000, 0.000000],
+          "RelativeScale" : [1.000000, 1.000000, 1.000000],
+          "ShadowBias" : 0.000010,
+          "ShadowResolutionScale" : 1024,
+          "ShadowSharpen" : 0.500000,
+          "ShadowSlopeBias" : 0.000010,
+          "SourceRadius" : 0.000000,
+          "Temperature" : 6500.000000,
+          "Type" : "UPointLightComponent",
+          "bCastShadows" : true,
+          "bHiddenInGame" : false,
+          "bIsActive" : true,
+          "bIsVisible" : true,
+          "bOverrideCameraLightPerspective" : false,
+          "bTickEnabled" : true,
+          "bTickInEditor" : false,
+          "bUseInverseSquareFalloff" : false
+        }],
+      "RootComponentId" : 1092,
+      "Tag" : "",
+      "Type" : "APointLightActor",
+      "bActorHiddenInGame" : false,
+      "bActorIsActive" : true
+    },
+    "1093" : {
+      "ObjectName" : "APointLightActor_1",
+      "OwnedComponents" : [{
+          "AttenuationRadius" : 94.800003,
+          "FalloffExponent" : 2.059000,
+          "Id" : 1095,
+          "Intensity" : 11.500000,
+          "LightColor" : [0.250965, 0.000000, 0.000000, 1.000000],
+          "ObjectName" : "UPointLightComponent_1",
+          "OverrideCameraLightNum" : 0,
+          "ParentId" : 0,
+          "RelativeLocation" : [190.115234, 203.364380, 117.878464],
+          "RelativeRotationEuler" : [-55.384644, 0.000000, 0.000000],
+          "RelativeScale" : [1.000000, 1.000000, 1.000000],
+          "ShadowBias" : 0.000010,
+          "ShadowResolutionScale" : 1024,
+          "ShadowSharpen" : 0.500000,
+          "ShadowSlopeBias" : 0.000010,
+          "SourceRadius" : 0.000000,
+          "Temperature" : 6500.000000,
+          "Type" : "UPointLightComponent",
+          "bCastShadows" : true,
+          "bHiddenInGame" : false,
+          "bIsActive" : true,
+          "bIsVisible" : true,
+          "bOverrideCameraLightPerspective" : false,
+          "bTickEnabled" : true,
+          "bTickInEditor" : false,
+          "bUseInverseSquareFalloff" : false
+        }],
+      "RootComponentId" : 1095,
+      "Tag" : "",
+      "Type" : "APointLightActor",
+      "bActorHiddenInGame" : false,
+      "bActorIsActive" : true
+    },
+    "1096" : {
+      "ObjectName" : "APointLightActor_2",
+      "OwnedComponents" : [{
+          "AttenuationRadius" : 94.800003,
+          "FalloffExponent" : 2.059000,
+          "Id" : 1098,
+          "Intensity" : 11.500000,
+          "LightColor" : [0.199609, 0.000000, 0.250965, 1.000000],
+          "ObjectName" : "UPointLightComponent_1",
+          "OverrideCameraLightNum" : 0,
+          "ParentId" : 0,
+          "RelativeLocation" : [189.944107, -128.967010, 118.878464],
+          "RelativeRotationEuler" : [-55.384644, 0.000000, 0.000000],
+          "RelativeScale" : [1.000000, 1.000000, 1.000000],
+          "ShadowBias" : 0.000010,
+          "ShadowResolutionScale" : 1024,
+          "ShadowSharpen" : 0.500000,
+          "ShadowSlopeBias" : 0.000010,
+          "SourceRadius" : 0.000000,
+          "Temperature" : 6500.000000,
+          "Type" : "UPointLightComponent",
+          "bCastShadows" : true,
+          "bHiddenInGame" : false,
+          "bIsActive" : true,
+          "bIsVisible" : true,
+          "bOverrideCameraLightPerspective" : false,
+          "bTickEnabled" : true,
+          "bTickInEditor" : false,
+          "bUseInverseSquareFalloff" : false
+        }],
+      "RootComponentId" : 1098,
+      "Tag" : "",
+      "Type" : "APointLightActor",
+      "bActorHiddenInGame" : false,
+      "bActorIsActive" : true
+    },
+    "1102" : {
+      "ObjectName" : "APointLightActor_4",
+      "OwnedComponents" : [{
+          "AttenuationRadius" : 94.800003,
+          "FalloffExponent" : 2.059000,
+          "Id" : 1104,
+          "Intensity" : 53.799999,
+          "LightColor" : [0.250965, 0.226741, 0.000000, 1.000000],
+          "ObjectName" : "UPointLightComponent_1",
+          "OverrideCameraLightNum" : 0,
+          "ParentId" : 0,
+          "RelativeLocation" : [190.913315, -58.775497, 267.926147],
+          "RelativeRotationEuler" : [-55.384644, 0.000000, 0.000000],
+          "RelativeScale" : [1.000000, 1.000000, 1.000000],
+          "ShadowBias" : 0.000010,
+          "ShadowResolutionScale" : 1024,
+          "ShadowSharpen" : 0.500000,
+          "ShadowSlopeBias" : 0.000010,
+          "SourceRadius" : 0.000000,
+          "Temperature" : 6500.000000,
+          "Type" : "UPointLightComponent",
+          "bCastShadows" : true,
+          "bHiddenInGame" : false,
+          "bIsActive" : true,
+          "bIsVisible" : true,
+          "bOverrideCameraLightPerspective" : false,
+          "bTickEnabled" : true,
+          "bTickInEditor" : false,
+          "bUseInverseSquareFalloff" : false
+        }],
+      "RootComponentId" : 1104,
+      "Tag" : "",
+      "Type" : "APointLightActor",
+      "bActorHiddenInGame" : false,
+      "bActorIsActive" : true
+    },
+    "1122" : {
+      "ObjectName" : "AParticleEventManager_8",
+      "OwnedComponents" : [{
+          "Id" : 1123,
+          "ObjectName" : "USceneComponent_9",
+          "ParentId" : 0,
+          "RelativeLocation" : [0.000000, 0.000000, 0.000000],
+          "RelativeRotationEuler" : [0.000000, 0.000000, 0.000000],
+          "RelativeScale" : [1.000000, 1.000000, 1.000000],
+          "Type" : "USceneComponent",
+          "bHiddenInGame" : false,
+          "bIsActive" : true,
+          "bIsVisible" : true,
+          "bTickEnabled" : true,
+          "bTickInEditor" : false
+        }],
+      "RootComponentId" : 1123,
+      "Tag" : "",
+      "Type" : "AParticleEventManager",
+      "bActorHiddenInGame" : false,
+      "bActorIsActive" : true
+    },
+    "1132" : {
+      "ObjectName" : "APointLightActor_0",
+      "OwnedComponents" : [{
+          "AttenuationRadius" : 94.800003,
+          "FalloffExponent" : 2.059000,
+          "Id" : 1133,
+          "Intensity" : 53.799999,
+          "LightColor" : [0.250965, 0.226741, 0.000000, 1.000000],
+          "ObjectName" : "UPointLightComponent_1",
+          "OverrideCameraLightNum" : 0,
+          "ParentId" : 0,
+          "RelativeLocation" : [190.473160, -16.273537, 255.909988],
+          "RelativeRotationEuler" : [-55.384644, 0.000000, 0.000000],
+          "RelativeScale" : [1.000000, 1.000000, 1.000000],
+          "ShadowBias" : 0.000010,
+          "ShadowResolutionScale" : 1024,
+          "ShadowSharpen" : 0.500000,
+          "ShadowSlopeBias" : 0.000010,
+          "SourceRadius" : 0.000000,
+          "Temperature" : 6500.000000,
+          "Type" : "UPointLightComponent",
+          "bCastShadows" : true,
+          "bHiddenInGame" : false,
+          "bIsActive" : true,
+          "bIsVisible" : true,
+          "bOverrideCameraLightPerspective" : false,
+          "bTickEnabled" : true,
+          "bTickInEditor" : false,
+          "bUseInverseSquareFalloff" : false
+        }],
+      "RootComponentId" : 1133,
+      "Tag" : "",
+      "Type" : "APointLightActor",
+      "bActorHiddenInGame" : false,
+      "bActorIsActive" : true
+    },
+    "1135" : {
+      "ObjectName" : "APointLightActor_1",
+      "OwnedComponents" : [{
+          "AttenuationRadius" : 94.800003,
+          "FalloffExponent" : 2.059000,
+          "Id" : 1136,
+          "Intensity" : 53.799999,
+          "LightColor" : [0.250965, 0.226741, 0.000000, 1.000000],
+          "ObjectName" : "UPointLightComponent_1",
+          "OverrideCameraLightNum" : 0,
+          "ParentId" : 0,
+          "RelativeLocation" : [190.982742, -49.231411, 228.290527],
+          "RelativeRotationEuler" : [-55.384644, 0.000000, 0.000000],
+          "RelativeScale" : [1.000000, 1.000000, 1.000000],
+          "ShadowBias" : 0.000010,
+          "ShadowResolutionScale" : 1024,
+          "ShadowSharpen" : 0.500000,
+          "ShadowSlopeBias" : 0.000010,
+          "SourceRadius" : 0.000000,
+          "Temperature" : 6500.000000,
+          "Type" : "UPointLightComponent",
+          "bCastShadows" : true,
+          "bHiddenInGame" : false,
+          "bIsActive" : true,
+          "bIsVisible" : true,
+          "bOverrideCameraLightPerspective" : false,
+          "bTickEnabled" : true,
+          "bTickInEditor" : false,
+          "bUseInverseSquareFalloff" : false
+        }],
+      "RootComponentId" : 1136,
+      "Tag" : "",
+      "Type" : "APointLightActor",
+      "bActorHiddenInGame" : false,
+      "bActorIsActive" : true
+    },
+    "1138" : {
+      "ObjectName" : "APointLightActor_2",
+      "OwnedComponents" : [{
+          "AttenuationRadius" : 94.800003,
+          "FalloffExponent" : 2.059000,
+          "Id" : 1139,
+          "Intensity" : 11.500000,
+          "LightColor" : [0.007752, 0.250965, 0.000000, 1.000000],
+          "ObjectName" : "UPointLightComponent_1",
+          "OverrideCameraLightNum" : 0,
+          "ParentId" : 0,
+          "RelativeLocation" : [186.146606, 159.138245, 267.926147],
+          "RelativeRotationEuler" : [-55.384644, 0.000000, 0.000000],
+          "RelativeScale" : [1.000000, 1.000000, 1.000000],
+          "ShadowBias" : 0.000010,
+          "ShadowResolutionScale" : 1024,
+          "ShadowSharpen" : 0.500000,
+          "ShadowSlopeBias" : 0.000010,
+          "SourceRadius" : 0.000000,
+          "Temperature" : 6500.000000,
+          "Type" : "UPointLightComponent",
+          "bCastShadows" : true,
+          "bHiddenInGame" : false,
+          "bIsActive" : true,
+          "bIsVisible" : true,
+          "bOverrideCameraLightPerspective" : false,
+          "bTickEnabled" : true,
+          "bTickInEditor" : false,
+          "bUseInverseSquareFalloff" : false
+        }],
+      "RootComponentId" : 1139,
+      "Tag" : "",
+      "Type" : "APointLightActor",
+      "bActorHiddenInGame" : false,
+      "bActorIsActive" : true
+    },
+    "1141" : {
+      "ObjectName" : "APointLightActor_3",
+      "OwnedComponents" : [{
+          "AttenuationRadius" : 94.800003,
+          "FalloffExponent" : 2.059000,
+          "Id" : 1142,
+          "Intensity" : 11.500000,
+          "LightColor" : [0.007752, 0.250965, 0.000000, 1.000000],
+          "ObjectName" : "UPointLightComponent_1",
+          "OverrideCameraLightNum" : 0,
+          "ParentId" : 0,
+          "RelativeLocation" : [190.616119, 160.138245, 209.918427],
+          "RelativeRotationEuler" : [-55.384644, 0.000000, 0.000000],
+          "RelativeScale" : [1.000000, 1.000000, 1.000000],
+          "ShadowBias" : 0.000010,
+          "ShadowResolutionScale" : 1024,
+          "ShadowSharpen" : 0.500000,
+          "ShadowSlopeBias" : 0.000010,
+          "SourceRadius" : 0.000000,
+          "Temperature" : 6500.000000,
+          "Type" : "UPointLightComponent",
+          "bCastShadows" : true,
+          "bHiddenInGame" : false,
+          "bIsActive" : true,
+          "bIsVisible" : true,
+          "bOverrideCameraLightPerspective" : false,
+          "bTickEnabled" : true,
+          "bTickInEditor" : false,
+          "bUseInverseSquareFalloff" : false
+        }],
+      "RootComponentId" : 1142,
+      "Tag" : "",
+      "Type" : "APointLightActor",
+      "bActorHiddenInGame" : false,
+      "bActorIsActive" : true
+    },
+    "1144" : {
+      "ObjectName" : "APointLightActor_4",
+      "OwnedComponents" : [{
+          "AttenuationRadius" : 94.800003,
+          "FalloffExponent" : 2.059000,
+          "Id" : 1145,
+          "Intensity" : 11.500000,
+          "LightColor" : [0.250965, 0.000000, 0.000000, 1.000000],
+          "ObjectName" : "UPointLightComponent_1",
+          "OverrideCameraLightNum" : 0,
+          "ParentId" : 0,
+          "RelativeLocation" : [188.881302, 154.519196, 118.878464],
+          "RelativeRotationEuler" : [-55.384644, 0.000000, 0.000000],
+          "RelativeScale" : [1.000000, 1.000000, 1.000000],
+          "ShadowBias" : 0.000010,
+          "ShadowResolutionScale" : 1024,
+          "ShadowSharpen" : 0.500000,
+          "ShadowSlopeBias" : 0.000010,
+          "SourceRadius" : 0.000000,
+          "Temperature" : 6500.000000,
+          "Type" : "UPointLightComponent",
+          "bCastShadows" : true,
+          "bHiddenInGame" : false,
+          "bIsActive" : true,
+          "bIsVisible" : true,
+          "bOverrideCameraLightPerspective" : false,
+          "bTickEnabled" : true,
+          "bTickInEditor" : false,
+          "bUseInverseSquareFalloff" : false
+        }],
+      "RootComponentId" : 1145,
+      "Tag" : "",
+      "Type" : "APointLightActor",
+      "bActorHiddenInGame" : false,
+      "bActorIsActive" : true
+    },
+    "1147" : {
+      "ObjectName" : "APointLightActor_5",
+      "OwnedComponents" : [{
+          "AttenuationRadius" : 94.800003,
+          "FalloffExponent" : 2.059000,
+          "Id" : 1148,
+          "Intensity" : 11.500000,
+          "LightColor" : [0.199609, 0.000000, 0.250965, 1.000000],
+          "ObjectName" : "UPointLightComponent_1",
+          "OverrideCameraLightNum" : 0,
+          "ParentId" : 0,
+          "RelativeLocation" : [190.944107, -150.447769, 119.878464],
+          "RelativeRotationEuler" : [-55.384644, 0.000000, 0.000000],
+          "RelativeScale" : [1.000000, 1.000000, 1.000000],
+          "ShadowBias" : 0.000010,
+          "ShadowResolutionScale" : 1024,
+          "ShadowSharpen" : 0.500000,
+          "ShadowSlopeBias" : 0.000010,
+          "SourceRadius" : 0.000000,
+          "Temperature" : 6500.000000,
+          "Type" : "UPointLightComponent",
+          "bCastShadows" : true,
+          "bHiddenInGame" : false,
+          "bIsActive" : true,
+          "bIsVisible" : true,
+          "bOverrideCameraLightPerspective" : false,
+          "bTickEnabled" : true,
+          "bTickInEditor" : false,
+          "bUseInverseSquareFalloff" : false
+        }],
+      "RootComponentId" : 1148,
+      "Tag" : "",
+      "Type" : "APointLightActor",
+      "bActorHiddenInGame" : false,
+      "bActorIsActive" : true
+    },
+    "1150" : {
+      "ObjectName" : "APointLightActor_6",
+      "OwnedComponents" : [{
+          "AttenuationRadius" : 94.800003,
+          "FalloffExponent" : 2.059000,
+          "Id" : 1151,
+          "Intensity" : 11.500000,
+          "LightColor" : [0.199609, 0.000000, 0.250965, 1.000000],
+          "ObjectName" : "UPointLightComponent_1",
+          "OverrideCameraLightNum" : 0,
+          "ParentId" : 0,
+          "RelativeLocation" : [185.345291, -168.977142, 192.634262],
+          "RelativeRotationEuler" : [-55.384644, 0.000000, 0.000000],
+          "RelativeScale" : [1.000000, 1.000000, 1.000000],
+          "ShadowBias" : 0.000010,
+          "ShadowResolutionScale" : 1024,
+          "ShadowSharpen" : 0.500000,
+          "ShadowSlopeBias" : 0.000010,
+          "SourceRadius" : 0.000000,
+          "Temperature" : 6500.000000,
+          "Type" : "UPointLightComponent",
+          "bCastShadows" : true,
+          "bHiddenInGame" : false,
+          "bIsActive" : true,
+          "bIsVisible" : true,
+          "bOverrideCameraLightPerspective" : false,
+          "bTickEnabled" : true,
+          "bTickInEditor" : false,
+          "bUseInverseSquareFalloff" : false
+        }],
+      "RootComponentId" : 1151,
+      "Tag" : "",
+      "Type" : "APointLightActor",
+      "bActorHiddenInGame" : false,
+      "bActorIsActive" : true
+    },
+    "1153" : {
+      "ObjectName" : "APointLightActor_7",
+      "OwnedComponents" : [{
+          "AttenuationRadius" : 44.000000,
+          "FalloffExponent" : 2.059000,
+          "Id" : 1154,
+          "Intensity" : 11.500000,
+          "LightColor" : [0.000000, 0.554077, 0.779923, 1.000000],
+          "ObjectName" : "UPointLightComponent_1",
+          "OverrideCameraLightNum" : 0,
+          "ParentId" : 0,
+          "RelativeLocation" : [189.787994, 51.119255, 108.626617],
+          "RelativeRotationEuler" : [0.000000, -0.000000, 0.000000],
+          "RelativeScale" : [1.000000, 1.000000, 1.000000],
+          "ShadowBias" : 0.000010,
+          "ShadowResolutionScale" : 1024,
+          "ShadowSharpen" : 0.500000,
+          "ShadowSlopeBias" : 0.000010,
+          "SourceRadius" : 0.000000,
+          "Temperature" : 6500.000000,
+          "Type" : "UPointLightComponent",
+          "bCastShadows" : true,
+          "bHiddenInGame" : false,
+          "bIsActive" : true,
+          "bIsVisible" : true,
+          "bOverrideCameraLightPerspective" : false,
+          "bTickEnabled" : true,
+          "bTickInEditor" : false,
+          "bUseInverseSquareFalloff" : false
+        }],
+      "RootComponentId" : 1154,
+      "Tag" : "",
+      "Type" : "APointLightActor",
+      "bActorHiddenInGame" : false,
+      "bActorIsActive" : true
     }
   },
-  "NextUUID" : 1089,
+  "NextUUID" : 1156,
   "PerspectiveCamera" : {
     "FOV" : [60.000000],
     "FarClip" : [2000.000000],
-    "Location" : [-5.087282, 1.339014, 17.295177],
+    "Location" : [-17.369553, 4.388821, 40.339668],
     "NearClip" : [0.100000],
-    "Rotation" : [0.000000, 16.499966, 0.400220]
+    "Rotation" : [0.000000, -32.499924, 3.100461]
   },
   "Version" : 1
 }
