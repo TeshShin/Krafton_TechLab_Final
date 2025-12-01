@@ -11,7 +11,7 @@ UBodySetup::~UBodySetup()
 {
 }
 
-void UBodySetup::AddShapesToRigidActor_AssumesLocked(FBodyInstance* OwningInstance, const FVector& Scale3D, PxRigidActor* PDestActor)
+void UBodySetup::AddShapesToRigidActor_AssumesLocked(FBodyInstance* OwningInstance, const FVector& Scale3D, PxRigidActor* PDestActor, UPhysicalMaterial* InPhysicalMaterial)
 {
     if (!PDestActor || !GPhysXSDK)
     {
@@ -19,14 +19,14 @@ void UBodySetup::AddShapesToRigidActor_AssumesLocked(FBodyInstance* OwningInstan
     }
 
     PxMaterial* PhysMaterialToUse;
-    if (!PhysMaterial)
+    if (!InPhysicalMaterial)
     {
         assert(GPhysicalMaterial);
         PhysMaterialToUse = GPhysicalMaterial->GetPxMaterial();
     }
     else
     {
-        PhysMaterialToUse = PhysMaterial->GetPxMaterial();
+        PhysMaterialToUse = InPhysicalMaterial->GetPxMaterial();
     }
 
     // ====================================================================

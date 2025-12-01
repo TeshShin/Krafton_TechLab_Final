@@ -37,12 +37,13 @@ public:
 
     /** 밀도, 마찰 등과 관련된 정보를 포함하는 물리 재질 */
 	UPROPERTY()
-	UPhysicalMaterial* PhysMaterial;
+	UPhysicalMaterial* PhysicalMaterial;
 
     void AddShapesToRigidActor_AssumesLocked(
         FBodyInstance* OwningInstance,
         const FVector& Scale3D,
-        PxRigidActor* PDestActor);
+        PxRigidActor* PDestActor,
+        UPhysicalMaterial* InPhysicalMaterial);
 
     /** 테스트용 함수 (박스 추가) */
     void AddBoxTest(const FVector& Extent);

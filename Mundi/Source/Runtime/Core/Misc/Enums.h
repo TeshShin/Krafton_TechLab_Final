@@ -51,6 +51,7 @@ enum class EResourceType : uint8
     Shader,
     Texture,
     Material,
+    PhysicalMaterial,
     Sound,
     Animation,
     ParticleSystem,

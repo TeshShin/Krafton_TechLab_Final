@@ -12,6 +12,7 @@
 #include "LineDynamicMesh.h"
 #include "SkeletalMesh.h"
 #include "AnimSequence.h"
+#include "PhysicalMaterial.h"
 #include "../Engine/Particles/ParticleSystem.h"
 // ... 기타 include ...
 
@@ -20,6 +21,7 @@ class UStaticMesh;
 class FMeshBVH;
 class UResourceBase;
 class UMaterial;
+class UPhysicalMaterial;
 class USound;
 
 //================================================================================================
@@ -275,6 +277,8 @@ EResourceType UResourceManager::GetResourceType()
 		return EResourceType::Texture;
     if (T::StaticClass() == UMaterial::StaticClass())
         return EResourceType::Material;
+	if (T::StaticClass() == UPhysicalMaterial::StaticClass())
+		return EResourceType::PhysicalMaterial;
     if (T::StaticClass() == USound::StaticClass())
         return EResourceType::Sound;
     if (T::StaticClass() == UAnimSequence::StaticClass())
