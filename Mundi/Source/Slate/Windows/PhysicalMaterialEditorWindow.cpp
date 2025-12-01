@@ -30,12 +30,14 @@ SPhysicalMaterialEditorWindow::~SPhysicalMaterialEditorWindow()
 void SPhysicalMaterialEditorWindow::PreloadEditorIcons()
 {
     FString NewIconPath = GDataDir + "/Icon/Plus.png";
-    FString SaveIconPath = GDataDir + "/Icon/save.png";
     FString OpenIconPath = GDataDir + "/Icon/show-in-explorer.png";
+    FString SaveIconPath = GDataDir + "/Icon/Toolbar_Save.png";
+    FString SaveAsIconPath = GDataDir + "/Icon/Toolbar_SaveAs.png";
 
     IconNew = UResourceManager::GetInstance().Load<UTexture>(NewIconPath);
-    IconSave = UResourceManager::GetInstance().Load<UTexture>(SaveIconPath);
     IconOpen = UResourceManager::GetInstance().Load<UTexture>(OpenIconPath);
+    IconSave = UResourceManager::GetInstance().Load<UTexture>(SaveIconPath);
+    IconSaveAs = UResourceManager::GetInstance().Load<UTexture>(SaveAsIconPath);
 }
 
 ViewerState* SPhysicalMaterialEditorWindow::CreateViewerState(const char* Name, UEditorAssetPreviewContext* Context)
@@ -220,13 +222,32 @@ void SPhysicalMaterialEditorWindow::RenderToolbar()
         }
     }
     if (ImGui::IsItemHovered()) ImGui::SetTooltip("Save Asset");
+    
+    ImGui::SameLine();
+
+    // 4. Save As Button
+    if (IconSaveAs && IconSaveAs->GetShaderResourceView())
+    {
+        if (ImGui::ImageButton("##SaveAs", (ImTextureID)IconSaveAs->GetShaderResourceView(), IconVec))
+        {
+            SaveAssetAs();
+        }
+    }
+    else
+    {
+        if (ImGui::Button("Save As"))
+        {
+            SaveAssetAs();
+        }
+    }
+    if (ImGui::IsItemHovered()) ImGui::SetTooltip("Save Asset As...");
 
     if (PhysicalMaterialEditorState* State = GetActiveState())
     {
         ImGui::SameLine();
         ImGui::TextDisabled("|  %s", State->CurrentFilePath.empty() ? "Untitled (Not Saved)" : State->CurrentFilePath.c_str());
     }
-
+    
     ImGui::Separator();
     ImGui::PopStyleVar();
 }
@@ -297,18 +318,7 @@ void SPhysicalMaterialEditorWindow::SaveAsset()
     // 1. 저장된 경로가 없으면(새 파일) -> 경로 지정 다이얼로그
     if (State->CurrentFilePath.empty())
     {
-        std::wstring widePath = FPlatformProcess::OpenSaveFileDialog(
-            UTF8ToWide(GDataDir),
-            L"phxmtl",
-            L"phxmtl"
-        );
-
-        if (widePath.empty()) return;
-
-        State->CurrentFilePath = WideToUTF8(widePath);
-        
-        std::filesystem::path fsPath(widePath);
-        State->Name = WideToUTF8(fsPath.filename().wstring()).c_str();
+        SaveAssetAs();
     }
     
     // 2. 저장 수행 (경로가 있으면 바로 저장)
@@ -325,4 +335,23 @@ void SPhysicalMaterialEditorWindow::SaveAsset()
     {
         FModalDialog::Get().Show("Error", "Failed to save file.", EModalType::OK);
     }
+}
+
+void SPhysicalMaterialEditorWindow::SaveAssetAs()
+{
+    PhysicalMaterialEditorState* State = GetActiveState();
+    if (!State || !State->EditingAsset) return;
+    
+    std::wstring widePath = FPlatformProcess::OpenSaveFileDialog(
+        UTF8ToWide(GDataDir),
+        L"phxmtl",
+        L"phxmtl"
+    );
+
+    if (widePath.empty()) return;
+
+    State->CurrentFilePath = WideToUTF8(widePath);
+        
+    std::filesystem::path fsPath(widePath);
+    State->Name = WideToUTF8(fsPath.filename().wstring()).c_str();
 }

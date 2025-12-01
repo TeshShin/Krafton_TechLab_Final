@@ -36,6 +36,7 @@ protected:
     void CreateNewAsset();
     void OpenAsset();
     void SaveAsset();
+    void SaveAssetAs();
 
     void PreloadEditorIcons();
 
@@ -48,4 +49,5 @@ private:
     UTexture* IconNew = nullptr;
     UTexture* IconOpen = nullptr;
     UTexture* IconSave = nullptr;
+    UTexture* IconSaveAs = nullptr;
 };

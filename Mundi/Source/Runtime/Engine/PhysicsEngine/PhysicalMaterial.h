@@ -98,6 +98,9 @@ public:
 
     /** 복제 (Deep Copy) */
     virtual void DuplicateSubObjects() override;
+    
+    // ==============================================================================
+    virtual void OnPropertyChanged(const FProperty& Prop) override;
 
 protected:
     /** PhysX 재질 인스턴스 (런타임 캐싱용) */

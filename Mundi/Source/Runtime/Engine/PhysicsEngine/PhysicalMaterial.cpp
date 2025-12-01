@@ -144,3 +144,10 @@ void UPhysicalMaterial::DuplicateSubObjects()
 
     PxMat = nullptr;
 }
+
+void UPhysicalMaterial::OnPropertyChanged(const FProperty& Prop)
+{
+    UResourceBase::OnPropertyChanged(Prop);
+
+    UpdatePhysicsMaterial(); 
+}
