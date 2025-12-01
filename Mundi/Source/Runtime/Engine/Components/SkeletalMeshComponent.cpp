@@ -8,6 +8,15 @@
 #include "AnimStateMachineInstance.h"
 #include "AnimBlendSpaceInstance.h"
 
+// Ragdoll Physics
+#include "BodyInstance.h"
+#include "ConstraintInstance.h"
+#include "PhysicsAsset.h"
+#include "PhysicsScene.h"
+#include "SkeletalBodySetup.h"
+#include "PhysicsConstraintTemplate.h"
+#include "World.h"
+
 USkeletalMeshComponent::USkeletalMeshComponent()
 {
     // Keep constructor lightweight for editor/viewer usage.
@@ -379,5 +388,200 @@ void USkeletalMeshComponent::TriggerAnimNotify(const FAnimNotifyEvent& NotifyEve
     if (Owner)
     {
         Owner->HandleAnimNotify(NotifyEvent);
+    }
+}
+
+// ===========================
+// Ragdoll Physics Implementation
+// ===========================
+
+void USkeletalMeshComponent::InitRagdoll()
+{
+    // 기존 Ragdoll 정리
+    TermRagdoll();
+
+    if (!SkeletalMesh)
+    {
+        UE_LOG("[Ragdoll] InitRagdoll failed: SkeletalMesh is null");
+        return;
+    }
+
+    UPhysicsAsset* PhysAsset = SkeletalMesh->GetPhysicsAsset();
+    if (!PhysAsset || !PhysAsset->IsValid())
+    {
+        UE_LOG("[Ragdoll] InitRagdoll failed: PhysicsAsset is null or invalid");
+        return;
+    }
+
+    const FSkeleton* Skeleton = SkeletalMesh->GetSkeleton();
+    if (!Skeleton)
+    {
+        UE_LOG("[Ragdoll] InitRagdoll failed: Skeleton is null");
+        return;
+    }
+
+    UWorld* World = GetWorld();
+    if (!World)
+    {
+        UE_LOG("[Ragdoll] InitRagdoll failed: World is null");
+        return;
+    }
+
+    FPhysicsScene* PhysScene = World->GetPhysicsScene();
+    if (!PhysScene)
+    {
+        UE_LOG("[Ragdoll] InitRagdoll failed: PhysicsScene is null");
+        return;
+    }
+
+    // Body 생성
+    const int32 NumBodies = PhysAsset->GetBodySetupCount();
+    RagdollBodies.Reserve(NumBodies);
+
+    for (int32 i = 0; i < NumBodies; ++i)
+    {
+        USkeletalBodySetup* BodySetup = PhysAsset->GetBodySetup(i);
+        if (!BodySetup)
+        {
+            continue;
+        }
+
+        // 본 인덱스 찾기
+        const FString BoneNameStr = BodySetup->BoneName.ToString();
+        const int32* BoneIndexPtr = Skeleton->BoneNameToIndex.Find(BoneNameStr);
+        if (!BoneIndexPtr)
+        {
+            UE_LOG("[Ragdoll] Bone not found: %s", BoneNameStr.c_str());
+            continue;
+        }
+        int32 BoneIndex = *BoneIndexPtr;
+
+        // Body Instance 생성
+        FBodyInstance* Body = new FBodyInstance();
+        Body->BoneName = BodySetup->BoneName;
+        Body->BoneIndex = BoneIndex;
+
+        // 본의 현재 월드 트랜스폼으로 초기화
+        FTransform BoneWorldTM = GetBoneWorldTransform(BoneIndex);
+        Body->InitBody(BodySetup, BoneWorldTM, this, PhysScene);
+
+        // 초기 상태는 Kinematic (비활성)
+        Body->SetSimulatePhysics(false);
+
+        int32 BodyIndex = RagdollBodies.Add(Body);
+        BoneNameToBodyIndex.Add(BodySetup->BoneName, BodyIndex);
+    }
+
+    // Constraint 생성
+    CreateRagdollConstraints();
+
+    // 인접 바디 충돌 비활성화
+    ApplyCollisionDisableTable();
+
+    // 블렌딩용 포즈 배열 초기화
+    const int32 NumBones = Skeleton->Bones.Num();
+    PreRagdollPose.SetNum(NumBones);
+    RagdollPose.SetNum(NumBones);
+
+    UE_LOG("[Ragdoll] InitRagdoll completed: %d bodies, %d constraints",
+        RagdollBodies.Num(), RagdollConstraints.Num());
+}
+
+void USkeletalMeshComponent::CreateRagdollConstraints()
+{
+    if (!SkeletalMesh)
+    {
+        return;
+    }
+
+    UPhysicsAsset* PhysAsset = SkeletalMesh->GetPhysicsAsset();
+    if (!PhysAsset)
+    {
+        return;
+    }
+
+    const int32 NumConstraints = PhysAsset->GetConstraintCount();
+    RagdollConstraints.Reserve(NumConstraints);
+
+    for (int32 i = 0; i < NumConstraints; ++i)
+    {
+        UPhysicsConstraintTemplate* Template = PhysAsset->ConstraintSetup[i];
+        if (!Template)
+        {
+            continue;
+        }
+
+        // 연결된 두 Body 찾기
+        const int32* BodyIdx1Ptr = BoneNameToBodyIndex.Find(Template->GetBone1Name());
+        const int32* BodyIdx2Ptr = BoneNameToBodyIndex.Find(Template->GetBone2Name());
+
+        if (!BodyIdx1Ptr || !BodyIdx2Ptr)
+        {
+            UE_LOG("[Ragdoll] Constraint bones not found: %s <-> %s",
+                Template->GetBone1Name().ToString().c_str(), Template->GetBone2Name().ToString().c_str());
+            continue;
+        }
+
+        FBodyInstance* Body1 = RagdollBodies[*BodyIdx1Ptr];
+        FBodyInstance* Body2 = RagdollBodies[*BodyIdx2Ptr];
+
+        if (!Body1 || !Body2)
+        {
+            continue;
+        }
+
+        // Constraint Instance 생성 (템플릿 설정 복사)
+        FConstraintInstance* Constraint = new FConstraintInstance(Template->DefaultInstance);
+
+        // Joint Frame 계산: Body2 위치를 Body1 로컬로 변환
+        FTransform Body1World = Body1->GetWorldTransform();
+        FTransform Body2World = Body2->GetWorldTransform();
+
+        // Frame1: Body1 로컬 좌표계에서 Body2로의 상대 위치
+        FTransform Frame1 = Body1World.GetRelativeTransform(Body2World);
+        // Frame2: Body2 원점 (기본 생성자 = Identity)
+        FTransform Frame2;
+
+        // Joint 초기화
+        Constraint->InitConstraint(Body1, Body2, Frame1, Frame2);
+        RagdollConstraints.Add(Constraint);
+    }
+
+    UE_LOG("[Ragdoll] CreateRagdollConstraints: %d constraints created", RagdollConstraints.Num());
+}
+
+void USkeletalMeshComponent::ApplyCollisionDisableTable()
+{
+    if (!SkeletalMesh)
+    {
+        return;
+    }
+
+    UPhysicsAsset* PhysAsset = SkeletalMesh->GetPhysicsAsset();
+    if (!PhysAsset)
+    {
+        return;
+    }
+
+    // PhysicsAsset의 CollisionDisableTable 적용
+    // 인접한 바디 간 자기 충돌 방지
+    for (const auto& Pair : PhysAsset->CollisionDisableTable)
+    {
+        int32 Idx1 = Pair.first.BodyIndex1;
+        int32 Idx2 = Pair.first.BodyIndex2;
+
+        if (Idx1 >= 0 && Idx1 < RagdollBodies.Num() &&
+            Idx2 >= 0 && Idx2 < RagdollBodies.Num())
+        {
+            FBodyInstance* Body1 = RagdollBodies[Idx1];
+            FBodyInstance* Body2 = RagdollBodies[Idx2];
+
+            if (Body1 && Body2 && Body1->RigidActor && Body2->RigidActor)
+            {
+                // TODO: PhysX 충돌 필터 설정
+                // PxSetGroupCollisionFlag 또는 SimulationFilterShader에서 처리
+                // 현재는 PhysicsAsset에서 설정된 테이블만 참조
+            }
+        }
     }
 }
