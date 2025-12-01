@@ -513,7 +513,8 @@ void USkeletalMeshComponent::InitRagdoll(FPhysScene* InPhysScene)
 
         // FBodyInstance 생성
         FBodyInstance* NewBody = new FBodyInstance();
-        NewBody->bSimulatePhysics = true;  // 랙돌은 동적 시뮬레이션
+        NewBody->bSimulatePhysics = bSimulatePhysics;
+        NewBody->Scale3D = GetRelativeScale();
         NewBody->LinearDamping = 0.1f;     // 기본 감쇠
         NewBody->AngularDamping = 0.05f;
 
@@ -1002,12 +1003,6 @@ void USkeletalMeshComponent::OnCreatePhysicsState()
 {
     // PhysicsAsset이 없으면 물리 생성 안함
     if (!PhysicsAsset)
-    {
-        return;
-    }
-
-    // 물리 시뮬레이션이 비활성화되어 있으면 물리 생성 안함
-    if (!bSimulatePhysics)
     {
         return;
     }
