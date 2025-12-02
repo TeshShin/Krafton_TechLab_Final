@@ -38,6 +38,7 @@ void UConstraintPropertiesWidget::RenderWidget()
 	ImGui::Separator();
 
 	// FConstraintSetup struct의 reflection 정보 가져오기
+	// TODO: 매 프레임 FindStruct 호출 대신 static 캐싱 고려
 	UStruct* StructType = UStruct::FindStruct("FConstraintSetup");
 	if (!StructType)
 	{
