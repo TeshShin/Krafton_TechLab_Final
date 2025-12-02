@@ -205,6 +205,7 @@ protected:
     bool bHiddenInOutliner = false;  // 아웃라이너에서 숨김 (시스템 액터용)
 
     bool bPendingDestroy = false;
+    bool bHasBegunPlay = false;  // BeginPlay 중복 호출 방지
 
     bool bIsPicked = false;
     bool bCanEverTick = true;   // Tick을 허용하는 Actor 라는 뜻 (생성자 시점에만 변경해야 됨)

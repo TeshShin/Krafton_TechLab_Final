@@ -68,23 +68,16 @@ void ULevel::Serialize(const bool bInIsLoading, JSON& InOutHandle)
         // 이전 씬의 dangling pointer 방지를 위해 SceneIdMap 클리어
         USceneComponent::GetSceneIdMap().clear();
 
-        // World Settings 로드
+        // World Settings 로드 (GameModeClass만 - 나머지는 GameMode 클래스에 정의됨)
         JSON WorldSettingsJson;
         if (FJsonSerializer::ReadObject(InOutHandle, "WorldSettings", WorldSettingsJson))
         {
-            FString GameModeClassName, DefaultPawnClassName, PlayerControllerClassName;
+            FString GameModeClassName;
             FJsonSerializer::ReadString(WorldSettingsJson, "GameModeClass", GameModeClassName, "", false);
-            FJsonSerializer::ReadString(WorldSettingsJson, "DefaultPawnClass", DefaultPawnClassName, "", false);
-            FJsonSerializer::ReadString(WorldSettingsJson, "PlayerControllerClass", PlayerControllerClassName, "", false);
-            FJsonSerializer::ReadVector(WorldSettingsJson, "PlayerSpawnLocation", GWorld->PlayerSpawnLocation, FVector(0, 0, 0), false);
 
             // 클래스 이름으로 UClass 찾기
             if (!GameModeClassName.empty())
                 GWorld->GameModeClass = UClass::FindClass(GameModeClassName);
-            if (!DefaultPawnClassName.empty())
-                GWorld->DefaultPawnClass = UClass::FindClass(DefaultPawnClassName);
-            if (!PlayerControllerClassName.empty())
-                GWorld->PlayerControllerClass = UClass::FindClass(PlayerControllerClassName);
         }
 
         // 카메라 정보
@@ -164,15 +157,10 @@ void ULevel::Serialize(const bool bInIsLoading, JSON& InOutHandle)
         InOutHandle["Version"] = 1;
         InOutHandle["NextUUID"] = UObject::PeekNextUUID();
 
-        // World Settings 저장
+        // World Settings 저장 (GameModeClass만 - 나머지는 GameMode 클래스에 정의됨)
         JSON WorldSettingsJson = json::Object();
         if (GWorld->GameModeClass)
             WorldSettingsJson["GameModeClass"] = GWorld->GameModeClass->Name;
-        if (GWorld->DefaultPawnClass)
-            WorldSettingsJson["DefaultPawnClass"] = GWorld->DefaultPawnClass->Name;
-        if (GWorld->PlayerControllerClass)
-            WorldSettingsJson["PlayerControllerClass"] = GWorld->PlayerControllerClass->Name;
-        WorldSettingsJson["PlayerSpawnLocation"] = FJsonSerializer::VectorToJson(GWorld->PlayerSpawnLocation);
         InOutHandle["WorldSettings"] = WorldSettingsJson;
 
         // 카메라 정보

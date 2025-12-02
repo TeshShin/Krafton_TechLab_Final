@@ -1,10 +1,11 @@
-// ────────────────────────────────────────────────────────────────────────────
+﻿// ────────────────────────────────────────────────────────────────────────────
 // PlayerController.cpp
 // 플레이어 입력 처리 Controller 구현
 // ────────────────────────────────────────────────────────────────────────────
 #include "pch.h"
 #include "PlayerController.h"
 #include "Pawn.h"
+#include "Character.h"
 #include "InputComponent.h"
 #include "InputManager.h"
 #include "PlayerCameraManager.h"
@@ -79,15 +80,21 @@ void APlayerController::OnPossess(APawn* InPawn)
 			InPawn->SetupPlayerInputComponent(InputComp);
 		}
 
-		// PlayerCameraManager 생성 (OnPossess가 BeginPlay보다 먼저 호출될 수 있음)
+		// PlayerCameraManager 생성 (World에 없을 때만)
 		if (!PlayerCameraManager && World && World->bPie)
 		{
-			PlayerCameraManager = World->SpawnActor<APlayerCameraManager>();
+			// World에 이미 PlayerCameraManager가 있으면 그것을 사용
+			APlayerCameraManager* ExistingPCM = World->GetPlayerCameraManager();
+			if (ExistingPCM)
+			{
+				PlayerCameraManager = ExistingPCM;
+			}
+			else
+			{
+				PlayerCameraManager = World->SpawnActor<APlayerCameraManager>();
+				World->SetPlayerCameraManager(PlayerCameraManager);
+			}
 		}
-
-		// TODO: Pawn의 CameraComponent를 찾아서 PlayerCameraManager에 설정
-		// Week11에서는 SetViewCamera(UCameraComponent*)를 사용
-		// 2단계에서 Pawn 구현 후 활성화
 	}
 }
 

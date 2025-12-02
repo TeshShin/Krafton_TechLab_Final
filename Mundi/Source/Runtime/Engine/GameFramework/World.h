@@ -63,17 +63,8 @@ public:
     // World Settings (GameMode 관련)
     // ════════════════════════════════════════════════════════════════════════
 
-    /** GameMode 클래스 설정 */
+    /** GameMode 클래스 설정 (GameMode 클래스 자체에 DefaultPawnClass, PlayerControllerClass 등이 정의됨) */
     UClass* GameModeClass = nullptr;
-
-    /** Default Pawn 클래스 설정 */
-    UClass* DefaultPawnClass = nullptr;
-
-    /** PlayerController 클래스 설정 */
-    UClass* PlayerControllerClass = nullptr;
-
-    /** 플레이어 스폰 위치 */
-    FVector PlayerSpawnLocation = FVector(0.0f, 0.0f, 0.0f);
 
     /** GameMode 인스턴스 접근자 */
     AGameModeBase* GetGameMode() const { return GameModeInstance; }
@@ -83,6 +74,9 @@ public:
     void Initialize();
     void InitializeGrid();
     void InitializeGizmo();
+
+    /** 게임 시작 - World Settings 기반 GameMode 생성 및 모든 액터 BeginPlay 호출 */
+    void BeginPlay();
 
     bool TryLoadLastUsedLevel();
     bool LoadLevelFromFile(const FWideString& Path);

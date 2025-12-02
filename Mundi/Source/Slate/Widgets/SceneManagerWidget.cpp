@@ -17,8 +17,6 @@
 #include <EditorEngine.h>
 #include "DirectionalLightComponent.h"
 #include "GameModeBase.h"
-#include "Pawn.h"
-#include "PlayerController.h"
 //// UE_LOG 대체 매크로
 //#define UE_LOG(fmt, ...)
 
@@ -152,7 +150,7 @@ void USceneManagerWidget::RenderWidget()
 		UWorld* World = GWorld;
 		if (World)
 		{
-			// GameMode 클래스 선택
+			// GameMode 클래스 선택 (GameMode 클래스에 DefaultPawn, PlayerController 등이 정의됨)
 			ImGui::Text("GameMode Class");
 			if (ImGui::BeginCombo("##GameModeClass", World->GameModeClass ? World->GameModeClass->Name : "None"))
 			{
@@ -175,62 +173,7 @@ void USceneManagerWidget::RenderWidget()
 				}
 				ImGui::EndCombo();
 			}
-
-			// DefaultPawn 클래스 선택
-			ImGui::Text("Default Pawn Class");
-			if (ImGui::BeginCombo("##DefaultPawnClass", World->DefaultPawnClass ? World->DefaultPawnClass->Name : "None"))
-			{
-				if (ImGui::Selectable("None", World->DefaultPawnClass == nullptr))
-				{
-					World->DefaultPawnClass = nullptr;
-				}
-				// APawn을 상속하는 모든 클래스 표시
-				for (UClass* Class : UClass::GetAllClasses())
-				{
-					if (Class && Class->IsChildOf(APawn::StaticClass()))
-					{
-						bool bSelected = (World->DefaultPawnClass == Class);
-						if (ImGui::Selectable(Class->Name, bSelected))
-						{
-							World->DefaultPawnClass = Class;
-						}
-					}
-				}
-				ImGui::EndCombo();
-			}
-
-			// PlayerController 클래스 선택
-			ImGui::Text("Player Controller Class");
-			if (ImGui::BeginCombo("##PlayerControllerClass", World->PlayerControllerClass ? World->PlayerControllerClass->Name : "None"))
-			{
-				if (ImGui::Selectable("None", World->PlayerControllerClass == nullptr))
-				{
-					World->PlayerControllerClass = nullptr;
-				}
-				// APlayerController를 상속하는 모든 클래스 표시
-				for (UClass* Class : UClass::GetAllClasses())
-				{
-					if (Class && Class->IsChildOf(APlayerController::StaticClass()))
-					{
-						bool bSelected = (World->PlayerControllerClass == Class);
-						if (ImGui::Selectable(Class->Name, bSelected))
-						{
-							World->PlayerControllerClass = Class;
-						}
-					}
-				}
-				ImGui::EndCombo();
-			}
-
-			ImGui::Separator();
-
-			// 플레이어 스폰 위치
-			ImGui::Text("Player Spawn Location");
-			float SpawnLoc[3] = { World->PlayerSpawnLocation.X, World->PlayerSpawnLocation.Y, World->PlayerSpawnLocation.Z };
-			if (ImGui::DragFloat3("##PlayerSpawnLocation", SpawnLoc, 0.1f))
-			{
-				World->PlayerSpawnLocation = FVector(SpawnLoc[0], SpawnLoc[1], SpawnLoc[2]);
-			}
+			ImGui::TextColored(ImVec4(0.6f, 0.6f, 0.6f, 1.0f), "(DefaultPawn, PlayerController, SpawnLocation are defined in GameMode class)");
 		}
 		else
 		{
