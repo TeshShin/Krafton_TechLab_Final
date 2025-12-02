@@ -2,12 +2,14 @@
 
 #include "ViewerState.h"
 #include "LinesBatch.h"
+#include <memory>
 
 class UPhysicsAsset;
 class ULineComponent;
 class UTriangleMeshComponent;
 class ASkeletalMeshActor;
 class USkeletalMeshComponent;
+class FPhysScene;
 
 /**
  * PhysicsAssetEditorState
@@ -17,6 +19,9 @@ class USkeletalMeshComponent;
  */
 struct PhysicsAssetEditorState : public ViewerState
 {
+	// 소멸자 (unique_ptr<FPhysScene> 삭제를 위해 cpp에서 정의)
+	~PhysicsAssetEditorState();
+
 	// ────────────────────────────────────────────────
 	// Physics Asset 데이터
 	// ────────────────────────────────────────────────
@@ -69,6 +74,9 @@ struct PhysicsAssetEditorState : public ViewerState
 
 	/** 바닥 액터 (시뮬레이션용) */
 	class ABoxActor* FloorActor = nullptr;
+
+	/** 시뮬레이션용 PhysScene (에디터 전용) */
+	std::unique_ptr<FPhysScene> SimulationPhysScene;
 
 	// ────────────────────────────────────────────────
 	// Shape 프리뷰 컴포넌트 (에디터용 시각화)

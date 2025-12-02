@@ -102,9 +102,13 @@ public:
     // ───── 직렬화 ────────────────────────────
     void Serialize(const bool bInIsLoading, JSON& InOutHandle) override;
 
+    // ───── 충돌 관련 (접근자) ────────────────────────────
+    FBodyInstance& GetBodyInstance() { return BodyInstance; }
+    const FBodyInstance& GetBodyInstance() const { return BodyInstance; }
+
 protected:
     bool bIsCulled = false;
-     
+
     // ───── 충돌 관련 ────────────────────────────
     FBodyInstance BodyInstance;
 

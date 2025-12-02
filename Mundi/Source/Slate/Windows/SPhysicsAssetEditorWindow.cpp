@@ -602,35 +602,35 @@ SPhysicsAssetEditorWindow::~SPhysicsAssetEditorWindow()
 	DestroySubWidgets();
 
 	// Clean up tabs (ViewerState 정리)
-	//for (int i = 0; i < Tabs.Num(); ++i)
-	//{
-	//	ViewerState* State = Tabs[i];
+	for (int i = 0; i < Tabs.Num(); ++i)
+	{
+		ViewerState* State = Tabs[i];
 
-	//	// 시뮬레이션 중이면 먼저 정리 (PhysScene 해제 전에)
-	//	PhysicsAssetEditorState* PhysState = static_cast<PhysicsAssetEditorState*>(State);
-	//	if (PhysState && PhysState->bSimulating)
-	//	{
-	//		// 랙돌 먼저 종료 (PhysScene 사용)
-	//		USkeletalMeshComponent* MeshComp = PhysState->GetPreviewMeshComponent();
-	//		/*if (MeshComp)
-	//		{
-	//			MeshComp->SetSimulatePhysics(false);
-	//			MeshComp->TermRagdoll();
-	//		}*/
-	//		// 바닥 액터 제거
-	//		if (PhysState->FloorActor)
-	//		{
-	//			UBoxComponent* BoxComp = PhysState->FloorActor->GetBoxComponent();
-	//			BoxComp->SetSimulatePhysics(false);  // 바닥은 Static
-	//			PhysState->FloorActor->Destroy();
-	//			PhysState->FloorActor = nullptr;
-	//		}
+		// 시뮬레이션 중이면 먼저 정리 (PhysScene 해제 전에)
+		PhysicsAssetEditorState* PhysState = static_cast<PhysicsAssetEditorState*>(State);
+		if (PhysState && PhysState->bSimulating)
+		{
+			// 랙돌 먼저 종료 (PhysScene 사용)
+			USkeletalMeshComponent* MeshComp = PhysState->GetPreviewMeshComponent();
+			/*if (MeshComp)
+			{
+				MeshComp->SetSimulatePhysics(false);
+				MeshComp->TermRagdoll();
+			}*/
+			// 바닥 액터 제거
+			if (PhysState->FloorActor)
+			{
+				UBoxComponent* BoxComp = PhysState->FloorActor->GetBoxComponent();
+				BoxComp->SetSimulatePhysics(false);  // 바닥은 Static
+				PhysState->FloorActor->Destroy();
+				PhysState->FloorActor = nullptr;
+			}
 
-	//		PhysState->bSimulating = false;
-	//	}
+			PhysState->bSimulating = false;
+		}
 
-	//	PhysicsAssetEditorBootstrap::DestroyViewerState(State);
-	//}
+		PhysicsAssetEditorBootstrap::DestroyViewerState(State);
+	}
 	Tabs.Empty();
 	ActiveState = nullptr;
 }
@@ -642,23 +642,34 @@ ViewerState* SPhysicsAssetEditorWindow::CreateViewerState(const char* Name, UEdi
 
 void SPhysicsAssetEditorWindow::DestroyViewerState(ViewerState*& State)
 {
-	// 시뮬레이션 중이면 먼저 정리
+	// 시뮬레이션 중이면 먼저 정리 (PhysScene 해제 전에)
 	PhysicsAssetEditorState* PhysState = static_cast<PhysicsAssetEditorState*>(State);
 	if (PhysState && PhysState->bSimulating)
 	{
-		// 바닥 액터 제거
-		if (PhysState->FloorActor)
-		{
-			PhysState->FloorActor->Destroy();
-			PhysState->FloorActor = nullptr;
-		}
-
-		// 랙돌 종료
+		// 1. 랙돌 먼저 종료 (SimulationPhysScene 사용 중이므로)
 		USkeletalMeshComponent* MeshComp = PhysState->GetPreviewMeshComponent();
 		if (MeshComp)
 		{
 			MeshComp->SetSimulatePhysics(false);
 			MeshComp->TermRagdoll();
+		}
+
+		// 2. 바닥 액터 물리 바디 정리
+		if (PhysState->FloorActor)
+		{
+			UBoxComponent* BoxComp = PhysState->FloorActor->GetBoxComponent();
+			if (BoxComp)
+			{
+				BoxComp->GetBodyInstance().TermBody();
+			}
+			PhysState->FloorActor->Destroy();
+			PhysState->FloorActor = nullptr;
+		}
+
+		// 3. 시뮬레이션 PhysScene 해제
+		if (PhysState->SimulationPhysScene)
+		{
+			PhysState->SimulationPhysScene.reset();
 		}
 
 		PhysState->bSimulating = false;
@@ -938,6 +949,23 @@ void SPhysicsAssetEditorWindow::OnRender()
 void SPhysicsAssetEditorWindow::OnUpdate(float DeltaSeconds)
 {
 	SViewerWindow::OnUpdate(DeltaSeconds);
+
+	// 시뮬레이션 중이면 PhysScene 틱
+	PhysicsAssetEditorState* SimState = GetActivePhysicsState();
+	if (SimState && SimState->bSimulating && SimState->SimulationPhysScene)
+	{
+		// PhysScene 시뮬레이션 진행
+		SimState->SimulationPhysScene->TickPhysScene(DeltaSeconds);
+		SimState->SimulationPhysScene->WaitPhysScene();
+		SimState->SimulationPhysScene->ProcessPhysScene();
+
+		// 랙돌 본 동기화
+		USkeletalMeshComponent* MeshComp = SimState->GetPreviewMeshComponent();
+		if (MeshComp && MeshComp->IsSimulatingPhysics())
+		{
+			MeshComp->TickComponent(DeltaSeconds);
+		}
+	}
 
 	// Sub Widget 에디터 상태 업데이트
 	UpdateSubWidgetEditorState();
@@ -2964,18 +2992,20 @@ void SPhysicsAssetEditorWindow::StartSimulation()
 	UWorld* World = State->World;
 	if (!World) return;
 
-	// PhysScene 초기화 (아직 없으면)
-	FPhysScene* PhysScene = GWorld->GetPhysicsScene();
-	if (!PhysScene)
+	// 1. 에디터 전용 PhysScene 생성
+	if (!State->SimulationPhysScene)
 	{
-		UE_LOG("[PhysicsAssetEditor] PhysScene이 없습니다.");
-		return;
+		State->SimulationPhysScene = std::make_unique<FPhysScene>(World);
+		State->SimulationPhysScene->InitPhysScene();
+		UE_LOG("[PhysicsAssetEditor] 시뮬레이션용 PhysScene 생성");
 	}
 
-	// 1. 바닥 박스 액터 생성 (10000 x 10000)
+	FPhysScene* PhysScene = State->SimulationPhysScene.get();
+
+	// 2. 바닥 박스 액터 생성 (10000 x 10000)
 	if (!State->FloorActor)
 	{
-		State->FloorActor = GWorld->SpawnActor<ABoxActor>();
+		State->FloorActor = World->SpawnActor<ABoxActor>();
 		if (State->FloorActor)
 		{
 			// BoxComponent 설정
@@ -2985,29 +3015,30 @@ void SPhysicsAssetEditorWindow::StartSimulation()
 				// BoxExtent는 반 크기이므로 5000으로 설정 (실제 크기 10000)
 				BoxComp->SetBoxExtent(FVector(5000.0f, 5000.0f, 1.0f));
 				BoxComp->SetSimulatePhysics(false);  // 바닥은 Static
+
+				// 바닥을 시뮬레이션 PhysScene에 등록
+				BoxComp->GetBodyInstance().InitBody(BoxComp->GetBodySetup(), BoxComp->GetWorldTransform(), BoxComp, PhysScene);
 			}
 
-			// 위치: 캐릭터 아래 (Z = -100 정도)
+			// 위치: 캐릭터 아래
 			FTransform FloorTransform;
 			FloorTransform.Translation = FVector(0.0f, 0.0f, -1.0f);
 			FloorTransform.Rotation = FQuat::Identity();
 			FloorTransform.Scale3D = FVector(1.0f, 1.0f, 1.0f);
 			State->FloorActor->SetActorTransform(FloorTransform);
 
-//			State->FloorActor = FloorBox;
-
 			UE_LOG("[PhysicsAssetEditor] 시뮬레이션 바닥 생성 완료 (10000 x 10000)");
 		}
 	}
 
-	// 2. SkeletalMeshComponent에 랙돌 초기화
+	// 3. SkeletalMeshComponent에 랙돌 초기화 (시뮬레이션 PhysScene 사용)
 	USkeletalMeshComponent* MeshComp = State->GetPreviewMeshComponent();
 	if (MeshComp && State->EditingAsset)
 	{
 		// PhysicsAsset 연결
 		MeshComp->SetPhysicsAsset(State->EditingAsset);
 
-		// 랙돌 초기화
+		// 랙돌 초기화 (에디터 전용 PhysScene 사용)
 		MeshComp->InitRagdoll(PhysScene);
 
 		// 시뮬레이션 시작
@@ -3016,16 +3047,23 @@ void SPhysicsAssetEditorWindow::StartSimulation()
 		UE_LOG("[PhysicsAssetEditor] 랙돌 시뮬레이션 시작");
 	}
 
-	// 3. 기즈모 숨기기
+	// 4. 기즈모 숨기기
 	State->HideGizmo();
 
-	// 4. 시각 디버그 끄기 (바디/제약조건 라인 숨기기)
+	// 5. 시각 디버그 끄기 (바디/제약조건 라인 및 메시 숨기기)
 	State->bShowBodies = false;
 	State->bShowConstraints = false;
 	if (State->BodyPreviewLineComponent)
 		State->BodyPreviewLineComponent->SetLineVisible(false);
 	if (State->ConstraintPreviewLineComponent)
 		State->ConstraintPreviewLineComponent->SetLineVisible(false);
+	// 메시 컴포넌트도 숨기기
+	for (UTriangleMeshComponent* MeshComp : State->BodyMeshComponents)
+	{
+		if (MeshComp) MeshComp->SetMeshVisible(false);
+	}
+	if (State->ConstraintMeshComponent)
+		State->ConstraintMeshComponent->SetMeshVisible(false);
 
 	State->bSimulating = true;
 }
@@ -3035,10 +3073,7 @@ void SPhysicsAssetEditorWindow::StopSimulation()
 	PhysicsAssetEditorState* State = GetActivePhysicsState();
 	if (!State || !State->bSimulating) return;
 
-	UWorld* World = State->World;
-	if (!World) return;
-
-	// 1. 랙돌 종료
+	// 1. 랙돌 종료 (PhysScene 해제 전에)
 	USkeletalMeshComponent* MeshComp = State->GetPreviewMeshComponent();
 	if (MeshComp)
 	{
@@ -3051,25 +3086,45 @@ void SPhysicsAssetEditorWindow::StopSimulation()
 		UE_LOG("[PhysicsAssetEditor] 랙돌 시뮬레이션 종료");
 	}
 
-	// 2. 바닥 액터 제거
+	// 2. 바닥 액터의 물리 바디 정리 (PhysScene 해제 전에)
 	if (State->FloorActor)
 	{
+		UBoxComponent* BoxComp = State->FloorActor->GetBoxComponent();
+		if (BoxComp)
+		{
+			BoxComp->GetBodyInstance().TermBody();
+		}
+
 		State->FloorActor->Destroy();
 		State->FloorActor = nullptr;
 
 		UE_LOG("[PhysicsAssetEditor] 시뮬레이션 바닥 제거");
 	}
 
-	// 3. Shape 라인 재구성 (포즈가 리셋되었으므로)
+	// 3. 시뮬레이션 PhysScene 해제
+	if (State->SimulationPhysScene)
+	{
+		State->SimulationPhysScene.reset();
+		UE_LOG("[PhysicsAssetEditor] 시뮬레이션용 PhysScene 해제");
+	}
+
+	// 4. Shape 라인 재구성 (포즈가 리셋되었으므로)
 	State->RequestLinesRebuild();
 
-	// 4. 시각 디버그 다시 켜기
+	// 5. 시각 디버그 다시 켜기 (라인 및 메시)
 	State->bShowBodies = true;
 	State->bShowConstraints = true;
 	if (State->BodyPreviewLineComponent)
 		State->BodyPreviewLineComponent->SetLineVisible(true);
 	if (State->ConstraintPreviewLineComponent)
 		State->ConstraintPreviewLineComponent->SetLineVisible(true);
+	// 메시 컴포넌트도 다시 보이기
+	for (UTriangleMeshComponent* MeshComp : State->BodyMeshComponents)
+	{
+		if (MeshComp) MeshComp->SetMeshVisible(true);
+	}
+	if (State->ConstraintMeshComponent)
+		State->ConstraintMeshComponent->SetMeshVisible(true);
 
 	State->bSimulating = false;
 }
