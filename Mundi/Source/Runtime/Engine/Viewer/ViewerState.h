@@ -159,32 +159,15 @@ struct ParticleEditorState : public ViewerState
     }
 };
 
-// 선택 타입 열거형
-enum class EPhATSelectionType : uint8
-{
-    None,
-    Body,
-    Constraint
-};
-
-// 자동 바디 생성 시 Shape 타입
-enum class EPhATShapeType : uint8
-{
-    Sphere,
-    Box,
-    Capsule
-};
-
-// 피직스 에셋 에디터 상태
+// Physics Asset Editor 상태
 struct PhysicsAssetEditorState : public ViewerState
 {
-    // 편집 중인 피직스 에셋
+    // 편집 중인 Physics Asset
     UPhysicsAsset* EditingPhysicsAsset = nullptr;
 
     // 선택 상태
     int32 SelectedBodyIndex = -1;
     int32 SelectedConstraintIndex = -1;
-    EPhATSelectionType SelectionType = EPhATSelectionType::None;
 
     // 시뮬레이션 상태
     bool bIsSimulating = false;
@@ -196,42 +179,14 @@ struct PhysicsAssetEditorState : public ViewerState
     // 파일 경로
     FString CurrentFilePath;
 
-    // 라인 컴포넌트 (Shape 및 조인트 시각화용)
+    // 시각화 라인 컴포넌트
     class ULineComponent* BodyShapeLineComponent = nullptr;
     class ULineComponent* ConstraintLineComponent = nullptr;
 
-    // 레이아웃 비율 (좌/우 패널 상하 분할)
-    float LeftTopRatio = 0.6f;    // Hierarchy / Graph
-    float RightTopRatio = 0.6f;   // Details / Tool
+    // 패널 비율 (좌측: Hierarchy/Graph, 우측: Details/Tool)
+    float LeftTopRatio = 0.6f;
+    float RightTopRatio = 0.6f;
 
-    // 자동 바디 생성 시 Shape 타입
-    EPhATShapeType AutoBodyShapeType = EPhATShapeType::Capsule;
-
-    // Shape 라인 재구성 필요 플래그
-    bool bBodyShapesDirty = true;
-    bool bConstraintLinesDirty = true;
-
-    // 선택 초기화
-    void ClearSelection()
-    {
-        SelectedBodyIndex = -1;
-        SelectedConstraintIndex = -1;
-        SelectionType = EPhATSelectionType::None;
-    }
-
-    // 바디 선택
-    void SelectBody(int32 Index)
-    {
-        ClearSelection();
-        SelectedBodyIndex = Index;
-        SelectionType = EPhATSelectionType::Body;
-    }
-
-    // 조인트 선택
-    void SelectConstraint(int32 Index)
-    {
-        ClearSelection();
-        SelectedConstraintIndex = Index;
-        SelectionType = EPhATSelectionType::Constraint;
-    }
+    // 더티 플래그
+    bool bIsDirty = false;
 };
