@@ -82,24 +82,44 @@ void SPhysicsAssetEditorWindow::OpenOrFocusTab(UEditorAssetPreviewContext* Conte
 {
 	if (!Context) return;
 
-	// 이미 열린 탭이 있는지 확인
-	for (int i = 0; i < Tabs.Num(); ++i)
+	// 열려는 PhysicsAsset 경로 결정
+	FString TargetPath;
+	if (!Context->PhysicsAssetPath.empty())
 	{
-		PhysicsAssetEditorState* State = static_cast<PhysicsAssetEditorState*>(Tabs[i]);
-		if (State->CurrentFilePath == Context->AssetPath)
+		// Case 2: PropertyRenderer에서 기존 PhysicsAsset 편집
+		TargetPath = Context->PhysicsAssetPath;
+	}
+	else if (!Context->AssetPath.empty())
+	{
+		// Case 3: ContentBrowser에서 더블클릭
+		TargetPath = Context->AssetPath;
+	}
+	// Case 1: 새로 생성 (TargetPath 비어있음)
+
+	// 이미 열린 탭이 있는지 확인 (경로가 있는 경우만)
+	if (!TargetPath.empty())
+	{
+		for (int i = 0; i < Tabs.Num(); ++i)
 		{
-			ActiveTabIndex = i;
-			ActiveState = Tabs[i];
-			return;
+			PhysicsAssetEditorState* State = static_cast<PhysicsAssetEditorState*>(Tabs[i]);
+			if (State->CurrentFilePath == TargetPath)
+			{
+				// 기존 탭으로 포커스
+				ActiveTabIndex = i;
+				ActiveState = Tabs[i];
+				PendingSelectTabIndex = i;
+				return;
+			}
 		}
 	}
 
 	// 새 탭 생성
-	FString TabName = ExtractFileNameFromPath(Context->AssetPath);
+	FString TabName = TargetPath.empty() ? "Untitled" : ExtractFileNameFromPath(TargetPath);
 	ViewerState* NewState = CreateViewerState(TabName.c_str(), Context);
 	Tabs.Add(NewState);
 	ActiveTabIndex = Tabs.Num() - 1;
 	ActiveState = NewState;
+	PendingSelectTabIndex = ActiveTabIndex;
 }
 
 void SPhysicsAssetEditorWindow::OnUpdate(float DeltaSeconds)
@@ -306,12 +326,17 @@ void SPhysicsAssetEditorWindow::RenderTabsAndToolbar(EViewerType CurrentViewerTy
 		char TabId[128];
 		sprintf_s(TabId, sizeof(TabId), "%s###Tab%d", TabDisplayName.c_str(), i);
 
+		// 탭 선택 요청이 있을 때만 SetSelected 플래그 사용 (그 외에는 사용자 클릭 따름)
 		ImGuiTabItemFlags tabFlags = 0;
-		if (i == ActiveTabIndex)
+		if (i == PendingSelectTabIndex)
+		{
 			tabFlags |= ImGuiTabItemFlags_SetSelected;
+			PendingSelectTabIndex = -1;  // 한 번만 적용
+		}
 
 		if (ImGui::BeginTabItem(TabId, &open, tabFlags))
 		{
+			// 현재 선택된 탭으로 ActiveState 업데이트
 			if (ActiveTabIndex != i)
 			{
 				ActiveTabIndex = i;
@@ -332,11 +357,7 @@ void SPhysicsAssetEditorWindow::RenderTabsAndToolbar(EViewerType CurrentViewerTy
 		}
 	}
 
-	// + 버튼으로 새 탭 추가
-	if (ImGui::TabItemButton("+", ImGuiTabItemFlags_Trailing))
-	{
-		OpenNewTab("New Physics Asset");
-	}
+	// "+" 버튼 제거 - 새 에셋은 PropertyRenderer나 ContentBrowser에서만 열기
 
 	ImGui::EndTabBar();
 }

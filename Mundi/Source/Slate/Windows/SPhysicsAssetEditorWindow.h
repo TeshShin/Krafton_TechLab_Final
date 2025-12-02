@@ -89,6 +89,9 @@ private:
 	// Shape 타입 선택 (Tool 패널용)
 	int32 SelectedShapeType = 0;  // 0: Sphere, 1: Box, 2: Capsule
 
+	// 탭 선택 요청 (새 탭 열기/포커스 시에만 사용, -1이면 무시)
+	int32 PendingSelectTabIndex = -1;
+
 	// 헬퍼 함수
 	PhysicsAssetEditorState* GetActivePhysicsState() const
 	{
