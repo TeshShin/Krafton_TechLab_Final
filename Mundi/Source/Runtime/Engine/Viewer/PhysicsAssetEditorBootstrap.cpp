@@ -42,9 +42,9 @@ ViewerState* PhysicsAssetEditorBootstrap::CreateViewerState(const char* Name, UW
 	Client->SetViewportType(EViewportType::Perspective);
 	Client->SetViewMode(EViewMode::VMI_Lit_Phong);
 
-	// 카메라 설정
-	Client->GetCamera()->SetActorLocation(FVector(5.f, 5.f, 3.f));
-	Client->GetCamera()->SetRotationFromEulerAngles(FVector(0.f, 20.f, -135.f));
+	// 카메라 설정 (SkeletalViewer와 동일)
+	Client->GetCamera()->SetActorLocation(FVector(3, 0, 1));
+	Client->GetCamera()->SetRotationFromEulerAngles(FVector(0.f, 0.f, 180.f));
 
 	State->Client = Client;
 	State->Viewport->SetViewportClient(Client);

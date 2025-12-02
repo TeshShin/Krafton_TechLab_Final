@@ -477,29 +477,50 @@ void SPhysicsAssetEditorWindow::RenderViewportArea(float width, float height)
 	PhysicsAssetEditorState* State = GetActivePhysicsState();
 	if (!State || !State->Viewport) return;
 
+	// 툴바와 뷰포트 사이 간격 제거
+	ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(0, 0));
+
+	// 뷰어 툴바 렌더링 (뷰포트 상단)
+	RenderViewerToolbar();
+
+	// 툴바 아래 남은 공간 계산
+	ImVec2 contentAvail = ImGui::GetContentRegionAvail();
+	float viewportWidth = contentAvail.x;
+	float viewportHeight = contentAvail.y;
+
+	// 뷰포트 위치 저장 (CenterRect 먼저 설정)
+	ImVec2 vpPos = ImGui::GetCursorScreenPos();
+	CenterRect = FRect(vpPos.x, vpPos.y, vpPos.x + viewportWidth, vpPos.y + viewportHeight);
+	CenterRect.UpdateMinMax();
+
 	// 뷰포트 리사이즈
-	int32 vpWidth = static_cast<int32>(width);
-	int32 vpHeight = static_cast<int32>(height);
+	int32 vpWidth = static_cast<int32>(viewportWidth);
+	int32 vpHeight = static_cast<int32>(viewportHeight);
 
 	if (vpWidth > 0 && vpHeight > 0)
 	{
 		State->Viewport->Resize(0, 0, vpWidth, vpHeight);
 	}
 
-	// 뷰포트 렌더링
+	// 뷰포트 렌더링 (CenterRect 설정 후)
 	OnRenderViewport();
 
 	// 뷰포트 이미지 표시
 	if (State->Viewport->GetSRV())
 	{
-		ImVec2 vpPos = ImGui::GetCursorScreenPos();
-		CenterRect = FRect(vpPos.x, vpPos.y, vpPos.x + width, vpPos.y + height);
-
 		ImGui::Image(
 			(ImTextureID)State->Viewport->GetSRV(),
-			ImVec2(width, height)
+			ImVec2(viewportWidth, viewportHeight)
 		);
+		// 뷰포트 hover 상태 업데이트 (마우스 입력 처리에 필요)
+		State->Viewport->SetViewportHovered(ImGui::IsItemHovered());
 	}
+	else
+	{
+		State->Viewport->SetViewportHovered(false);
+	}
+
+	ImGui::PopStyleVar(); // ItemSpacing 복원
 }
 
 void SPhysicsAssetEditorWindow::RenderHierarchyPanel()
