@@ -117,6 +117,25 @@ public:
                         FHitResult& OutHit,
                         AActor* IgnoreActor = nullptr) const;
 
+    // ==================================================================================
+    // Overlap / Penetration Interface
+    // ==================================================================================
+
+    /**
+     * @brief 캡슐이 다른 물체와 겹치는지 확인하고 MTD(최소 이동 거리) 반환
+     * @param Position 캡슐 위치
+     * @param Radius 캡슐 반경
+     * @param HalfHeight 캡슐 반높이
+     * @param OutMTD 최소 이동 방향 (정규화됨, 출력)
+     * @param OutPenetrationDepth 침투 깊이 (출력)
+     * @param IgnoreActor 무시할 액터
+     * @return 겹침이 있으면 true
+     */
+    bool ComputePenetrationCapsule(const FVector& Position,
+                                   float Radius, float HalfHeight,
+                                   FVector& OutMTD, float& OutPenetrationDepth,
+                                   AActor* IgnoreActor = nullptr) const;
+
     /** 실제 시뮬레이션 로직을 수행한다 (에디터에서 직접 호출 가능). */
     void TickPhysScene(float DeltaTime);
 

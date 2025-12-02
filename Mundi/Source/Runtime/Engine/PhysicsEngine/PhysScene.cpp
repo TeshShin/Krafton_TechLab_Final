@@ -551,3 +551,102 @@ bool FPhysScene::SweepSingleBox(const FVector& Start, const FVector& End,
 
     return SweepSingleInternal(BoxGeom, Start, End, Rotation, OutHit, IgnoreActor);
 }
+
+bool FPhysScene::ComputePenetrationCapsule(const FVector& Position,
+                                            float Radius, float HalfHeight,
+                                            FVector& OutMTD, float& OutPenetrationDepth,
+                                            AActor* IgnoreActor) const
+{
+    if (!PhysXScene)
+    {
+        return false;
+    }
+
+    OutMTD = FVector::Zero();
+    OutPenetrationDepth = 0.0f;
+
+    // PhysX 캡슐 생성 (Z축 정렬)
+    PxCapsuleGeometry CapsuleGeom(Radius, HalfHeight);
+    FQuat CapsuleRotation = FQuat::FromAxisAngle(FVector(0, 1, 0), DegreesToRadians(90.0f));
+    PxTransform CapsulePose(U2PVector(Position), U2PQuat(CapsuleRotation));
+
+    // Overlap 쿼리로 겹치는 물체들 찾기
+    const PxU32 MaxOverlaps = 16;
+    PxOverlapHit OverlapHits[MaxOverlaps];
+    PxOverlapBuffer OverlapBuffer(OverlapHits, MaxOverlaps);
+
+    PxQueryFilterData FilterData;
+    FilterData.flags = PxQueryFlag::eSTATIC | PxQueryFlag::eDYNAMIC;
+
+    bool bHasOverlap = PhysXScene->overlap(CapsuleGeom, CapsulePose, OverlapBuffer, FilterData);
+
+    if (!bHasOverlap || OverlapBuffer.getNbAnyHits() == 0)
+    {
+        return false;
+    }
+
+    // 모든 겹침에 대해 MTD 계산하고 가장 큰 침투 해결
+    FVector TotalMTD = FVector::Zero();
+    float MaxPenetration = 0.0f;
+
+    for (PxU32 i = 0; i < OverlapBuffer.getNbAnyHits(); ++i)
+    {
+        const PxOverlapHit& Hit = OverlapBuffer.getAnyHit(i);
+
+        if (!Hit.actor || !Hit.shape)
+        {
+            continue;
+        }
+
+        // IgnoreActor 체크
+        if (IgnoreActor)
+        {
+            FBodyInstance* BodyInstance = static_cast<FBodyInstance*>(Hit.actor->userData);
+            if (BodyInstance && BodyInstance->OwnerComponent)
+            {
+                if (BodyInstance->OwnerComponent->GetOwner() == IgnoreActor)
+                {
+                    continue;
+                }
+            }
+        }
+
+        // MTD 계산
+        PxVec3 MtdDirection;
+        PxF32 MtdDepth;
+
+        PxTransform ShapePose = PxShapeExt::getGlobalPose(*Hit.shape, *Hit.actor);
+        PxGeometryHolder GeomHolder = Hit.shape->getGeometry();
+
+        bool bSuccess = PxGeometryQuery::computePenetration(
+            MtdDirection, MtdDepth,
+            CapsuleGeom, CapsulePose,
+            GeomHolder.any(), ShapePose
+        );
+
+        if (bSuccess && MtdDepth > 0.0f)
+        {
+            FVector ThisMTD = P2UVector(MtdDirection) * MtdDepth;
+
+            // 가장 큰 침투 방향으로 누적
+            if (MtdDepth > MaxPenetration)
+            {
+                MaxPenetration = MtdDepth;
+                OutMTD = P2UVector(MtdDirection);
+                OutPenetrationDepth = MtdDepth;
+            }
+
+            TotalMTD += ThisMTD;
+        }
+    }
+
+    // 누적된 MTD가 있으면 정규화
+    if (TotalMTD.SizeSquared() > KINDA_SMALL_NUMBER)
+    {
+        OutMTD = TotalMTD.GetNormalized();
+        OutPenetrationDepth = TotalMTD.Size();
+        return true;
+    }
+
+    return MaxPenetration > 0.0f;
+}

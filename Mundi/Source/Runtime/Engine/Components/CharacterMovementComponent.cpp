@@ -254,28 +254,171 @@ void UCharacterMovementComponent::MoveUpdatedComponent(float DeltaTime)
 		return;
 	}
 
-	// 단순 이동 (충돌 처리 없음)
 	FVector Delta = Velocity * DeltaTime;
-	FVector NewLocation = UpdatedComponent->GetWorldLocation() + Delta;
-	UpdatedComponent->SetWorldLocation(NewLocation);
+
+	if (Delta.SizeSquared() < KINDA_SMALL_NUMBER)
+	{
+		return;
+	}
+
+	// 수평/수직 이동 분리
+	// 1. 먼저 침투 해제
+	ResolvePenetration();
+
+	// 2. 수평 이동 (XY)
+	FVector HorizontalDelta = FVector(Delta.X, Delta.Y, 0.0f);
+	if (HorizontalDelta.SizeSquared() > KINDA_SMALL_NUMBER)
+	{
+		SlideAlongSurface(HorizontalDelta);
+	}
+
+	// 3. 수직 이동 (Z)
+	FVector VerticalDelta = FVector(0.0f, 0.0f, Delta.Z);
+	if (VerticalDelta.SizeSquared() > KINDA_SMALL_NUMBER)
+	{
+		SlideAlongSurface(VerticalDelta);
+	}
 }
 
-// Phase 3용 - 현재 사용 안 함
+// ────────────────────────────────────────────────────────────────────────────
+// Phase 3: 벽 충돌 + 슬라이딩
+// ────────────────────────────────────────────────────────────────────────────
+
 bool UCharacterMovementComponent::SafeMoveUpdatedComponent(const FVector& Delta, FHitResult& OutHit)
 {
 	OutHit.Init();
-	return false;
+
+	if (!UpdatedComponent || !CharacterOwner)
+	{
+		return false;
+	}
+
+	if (Delta.SizeSquared() < KINDA_SMALL_NUMBER)
+	{
+		return false;
+	}
+
+	UCapsuleComponent* Capsule = CharacterOwner->GetCapsuleComponent();
+	if (!Capsule)
+	{
+		FVector NewLocation = UpdatedComponent->GetWorldLocation() + Delta;
+		UpdatedComponent->SetWorldLocation(NewLocation);
+		return true;
+	}
+
+	UWorld* World = CharacterOwner->GetWorld();
+	if (!World || !World->GetPhysicsScene())
+	{
+		FVector NewLocation = UpdatedComponent->GetWorldLocation() + Delta;
+		UpdatedComponent->SetWorldLocation(NewLocation);
+		return true;
+	}
+
+	FPhysScene* PhysScene = World->GetPhysicsScene();
+
+	// 스킨 두께 - 충돌 감지용 여유 공간
+	const float SkinWidth = 0.015f;
+
+	float CapsuleRadius = Capsule->GetScaledCapsuleRadius();
+	float CapsuleHalfHeight = Capsule->GetScaledCapsuleHalfHeight();
+
+	// 스윕용 캡슐은 스킨 두께만큼 작게
+	float SweepRadius = FMath::Max(0.01f, CapsuleRadius - SkinWidth);
+	float SweepHalfHeight = FMath::Max(0.01f, CapsuleHalfHeight - SkinWidth);
+
+	FVector Start = UpdatedComponent->GetWorldLocation();
+	FVector End = Start + Delta;
+
+	// 캡슐 스윕으로 충돌 감지
+	if (PhysScene->SweepSingleCapsule(Start, End, SweepRadius, SweepHalfHeight, OutHit, CharacterOwner))
+	{
+		// 시작 위치에서 이미 침투 상태
+		if (OutHit.Distance <= KINDA_SMALL_NUMBER)
+		{
+			// 침투 해제: 노멀 방향으로 밀어냄
+			if (OutHit.ImpactNormal.SizeSquared() > KINDA_SMALL_NUMBER)
+			{
+				FVector Depenetration = OutHit.ImpactNormal * SkinWidth;
+				FVector NewLocation = Start + Depenetration;
+				UpdatedComponent->SetWorldLocation(NewLocation);
+			}
+			OutHit.bBlockingHit = true;
+			return true;
+		}
+
+		// 충돌 발생 - 충돌 지점에서 스킨 두께만큼 떨어진 곳에 위치
+		float SafeDistance = OutHit.Distance;
+		FVector SafeDelta = Delta.GetNormalized() * SafeDistance;
+		FVector NewLocation = Start + SafeDelta;
+		UpdatedComponent->SetWorldLocation(NewLocation);
+		return true;
+	}
+	else
+	{
+		// 충돌 없음, 전체 이동
+		UpdatedComponent->SetWorldLocation(End);
+		return true;
+	}
 }
 
-// Phase 3용 - 현재 사용 안 함
 FVector UCharacterMovementComponent::ComputeSlideVector(const FVector& Delta, const FVector& Normal, const FHitResult& Hit) const
 {
-	return FVector::Zero();
+	// 기본 슬라이드: 충돌면에 평행한 성분만 남김
+	// SlideVector = Delta - (Delta · Normal) * Normal
+	float DotWithNormal = FVector::Dot(Delta, Normal);
+	FVector SlideVector = Delta - Normal * DotWithNormal;
+
+	return SlideVector;
 }
 
-// Phase 3용 - 현재 사용 안 함
 void UCharacterMovementComponent::SlideAlongSurface(const FVector& Delta, int32 MaxIterations)
 {
+	if (!UpdatedComponent || Delta.SizeSquared() < KINDA_SMALL_NUMBER)
+	{
+		return;
+	}
+
+	FVector RemainingDelta = Delta;
+	int32 Iterations = 0;
+
+	while (Iterations < MaxIterations && RemainingDelta.SizeSquared() > KINDA_SMALL_NUMBER)
+	{
+		FHitResult Hit;
+
+		if (!SafeMoveUpdatedComponent(RemainingDelta, Hit))
+		{
+			break;
+		}
+
+		if (!Hit.bBlockingHit)
+		{
+			// 충돌 없이 이동 완료
+			break;
+		}
+
+		// 충돌 발생 - 남은 거리 계산
+		float MovedDistance = Hit.Distance;
+		float TotalDistance = RemainingDelta.Size();
+
+		if (TotalDistance < KINDA_SMALL_NUMBER)
+		{
+			break;
+		}
+
+		float RemainingRatio = 1.0f - (MovedDistance / TotalDistance);
+		FVector LeftoverDelta = RemainingDelta * RemainingRatio;
+
+		// 바닥 충돌 시 수직 속도 제거
+		if (IsWalkable(Hit.ImpactNormal) && Velocity.Z < 0.0f)
+		{
+			Velocity.Z = 0.0f;
+		}
+
+		// 슬라이드 벡터 계산
+		RemainingDelta = ComputeSlideVector(LeftoverDelta, Hit.ImpactNormal, Hit);
+
+		Iterations++;
+	}
 }
 
 // Phase 4용 - 현재 사용 안 함
@@ -399,6 +542,52 @@ void UCharacterMovementComponent::SnapToFloor()
 		Location.Z -= CurrentFloor.FloorDist;
 		UpdatedComponent->SetWorldLocation(Location);
 	}
+}
+
+bool UCharacterMovementComponent::ResolvePenetration()
+{
+	if (!UpdatedComponent || !CharacterOwner)
+	{
+		return false;
+	}
+
+	UCapsuleComponent* Capsule = CharacterOwner->GetCapsuleComponent();
+	if (!Capsule)
+	{
+		return false;
+	}
+
+	UWorld* World = CharacterOwner->GetWorld();
+	if (!World || !World->GetPhysicsScene())
+	{
+		return false;
+	}
+
+	FPhysScene* PhysScene = World->GetPhysicsScene();
+
+	float CapsuleRadius = Capsule->GetScaledCapsuleRadius();
+	float CapsuleHalfHeight = Capsule->GetScaledCapsuleHalfHeight();
+	FVector CurrentLocation = UpdatedComponent->GetWorldLocation();
+
+	FVector MTD;
+	float PenetrationDepth;
+
+	// MTD를 사용하여 침투 감지 및 해제
+	if (PhysScene->ComputePenetrationCapsule(CurrentLocation, CapsuleRadius, CapsuleHalfHeight,
+	                                          MTD, PenetrationDepth, CharacterOwner))
+	{
+		// 침투가 감지됨 - MTD 방향으로 밀어냄
+		// 약간의 여유를 두고 밀어냄 (0.125 cm)
+		const float PushOutDistance = PenetrationDepth + 0.00125f;
+		FVector Adjustment = MTD * PushOutDistance;
+
+		FVector NewLocation = CurrentLocation + Adjustment;
+		UpdatedComponent->SetWorldLocation(NewLocation);
+
+		return true;
+	}
+
+	return false;
 }
 
 // ────────────────────────────────────────────────────────────────────────────
