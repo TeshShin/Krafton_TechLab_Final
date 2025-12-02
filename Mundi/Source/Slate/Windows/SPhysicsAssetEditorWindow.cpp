@@ -2306,11 +2306,8 @@ void SPhysicsAssetEditorWindow::AutoGenerateBodies(EAggCollisionShape PrimitiveT
 		{
 			++GeneratedBodies;
 		}
-		else
-		{
-			// Shape 생성 실패 시 바디 제거
-			Asset->BodySetups.RemoveAt(BodyIndex);
-		}
+		// Shape 생성 실패해도 body 유지 (PhysX에서 mass=0으로 kinematic 취급)
+		// Constraint anchor point로 사용 가능
 	}
 
 	// ────────────────────────────────────────────────
@@ -2337,8 +2334,10 @@ void SPhysicsAssetEditorWindow::AutoGenerateBodies(EAggCollisionShape PrimitiveT
 	State->ClearSelection();
 	State->HideGizmo();
 
-	UE_LOG("[SPhysicsAssetEditorWindow] Auto-generated %d bodies and %d constraints (vertex-based)",
-		GeneratedBodies, (int)Asset->ConstraintSetups.size());
+	int32 TotalBodies = static_cast<int32>(Asset->BodySetups.size());
+	int32 EmptyBodies = TotalBodies - GeneratedBodies;
+	UE_LOG("[SPhysicsAssetEditorWindow] Auto-generated %d bodies (%d with shape, %d empty) and %d constraints",
+		TotalBodies, GeneratedBodies, EmptyBodies, (int)Asset->ConstraintSetups.size());
 }
 
 void SPhysicsAssetEditorWindow::AddBodyToBone(int32 BoneIndex, EAggCollisionShape PrimitiveType)
