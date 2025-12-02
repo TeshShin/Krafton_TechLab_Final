@@ -404,6 +404,8 @@ void UBodySetup::ClearAllShapes()
 // --- 직렬화 ---
 FArchive& operator<<(FArchive& Ar, UBodySetup& BodySetup)
 {
+    return Ar;
+
     if (Ar.IsSaving())
     {
         // 1. DefaultCollisionEnabled 저장
