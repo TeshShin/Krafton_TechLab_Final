@@ -27,9 +27,10 @@ void UStaticMeshComponent::BeginPlay()
 
 void UStaticMeshComponent::OnHit(UPrimitiveComponent* This, UPrimitiveComponent* Other, FHitResult HitResult)
 {
+	// OnHit Test Code!
 	if (Other->IsA(UStaticMeshComponent::StaticClass()))
 	{
-		Other->GetOwner()->Destroy();
+		Other->DestroyComponent();
 	}
 }
 

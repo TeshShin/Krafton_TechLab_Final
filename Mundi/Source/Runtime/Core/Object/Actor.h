@@ -86,6 +86,7 @@ public:
 
     // ===== 월드가 파괴 경로에서 호출할 "좁은 공개 API" =====
     void DestroyAllComponents();   // Unregister 이후 최종 파괴
+    void ResetComponents(); // Pending하지 않고 바로 초기화 
 
     // ===== 파괴 재진입 가드 =====
     bool IsPendingDestroy() const { return bPendingDestroy; }
