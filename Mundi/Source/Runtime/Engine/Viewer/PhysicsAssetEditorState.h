@@ -1,12 +1,49 @@
-#pragma once
+﻿#pragma once
 
 #include "ViewerState.h"
 #include "LinesBatch.h"
+#include "EAggCollisionShape.h"
+#include <memory>
 
 class UPhysicsAsset;
 class ULineComponent;
+class UTriangleMeshComponent;
 class ASkeletalMeshActor;
 class USkeletalMeshComponent;
+class FPhysScene;
+
+/**
+ * FPrimitiveSelection
+ *
+ * 선택된 Primitive를 식별하는 구조체
+ * PrimitiveType과 해당 타입 배열 내 인덱스로 구성
+ */
+struct FPrimitiveSelection
+{
+	EAggCollisionShape PrimitiveType = EAggCollisionShape::Unknown;
+	int32 PrimitiveIndex = -1;
+
+	bool IsValid() const
+	{
+		return PrimitiveType != EAggCollisionShape::Unknown && PrimitiveIndex >= 0;
+	}
+
+	void Clear()
+	{
+		PrimitiveType = EAggCollisionShape::Unknown;
+		PrimitiveIndex = -1;
+	}
+
+	bool operator==(const FPrimitiveSelection& Other) const
+	{
+		return PrimitiveType == Other.PrimitiveType && PrimitiveIndex == Other.PrimitiveIndex;
+	}
+
+	bool operator!=(const FPrimitiveSelection& Other) const
+	{
+		return !(*this == Other);
+	}
+};
 
 /**
  * PhysicsAssetEditorState
@@ -16,6 +53,9 @@ class USkeletalMeshComponent;
  */
 struct PhysicsAssetEditorState : public ViewerState
 {
+	// 소멸자 (unique_ptr<FPhysScene> 삭제를 위해 cpp에서 정의)
+	~PhysicsAssetEditorState();
+
 	// ────────────────────────────────────────────────
 	// Physics Asset 데이터
 	// ────────────────────────────────────────────────
@@ -36,10 +76,13 @@ struct PhysicsAssetEditorState : public ViewerState
 	/** 선택된 바디 인덱스 (-1이면 선택 없음) */
 	int32 SelectedBodyIndex = -1;
 
+	/** 선택된 Primitive (바디 내 개별 Shape) */
+	FPrimitiveSelection SelectedPrimitive;
+
 	/** 선택된 제약 조건 인덱스 (-1이면 선택 없음) */
 	int32 SelectedConstraintIndex = -1;
 
-	/** 선택 모드 (true: Body, false: Constraint) */
+	/** 선택 모드 (true: Body/Primitive, false: Constraint) */
 	bool bBodySelectionMode = true;
 
 	// ────────────────────────────────────────────────
@@ -60,14 +103,33 @@ struct PhysicsAssetEditorState : public ViewerState
 	bool bShowMassProperties = false;
 
 	// ────────────────────────────────────────────────
+	// 시뮬레이션 상태
+	// ────────────────────────────────────────────────
+
+	/** 시뮬레이션 실행 중 여부 */
+	bool bSimulating = false;
+
+	/** 바닥 액터 (시뮬레이션용) */
+	class ABoxActor* FloorActor = nullptr;
+
+	/** 시뮬레이션용 PhysScene (에디터 전용) */
+	std::unique_ptr<FPhysScene> SimulationPhysScene;
+
+	// ────────────────────────────────────────────────
 	// Shape 프리뷰 컴포넌트 (에디터용 시각화)
 	// ────────────────────────────────────────────────
 
-	/** 바디별 Shape 프리뷰 라인 컴포넌트 */
+	/** 바디별 Shape 프리뷰 라인 컴포넌트 (wireframe) */
 	ULineComponent* BodyPreviewLineComponent = nullptr;
 
-	/** 제약 조건 시각화 라인 컴포넌트 */
+	/** 바디별 Shape 메시 컴포넌트 배열 (solid mesh) */
+	TArray<UTriangleMeshComponent*> BodyMeshComponents;
+
+	/** 제약 조건 시각화 라인 컴포넌트 (wireframe) */
 	ULineComponent* ConstraintPreviewLineComponent = nullptr;
+
+	/** 제약 조건 메시 컴포넌트 (solid mesh) */
+	UTriangleMeshComponent* ConstraintMeshComponent = nullptr;
 
 	/** Shape 라인 재구성 필요 (바디 추가/제거 시) */
 	bool bShapeLinesNeedRebuild = true;
@@ -80,6 +142,7 @@ struct PhysicsAssetEditorState : public ViewerState
 
 	/** 이전 선택 상태 (색상 업데이트용) */
 	int32 CachedSelectedBodyIndex = -1;
+	FPrimitiveSelection CachedSelectedPrimitive;
 	int32 CachedSelectedConstraintIndex = -1;
 
 	/** 기즈모 드래그 상태 (첫 프레임 감지용) */
@@ -93,29 +156,28 @@ struct PhysicsAssetEditorState : public ViewerState
 	};
 	TArray<FBodyLineRange> BodyLineRanges;
 
-	/** 바디 라인 배치 (DOD 기반) */
+	/** 바디 라인 배치 (DOD 기반 - wireframe) */
 	FLinesBatch BodyLinesBatch;
 
-	/** 제약 조건 라인 배치 (DOD 기반) */
+	/** 제약 조건 라인 배치 (DOD 기반 - wireframe) */
 	FLinesBatch ConstraintLinesBatch;
-
-	/** 제약 조건 삼각형 배치 (면 기반 시각화) */
-	FTrianglesBatch ConstraintTrianglesBatch;
-
-	/** 바디 삼각형 배치 (면 기반 시각화 - 충돌 형상) */
-	FTrianglesBatch BodyTrianglesBatch;
 
 	// ────────────────────────────────────────────────
 	// 헬퍼 메서드
 	// ────────────────────────────────────────────────
 
-	/** 바디 선택 (색상만 업데이트) */
-	void SelectBody(int32 BodyIndex)
+	/** 바디 선택 (첫 번째 primitive 자동 선택) */
+	void SelectBody(int32 BodyIndex);
+
+	/** 특정 Primitive 선택 (Viewport 피킹용) */
+	void SelectPrimitive(int32 BodyIndex, EAggCollisionShape PrimitiveType, int32 PrimitiveIndex)
 	{
 		SelectedBodyIndex = BodyIndex;
+		SelectedPrimitive.PrimitiveType = PrimitiveType;
+		SelectedPrimitive.PrimitiveIndex = PrimitiveIndex;
 		SelectedConstraintIndex = -1;
 		bBodySelectionMode = true;
-		bSelectionColorDirty = true;  // 색상만 업데이트
+		bSelectionColorDirty = true;
 	}
 
 	/** 제약 조건 선택 (색상만 업데이트) */
@@ -123,16 +185,18 @@ struct PhysicsAssetEditorState : public ViewerState
 	{
 		SelectedConstraintIndex = ConstraintIndex;
 		SelectedBodyIndex = -1;
+		SelectedPrimitive.Clear();
 		bBodySelectionMode = false;
-		bSelectionColorDirty = true;  // 색상만 업데이트
+		bSelectionColorDirty = true;
 	}
 
 	/** 선택 해제 (색상만 업데이트) */
 	void ClearSelection()
 	{
 		SelectedBodyIndex = -1;
+		SelectedPrimitive.Clear();
 		SelectedConstraintIndex = -1;
-		bSelectionColorDirty = true;  // 색상만 업데이트
+		bSelectionColorDirty = true;
 	}
 
 	/** 라인 재구성 요청 (바디/제약조건 추가/제거 시) */
@@ -151,6 +215,12 @@ struct PhysicsAssetEditorState : public ViewerState
 	bool HasSelection() const
 	{
 		return SelectedBodyIndex >= 0 || SelectedConstraintIndex >= 0;
+	}
+
+	/** Primitive 선택이 유효한지 확인 */
+	bool HasPrimitiveSelection() const
+	{
+		return SelectedBodyIndex >= 0 && SelectedPrimitive.IsValid();
 	}
 
 	/** 프리뷰 액터를 SkeletalMeshActor로 캐스팅 */

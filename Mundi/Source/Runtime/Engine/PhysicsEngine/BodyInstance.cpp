@@ -149,7 +149,7 @@ void FBodyInstance::TermBody()
         // userData를 먼저 클리어하여 dangling pointer 방지
         RigidActor->userData = nullptr;
 
-        if (PhysScene)
+        if (PhysScene && PhysScene->GetPxScene())
         {
             // 시뮬레이션 중이면 완료될 때까지 대기
             PhysScene->WaitPhysScene();

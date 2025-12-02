@@ -62,7 +62,38 @@ void UToolsWidget::RenderGenerationSection()
 	{
 		ImGui::Indent(8.0f);
 
-		float buttonWidth = ImGui::GetContentRegionAvail().x - 8.0f;
+		float fullWidth = ImGui::GetContentRegionAvail().x - 8.0f;
+		float inputWidth = fullWidth * 0.6f;  // 입력 위젯은 60% 너비
+		float buttonWidth = fullWidth;  // 버튼은 전체 너비
+
+		// Primitive Type 콤보박스
+		// EAggCollisionShape: Sphere=0, Box=1, Sphyl=2 (Capsule)
+		const char* PrimitiveTypes[] = { "Sphere", "Box", "Capsule" };
+		int currentType = 0;
+		if (SelectedPrimitiveType == EAggCollisionShape::Sphere) currentType = 0;
+		else if (SelectedPrimitiveType == EAggCollisionShape::Box) currentType = 1;
+		else if (SelectedPrimitiveType == EAggCollisionShape::Sphyl) currentType = 2;
+
+		ImGui::SetNextItemWidth(inputWidth);
+		if (ImGui::Combo("Primitive Type", &currentType, PrimitiveTypes, IM_ARRAYSIZE(PrimitiveTypes)))
+		{
+			switch (currentType)
+			{
+			case 0: SelectedPrimitiveType = EAggCollisionShape::Sphere; break;
+			case 1: SelectedPrimitiveType = EAggCollisionShape::Box; break;
+			case 2: SelectedPrimitiveType = EAggCollisionShape::Sphyl; break;
+			}
+		}
+
+		// Min Bone Size 슬라이더
+		ImGui::SetNextItemWidth(inputWidth);
+		ImGui::SliderFloat("Min Bone Size", &MinBoneSize, 0.001f, 0.1f, "%.3f");
+		if (ImGui::IsItemHovered())
+		{
+			ImGui::SetTooltip("Bodies smaller than this will not be generated");
+		}
+
+		ImGui::Spacing();
 
 		// 동적 버튼
 		bool bEnabled = CanGenerate();
@@ -73,15 +104,15 @@ void UToolsWidget::RenderGenerationSection()
 		{
 			if (strcmp(ButtonText, "Re-generate Bodies") == 0)
 			{
-				EditorWindow->RegenerateSelectedBody();
+				EditorWindow->RegenerateSelectedBody(SelectedPrimitiveType);
 			}
 			else if (strcmp(ButtonText, "Add Bodies") == 0)
 			{
-				EditorWindow->AddBodyToBone(EditorState->SelectedBoneIndex);
+				EditorWindow->AddBodyToBone(EditorState->SelectedBoneIndex, SelectedPrimitiveType);
 			}
 			else  // Generate All Bodies
 			{
-				EditorWindow->AutoGenerateBodies();
+				EditorWindow->AutoGenerateBodies(SelectedPrimitiveType, MinBoneSize);
 			}
 		}
 

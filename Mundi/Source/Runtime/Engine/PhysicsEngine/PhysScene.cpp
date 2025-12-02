@@ -6,7 +6,11 @@
 #include "PrimitiveComponent.h"
 
 // 커스텀 Simulation Filter Shader
-// 랙돌 내 자체 충돌은 PxAggregate(selfCollision=false)로 처리
+// FilterData 구조:
+// word0: 충돌 그룹 ID
+// word1: 충돌 마스크 (어떤 그룹과 충돌할지)
+// word2: 초기 겹침으로 인한 충돌 무시 마스크 (비트 플래그)
+// word3: 바디 인덱스 (word2 비트 체크용)
 PxFilterFlags CustomFilterShader(
     PxFilterObjectAttributes attributes0, PxFilterData filterData0,
     PxFilterObjectAttributes attributes1, PxFilterData filterData1,
@@ -17,6 +21,17 @@ PxFilterFlags CustomFilterShader(
     {
         pairFlags = PxPairFlag::eTRIGGER_DEFAULT;
         return PxFilterFlag::eDEFAULT;
+    }
+
+    // 초기 겹침으로 인한 충돌 무시 체크
+    // word2: 무시할 바디 인덱스 비트, word3: 자신의 바디 인덱스
+    PxU32 index0 = filterData0.word3;
+    PxU32 index1 = filterData1.word3;
+
+    // 0번이 1번을 무시하거나, 1번이 0번을 무시하는 경우
+    if ((filterData0.word2 & (1 << index1)) || (filterData1.word2 & (1 << index0)))
+    {
+        return PxFilterFlag::eSUPPRESS;  // 충돌 무시
     }
 
     // 기본 충돌 처리

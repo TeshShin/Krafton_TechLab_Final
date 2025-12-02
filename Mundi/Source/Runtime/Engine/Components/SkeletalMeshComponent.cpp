@@ -41,6 +41,22 @@ void USkeletalMeshComponent::TickComponent(float DeltaTime)
     if (bSimulatePhysics && bRagdollInitialized)
     {
         SyncBonesFromPhysics();
+
+        // 디버그: 조인트 각도 로그 출력 (1초마다)
+        static float LogTimer = 0.0f;
+        LogTimer += DeltaTime;
+        if (LogTimer >= 1.0f && PhysicsAsset)
+        {
+            LogTimer = 0.0f;
+            UE_LOG("[Ragdoll] === Joint Angles ===");
+            for (int32 i = 0; i < Constraints.Num(); ++i)
+            {
+                if (Constraints[i] && Constraints[i]->IsValid() && i < PhysicsAsset->ConstraintSetups.Num())
+                {
+                    Constraints[i]->LogCurrentAngles(PhysicsAsset->ConstraintSetups[i].JointName);
+                }
+            }
+        }
         return;
     }
 
@@ -505,10 +521,11 @@ void USkeletalMeshComponent::InitRagdoll(FPhysScene* InPhysScene)
         Bodies[i] = nullptr;
     }
 
-    // PxAggregate 생성 (자체 충돌 비활성화: selfCollision = false)
+    // PxAggregate 생성 (자체 충돌 활성화: selfCollision = true)
+    // 초기에 겹치는 바디만 나중에 충돌 무시 설정
     if (GPhysXSDK)
     {
-        Aggregate = GPhysXSDK->createAggregate(NumBodySetups, false);  // false = 자체 충돌 비활성화
+        Aggregate = GPhysXSDK->createAggregate(NumBodySetups, true);  // true = 자체 충돌 활성화
     }
 
     // PhysicsAsset의 각 BodySetup에 대해 FBodyInstance 생성
@@ -534,7 +551,8 @@ void USkeletalMeshComponent::InitRagdoll(FPhysScene* InPhysScene)
 
         // FBodyInstance 생성
         FBodyInstance* NewBody = new FBodyInstance();
-        NewBody->bSimulatePhysics = bSimulatePhysics;
+        // Ragdoll 바디는 항상 Dynamic이어야 함 (Joint 연결을 위해)
+        NewBody->bSimulatePhysics = true;
         NewBody->LinearDamping = 0.1f;     // 기본 감쇠
         NewBody->AngularDamping = 0.05f;
         NewBody->bIsRagdollBody = true;    // 랙돌 바디 표시
@@ -550,6 +568,9 @@ void USkeletalMeshComponent::InitRagdoll(FPhysScene* InPhysScene)
     {
         PhysScene->GetPxScene()->addAggregate(*Aggregate);
     }
+
+    // 초기 포즈에서 겹치는 바디 쌍 검출 및 충돌 무시 설정
+    SetupInitialOverlapFilters();
 
     // Constraints 생성
     for (int32 ConstraintIdx = 0; ConstraintIdx < PhysicsAsset->ConstraintSetups.Num(); ++ConstraintIdx)
@@ -1140,4 +1161,118 @@ void USkeletalMeshComponent::OnUpdateTransform(EUpdateTransformFlags UpdateTrans
             }
         }
     }
+}
+
+void USkeletalMeshComponent::SetupInitialOverlapFilters()
+{
+    if (!PhysScene || !PhysScene->GetPxScene() || !PhysicsAsset)
+    {
+        return;
+    }
+
+    PxScene* Scene = PhysScene->GetPxScene();
+
+    // 유효한 바디 인스턴스 목록 수집
+    TArray<FBodyInstance*> ValidBodies;
+    TArray<int32> ValidBodyIndices;
+    for (int32 i = 0; i < Bodies.Num(); ++i)
+    {
+        if (Bodies[i] && Bodies[i]->RigidActor)
+        {
+            ValidBodies.Add(Bodies[i]);
+            ValidBodyIndices.Add(i);
+        }
+    }
+
+    // 먼저 각 바디의 Shape에 자신의 인덱스를 word3에 설정
+    for (int32 i = 0; i < ValidBodies.Num(); ++i)
+    {
+        PxRigidActor* Actor = ValidBodies[i]->RigidActor;
+        PxU32 NumShapes = Actor->getNbShapes();
+        TArray<PxShape*> Shapes(NumShapes);
+        Actor->getShapes(Shapes.GetData(), NumShapes);
+
+        for (PxU32 s = 0; s < NumShapes; ++s)
+        {
+            PxFilterData FilterData = Shapes[s]->getSimulationFilterData();
+            FilterData.word3 = i;  // 자신의 바디 인덱스 저장
+            Shapes[s]->setSimulationFilterData(FilterData);
+        }
+    }
+
+    int32 OverlapCount = 0;
+
+    // 모든 바디 쌍에 대해 겹침 검사
+    for (int32 i = 0; i < ValidBodies.Num(); ++i)
+    {
+        for (int32 j = i + 1; j < ValidBodies.Num(); ++j)
+        {
+            FBodyInstance* BodyA = ValidBodies[i];
+            FBodyInstance* BodyB = ValidBodies[j];
+
+            PxRigidActor* ActorA = BodyA->RigidActor;
+            PxRigidActor* ActorB = BodyB->RigidActor;
+
+            // 각 Shape 쌍에 대해 겹침 검사
+            bool bOverlapping = false;
+
+            PxU32 NumShapesA = ActorA->getNbShapes();
+            PxU32 NumShapesB = ActorB->getNbShapes();
+
+            TArray<PxShape*> ShapesA(NumShapesA);
+            TArray<PxShape*> ShapesB(NumShapesB);
+
+            ActorA->getShapes(ShapesA.GetData(), NumShapesA);
+            ActorB->getShapes(ShapesB.GetData(), NumShapesB);
+
+            for (PxU32 sa = 0; sa < NumShapesA && !bOverlapping; ++sa)
+            {
+                for (PxU32 sb = 0; sb < NumShapesB && !bOverlapping; ++sb)
+                {
+                    PxShape* ShapeA = ShapesA[sa];
+                    PxShape* ShapeB = ShapesB[sb];
+
+                    PxTransform PoseA = ActorA->getGlobalPose() * ShapeA->getLocalPose();
+                    PxTransform PoseB = ActorB->getGlobalPose() * ShapeB->getLocalPose();
+
+                    // PxGeometryQuery::overlap으로 겹침 검사
+                    PxGeometryHolder GeomA = ShapeA->getGeometry();
+                    PxGeometryHolder GeomB = ShapeB->getGeometry();
+
+                    if (PxGeometryQuery::overlap(GeomA.any(), PoseA, GeomB.any(), PoseB))
+                    {
+                        bOverlapping = true;
+                    }
+                }
+            }
+
+            // 겹치는 경우 충돌 무시 설정
+            if (bOverlapping)
+            {
+                OverlapCount++;
+
+                // FilterData.word2에 충돌 무시할 바디 인덱스 비트 설정
+                for (PxU32 sa = 0; sa < NumShapesA; ++sa)
+                {
+                    PxShape* Shape = ShapesA[sa];
+                    PxFilterData FilterData = Shape->getSimulationFilterData();
+                    FilterData.word2 |= (1 << j);  // j번 바디와 충돌 무시
+                    Shape->setSimulationFilterData(FilterData);
+                }
+                for (PxU32 sb = 0; sb < NumShapesB; ++sb)
+                {
+                    PxShape* Shape = ShapesB[sb];
+                    PxFilterData FilterData = Shape->getSimulationFilterData();
+                    FilterData.word2 |= (1 << i);  // i번 바디와 충돌 무시
+                    Shape->setSimulationFilterData(FilterData);
+                }
+
+                // 필터링 재설정
+                Scene->resetFiltering(*ActorA);
+                Scene->resetFiltering(*ActorB);
+            }
+        }
+    }
+
+    UE_LOG("[Ragdoll] SetupInitialOverlapFilters: Found %d overlapping body pairs", OverlapCount);
 }

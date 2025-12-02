@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Source/Slate/Widgets/Widget.h"
+#include "Source/Runtime/Engine/PhysicsEngine/EAggCollisionShape.h"
 
 struct PhysicsAssetEditorState;
 class SPhysicsAssetEditorWindow;
@@ -45,4 +46,8 @@ private:
 
 	PhysicsAssetEditorState* EditorState = nullptr;
 	SPhysicsAssetEditorWindow* EditorWindow = nullptr;
+
+	// Body 생성 옵션
+	EAggCollisionShape SelectedPrimitiveType = EAggCollisionShape::Sphyl;  // Sphyl = Capsule
+	float MinBoneSize = 0.01f;  // 이보다 작은 바디는 생성하지 않음
 };

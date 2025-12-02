@@ -7,6 +7,7 @@
 #include "FViewportClient.h"
 #include "Source/Runtime/Engine/PhysicsEngine/PhysicsAsset.h"
 #include "Source/Runtime/Engine/PhysicsEngine/PhysicsTypes.h"
+#include "Source/Runtime/Engine/PhysicsEngine/PhysScene.h"
 #include "SkeletalMeshActor.h"
 #include "SkeletalMesh.h"
 #include "Grid/GridActor.h"
@@ -16,6 +17,9 @@
 #include "Source/Runtime/Engine/Components/LineComponent.h"
 #include "Source/Runtime/Engine/Components/BoneAnchorComponent.h"
 #include "SelectionManager.h"
+
+// PhysicsAssetEditorState 소멸자 정의 (unique_ptr<FPhysScene> 삭제를 위해 완전한 타입 필요)
+PhysicsAssetEditorState::~PhysicsAssetEditorState() = default;
 
 ViewerState* PhysicsAssetEditorBootstrap::CreateViewerState(const char* Name, UWorld* InWorld,
 	ID3D11Device* InDevice, UEditorAssetPreviewContext* Context)
@@ -278,5 +282,40 @@ void PhysicsAssetEditorState::HideGizmo()
 	if (World)
 	{
 		World->GetSelectionManager()->ClearSelection();
+	}
+}
+
+void PhysicsAssetEditorState::SelectBody(int32 BodyIndex)
+{
+	SelectedBodyIndex = BodyIndex;
+	SelectedConstraintIndex = -1;
+	bBodySelectionMode = true;
+	bSelectionColorDirty = true;
+
+	// 첫 번째 Primitive 자동 선택
+	SelectedPrimitive.Clear();
+
+	if (!EditingAsset || BodyIndex < 0 ||
+		BodyIndex >= static_cast<int32>(EditingAsset->BodySetups.size()))
+		return;
+
+	UBodySetup* Body = EditingAsset->BodySetups[BodyIndex];
+	if (!Body) return;
+
+	// 우선순위: Sphere -> Box -> Sphyl
+	if (!Body->AggGeom.SphereElems.IsEmpty())
+	{
+		SelectedPrimitive.PrimitiveType = EAggCollisionShape::Sphere;
+		SelectedPrimitive.PrimitiveIndex = 0;
+	}
+	else if (!Body->AggGeom.BoxElems.IsEmpty())
+	{
+		SelectedPrimitive.PrimitiveType = EAggCollisionShape::Box;
+		SelectedPrimitive.PrimitiveIndex = 0;
+	}
+	else if (!Body->AggGeom.SphylElems.IsEmpty())
+	{
+		SelectedPrimitive.PrimitiveType = EAggCollisionShape::Sphyl;
+		SelectedPrimitive.PrimitiveIndex = 0;
 	}
 }

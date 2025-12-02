@@ -13,11 +13,14 @@
 #include "Source/Runtime/Engine/PhysicsEngine/BodySetup.h"
 #include "Source/Runtime/Engine/PhysicsEngine/FConstraintSetup.h"
 #include "Source/Runtime/Engine/PhysicsEngine/PhysicsDebugUtils.h"
+#include "Source/Runtime/Engine/PhysicsEngine/BodyShapeCalculator.h"
+#include "Source/Runtime/Engine/Viewer/PhysicsPickingHelper.h"
 #include "Source/Runtime/Core/Misc/VertexData.h"
 #include "SkeletalMeshActor.h"
 #include "SkeletalMesh.h"
 #include "SkeletalMeshComponent.h"
 #include "Source/Runtime/Engine/Components/LineComponent.h"
+#include "Source/Runtime/Engine/Components/TriangleMeshComponent.h"
 #include "Source/Runtime/AssetManagement/Line.h"
 #include "Source/Runtime/AssetManagement/LinesBatch.h"
 #include "Source/Editor/PlatformProcess.h"
@@ -40,6 +43,11 @@
 #include "Source/Runtime/Engine/Collision/Picking.h"
 #include "CameraActor.h"
 #include <chrono>
+
+// Simulation
+#include "BoxActor.h"
+#include "BoxComponent.h"
+#include "PhysScene.h"
 
 // ────────────────────────────────────────────────────────────────
 // Shape 라인 좌표 생성 헬퍼
@@ -504,13 +512,13 @@ static void GenerateConstraintMeshVisualization(
 	TArray<FVector4>& OutColors,
 	FLinesBatch& OutLineBatch)
 {
-	// 색상 설정 (반투명)
+	// 색상 설정 (반투명) - Unreal Engine 스타일
 	FVector4 SwingColor = bSelected
-		? FVector4(0.0f, 1.0f, 0.5f, 0.4f)   // 선택: 밝은 초록
-		: FVector4(0.0f, 0.8f, 0.4f, 0.25f);  // 기본: 초록 (25% 투명)
+		? FVector4(0.0f, 1.0f, 0.0f, 0.5f)   // 선택: 밝은 초록
+		: FVector4(0.0f, 0.8f, 0.0f, 0.3f);  // 기본: 초록 (30% 투명)
 	FVector4 TwistColor = bSelected
-		? FVector4(0.5f, 0.5f, 1.0f, 0.4f)   // 선택: 밝은 파랑
-		: FVector4(0.3f, 0.3f, 0.8f, 0.25f);  // 기본: 파랑 (25% 투명)
+		? FVector4(1.0f, 0.3f, 0.3f, 0.5f)   // 선택: 밝은 빨강
+		: FVector4(1.0f, 0.0f, 0.0f, 0.3f);  // 기본: 빨강 (30% 투명)
 	FVector4 LineColor = bSelected
 		? FVector4(1.0f, 1.0f, 0.0f, 1.0f)   // 선택: 노랑
 		: FVector4(1.0f, 0.5f, 0.0f, 1.0f);  // 기본: 주황
@@ -598,6 +606,30 @@ SPhysicsAssetEditorWindow::~SPhysicsAssetEditorWindow()
 	for (int i = 0; i < Tabs.Num(); ++i)
 	{
 		ViewerState* State = Tabs[i];
+
+		// 시뮬레이션 중이면 먼저 정리 (PhysScene 해제 전에)
+		PhysicsAssetEditorState* PhysState = static_cast<PhysicsAssetEditorState*>(State);
+		if (PhysState && PhysState->bSimulating)
+		{
+			// 랙돌 먼저 종료 (PhysScene 사용)
+			USkeletalMeshComponent* MeshComp = PhysState->GetPreviewMeshComponent();
+			/*if (MeshComp)
+			{
+				MeshComp->SetSimulatePhysics(false);
+				MeshComp->TermRagdoll();
+			}*/
+			// 바닥 액터 제거
+			if (PhysState->FloorActor)
+			{
+				UBoxComponent* BoxComp = PhysState->FloorActor->GetBoxComponent();
+				BoxComp->SetSimulatePhysics(false);  // 바닥은 Static
+				PhysState->FloorActor->Destroy();
+				PhysState->FloorActor = nullptr;
+			}
+
+			PhysState->bSimulating = false;
+		}
+
 		PhysicsAssetEditorBootstrap::DestroyViewerState(State);
 	}
 	Tabs.Empty();
@@ -611,6 +643,39 @@ ViewerState* SPhysicsAssetEditorWindow::CreateViewerState(const char* Name, UEdi
 
 void SPhysicsAssetEditorWindow::DestroyViewerState(ViewerState*& State)
 {
+	// 시뮬레이션 중이면 먼저 정리 (PhysScene 해제 전에)
+	PhysicsAssetEditorState* PhysState = static_cast<PhysicsAssetEditorState*>(State);
+	if (PhysState && PhysState->bSimulating)
+	{
+		// 1. 랙돌 먼저 종료 (SimulationPhysScene 사용 중이므로)
+		USkeletalMeshComponent* MeshComp = PhysState->GetPreviewMeshComponent();
+		if (MeshComp)
+		{
+			MeshComp->SetSimulatePhysics(false);
+			MeshComp->TermRagdoll();
+		}
+
+		// 2. 바닥 액터 물리 바디 정리
+		if (PhysState->FloorActor)
+		{
+			UBoxComponent* BoxComp = PhysState->FloorActor->GetBoxComponent();
+			if (BoxComp)
+			{
+				BoxComp->GetBodyInstance().TermBody();
+			}
+			PhysState->FloorActor->Destroy();
+			PhysState->FloorActor = nullptr;
+		}
+
+		// 3. 시뮬레이션 PhysScene 해제
+		if (PhysState->SimulationPhysScene)
+		{
+			PhysState->SimulationPhysScene.reset();
+		}
+
+		PhysState->bSimulating = false;
+	}
+
 	PhysicsAssetEditorBootstrap::DestroyViewerState(State);
 }
 
@@ -886,6 +951,23 @@ void SPhysicsAssetEditorWindow::OnUpdate(float DeltaSeconds)
 {
 	SViewerWindow::OnUpdate(DeltaSeconds);
 
+	// 시뮬레이션 중이면 PhysScene 틱
+	PhysicsAssetEditorState* SimState = GetActivePhysicsState();
+	if (SimState && SimState->bSimulating && SimState->SimulationPhysScene)
+	{
+		// PhysScene 시뮬레이션 진행
+		SimState->SimulationPhysScene->TickPhysScene(DeltaSeconds);
+		SimState->SimulationPhysScene->WaitPhysScene();
+		SimState->SimulationPhysScene->ProcessPhysScene();
+
+		// 랙돌 본 동기화
+		USkeletalMeshComponent* MeshComp = SimState->GetPreviewMeshComponent();
+		if (MeshComp && MeshComp->IsSimulatingPhysics())
+		{
+			MeshComp->TickComponent(DeltaSeconds);
+		}
+	}
+
 	// Sub Widget 에디터 상태 업데이트
 	UpdateSubWidgetEditorState();
 
@@ -915,7 +997,7 @@ void SPhysicsAssetEditorWindow::OnUpdate(float DeltaSeconds)
 		// ─────────────────────────────────────────────────
 		// 기즈모 연동: 선택된 바디의 트랜스폼 편집
 		// ─────────────────────────────────────────────────
-		if (State->bBodySelectionMode && State->SelectedBodyIndex >= 0 && State->World)
+		if (State->bBodySelectionMode && State->HasPrimitiveSelection() && State->World)
 		{
 			AGizmoActor* Gizmo = State->World->GetGizmoActor();
 			bool bCurrentlyDragging = Gizmo && Gizmo->GetbIsDragging();
@@ -926,12 +1008,12 @@ void SPhysicsAssetEditorWindow::OnUpdate(float DeltaSeconds)
 			if (bCurrentlyDragging && !bIsFirstDragFrame)
 			{
 				// 첫 프레임이 아닐 때만 기즈모로부터 트랜스폼 업데이트
-				UpdateBodyTransformFromGizmo();
+				UpdatePrimitiveTransformFromGizmo();
 			}
 			else if (!bCurrentlyDragging)
 			{
-				// 드래그 중이 아니면 기즈모 앵커를 바디 위치로 이동
-				RepositionAnchorToBody(State->SelectedBodyIndex);
+				// 드래그 중이 아니면 기즈모 앵커를 선택된 primitive 위치로 이동
+				RepositionAnchorToPrimitive();
 			}
 
 			// 드래그 상태 업데이트 (다음 프레임에서 첫 프레임 감지용)
@@ -940,6 +1022,12 @@ void SPhysicsAssetEditorWindow::OnUpdate(float DeltaSeconds)
 		else
 		{
 			State->bWasGizmoDragging = false;
+
+			// Primitive가 없으면 기즈모 숨기기
+			if (State->bBodySelectionMode && State->SelectedBodyIndex >= 0 && !State->HasPrimitiveSelection())
+			{
+				State->HideGizmo();
+			}
 		}
 
 		// 라인 재구성이 필요한 경우 (바디/제약조건 추가/제거)
@@ -1534,10 +1622,20 @@ void SPhysicsAssetEditorWindow::RenderToolbar()
 	ImGui::SeparatorEx(ImGuiSeparatorFlags_Vertical);
 	ImGui::SameLine();
 
-	// Simulate 버튼 (placeholder)
-	if (ImGui::Button("Simulate"))
+	// Simulate 버튼 (토글)
+	if (State->bSimulating)
 	{
-		// TODO: 시뮬레이션 기능 구현
+		if (ImGui::Button("Stop"))
+		{
+			StopSimulation();
+		}
+	}
+	else
+	{
+		if (ImGui::Button("Simulate"))
+		{
+			StartSimulation();
+		}
 	}
 	ImGui::SameLine();
 
@@ -1580,17 +1678,50 @@ void SPhysicsAssetEditorWindow::RebuildShapeLines()
 	ULineComponent* ConstraintLineComp = State->ConstraintPreviewLineComponent;
 
 	// ─────────────────────────────────────────────────
-	// 바디 라인 + 메쉬 재구성 (FLinesBatch + FTrianglesBatch 기반 - DOD)
+	// 바디 라인 + 메쉬 재구성
 	// ─────────────────────────────────────────────────
 	State->BodyLinesBatch.Clear();
-	State->BodyTrianglesBatch.Clear();
 	State->BodyLineRanges.Empty();
 	State->BodyLineRanges.SetNum(static_cast<int32>(State->EditingAsset->BodySetups.size()));
 
 	// 예상 크기 예약
 	int32 NumBodies = static_cast<int32>(State->EditingAsset->BodySetups.size());
 	State->BodyLinesBatch.Reserve(NumBodies * 40);
-	State->BodyTrianglesBatch.Reserve(NumBodies * 200, NumBodies * 400);  // 메쉬용
+
+	// 바디 메시 컴포넌트 배열 크기 조정
+	int32 CurrentSize = State->BodyMeshComponents.Num();
+
+	// 필요한 것보다 많으면 제거
+	while (State->BodyMeshComponents.Num() > NumBodies)
+	{
+		int32 LastIndex = State->BodyMeshComponents.Num() - 1;
+		UTriangleMeshComponent* MeshComp = State->BodyMeshComponents[LastIndex];
+		if (MeshComp)
+		{
+			MeshComp->UnregisterComponent();
+			if (State->PreviewActor)
+			{
+				State->PreviewActor->RemoveOwnedComponent(MeshComp);
+			}
+		}
+		State->BodyMeshComponents.RemoveAt(LastIndex);
+	}
+
+	// 부족하면 추가
+	while (State->BodyMeshComponents.Num() < NumBodies)
+	{
+		UTriangleMeshComponent* NewMeshComp = NewObject<UTriangleMeshComponent>();
+		NewMeshComp->SetMeshVisible(State->bShowBodies);
+		NewMeshComp->SetAlwaysOnTop(true);  // 편집을 위해 항상 위에 표시
+
+		if (State->PreviewActor)
+		{
+			State->PreviewActor->AddOwnedComponent(NewMeshComp);
+			NewMeshComp->RegisterComponent(State->World);
+		}
+
+		State->BodyMeshComponents.Add(NewMeshComp);
+	}
 
 	USkeletalMeshComponent* MeshComp = State->GetPreviewMeshComponent();
 
@@ -1609,8 +1740,8 @@ void SPhysicsAssetEditorWindow::RebuildShapeLines()
 			? FVector4(0.0f, 1.0f, 0.0f, 1.0f)  // 선택: 녹색
 			: FVector4(0.0f, 0.5f, 1.0f, 1.0f); // 기본: 파랑
 		FVector4 MeshColor = bSelected
-			? FVector4(0.0f, 1.0f, 0.0f, 0.3f)  // 선택: 반투명 녹색
-			: FVector4(0.0f, 0.5f, 1.0f, 0.2f); // 기본: 반투명 파랑
+			? FVector4(1.0f, 1.0f, 0.8f, 0.25f)  // 선택: 옅은 노란색 (25% 투명)
+			: FVector4(0.9f, 0.9f, 0.9f, 0.15f); // 기본: 옅은 흰색 (15% 투명)
 
 		// 본 트랜스폼 가져오기
 		FTransform BoneTransform;
@@ -1632,19 +1763,22 @@ void SPhysicsAssetEditorWindow::RebuildShapeLines()
 		// 바디 라인 범위 종료
 		Range.Count = State->BodyLinesBatch.Num() - Range.StartIndex;
 
-		// 헬퍼 함수로 메쉬 좌표 생성 (AggGeom의 모든 Shape 처리)
-		FPhysicsDebugUtils::GenerateBodyShapeMesh(Body, BoneTransform, MeshColor,
-			State->BodyTrianglesBatch.Vertices,
-			State->BodyTrianglesBatch.Indices,
-			State->BodyTrianglesBatch.Colors);
+		// 바디 메시 생성 (개별 TriangleMeshComponent에 설정)
+		if (State->BodyMeshComponents[i])
+		{
+			FTrianglesBatch MeshBatch;
+			FPhysicsDebugUtils::GenerateBodyShapeMesh(Body, BoneTransform, MeshColor,
+				MeshBatch.Vertices, MeshBatch.Indices, MeshBatch.Colors);
+
+			State->BodyMeshComponents[i]->SetMesh(MeshBatch);
+		}
 	}
 
-	// ULineComponent에 배치 데이터 설정
+	// ULineComponent에 배치 데이터 설정 (wireframe만)
 	if (BodyLineComp)
 	{
 		BodyLineComp->ClearLines();  // 기존 ULine 정리
 		BodyLineComp->SetDirectBatch(State->BodyLinesBatch);
-		BodyLineComp->SetTriangleBatch(State->BodyTrianglesBatch);  // 삼각형 배치 설정
 		BodyLineComp->SetLineVisible(State->bShowBodies);
 	}
 
@@ -1652,12 +1786,28 @@ void SPhysicsAssetEditorWindow::RebuildShapeLines()
 	// 제약 조건 시각화 재구성 (면 기반 + 라인)
 	// ─────────────────────────────────────────────────
 	State->ConstraintLinesBatch.Clear();
-	State->ConstraintTrianglesBatch.Clear();
+
+	// 제약조건 메시 컴포넌트 생성/초기화
+	if (!State->ConstraintMeshComponent)
+	{
+		State->ConstraintMeshComponent = NewObject<UTriangleMeshComponent>();
+		State->ConstraintMeshComponent->SetMeshVisible(State->bShowConstraints);
+		State->ConstraintMeshComponent->SetAlwaysOnTop(true);  // 편집을 위해 항상 위에 표시
+
+		if (State->PreviewActor)
+		{
+			State->PreviewActor->AddOwnedComponent(State->ConstraintMeshComponent);
+			State->ConstraintMeshComponent->RegisterComponent(State->World);
+		}
+	}
+
+	// 제약조건 메시 데이터 (모든 제약조건을 하나의 배치로)
+	FTrianglesBatch ConstraintMeshBatch;
 
 	// 예상 크기 예약
 	int32 NumConstraints = static_cast<int32>(State->EditingAsset->ConstraintSetups.size());
 	State->ConstraintLinesBatch.Reserve(NumConstraints * 10);  // 연결선 + 축 마커
-	State->ConstraintTrianglesBatch.Reserve(NumConstraints * 50, NumConstraints * 100);  // 원뿔 + 부채꼴
+	ConstraintMeshBatch.Reserve(NumConstraints * 50, NumConstraints * 100);  // 원뿔 + 부채꼴
 
 	for (int32 i = 0; i < NumConstraints; ++i)
 	{
@@ -1715,18 +1865,23 @@ void SPhysicsAssetEditorWindow::RebuildShapeLines()
 		// 면 기반 시각화 사용
 		GenerateConstraintMeshVisualization(
 			Constraint, ParentPos, ChildPos, JointRotation, bSelected,
-			State->ConstraintTrianglesBatch.Vertices,
-			State->ConstraintTrianglesBatch.Indices,
-			State->ConstraintTrianglesBatch.Colors,
+			ConstraintMeshBatch.Vertices,
+			ConstraintMeshBatch.Indices,
+			ConstraintMeshBatch.Colors,
 			State->ConstraintLinesBatch);
 	}
 
-	// ULineComponent에 라인 배치 데이터 설정 (연결선 + 축 마커)
+	// 제약조건 메시 컴포넌트에 데이터 설정
+	if (State->ConstraintMeshComponent)
+	{
+		State->ConstraintMeshComponent->SetMesh(ConstraintMeshBatch);
+	}
+
+	// ULineComponent에 라인 배치 데이터 설정 (연결선 + 축 마커만)
 	if (ConstraintLineComp)
 	{
 		ConstraintLineComp->ClearLines();  // 기존 ULine 정리
 		ConstraintLineComp->SetDirectBatch(State->ConstraintLinesBatch);
-		ConstraintLineComp->SetTriangleBatch(State->ConstraintTrianglesBatch);  // 삼각형 배치도 설정
 		ConstraintLineComp->SetLineVisible(State->bShowConstraints);
 	}
 }
@@ -1761,15 +1916,36 @@ void SPhysicsAssetEditorWindow::UpdateSelectedBodyLines()
 		State->BodyLinesBatch.SetLine(Range.StartIndex + i, StartPoints[i], EndPoints[i]);
 	}
 
-	// ULineComponent에 갱신된 배치 데이터 재설정
+	// ULineComponent에 갱신된 배치 데이터 재설정 (wireframe)
 	if (ULineComponent* BodyLineComp = State->BodyPreviewLineComponent)
 	{
 		BodyLineComp->SetDirectBatch(State->BodyLinesBatch);
+	}
+
+	// 선택된 바디의 메시 컴포넌트 업데이트 (solid mesh)
+	if (State->SelectedBodyIndex < State->BodyMeshComponents.Num())
+	{
+		UTriangleMeshComponent* MeshComp = State->BodyMeshComponents[State->SelectedBodyIndex];
+		if (MeshComp)
+		{
+			// 선택된 바디는 옅은 노란색
+			FVector4 MeshColor(1.0f, 1.0f, 0.8f, 0.25f);
+
+			FTrianglesBatch MeshBatch;
+			FPhysicsDebugUtils::GenerateBodyShapeMesh(Body, BoneTransform, MeshColor,
+				MeshBatch.Vertices, MeshBatch.Indices, MeshBatch.Colors);
+
+			MeshComp->SetMesh(MeshBatch);
+		}
 	}
 }
 
 void SPhysicsAssetEditorWindow::UpdateSelectionColors()
 {
+	// TODO: 현재 Body 단위 하이라이트 -> Primitive 단위 하이라이트로 변경 고려
+	//       선택된 primitive만 SelectedColor, 같은 body의 다른 primitive는 NormalColor
+	//       (현재는 gizmo 위치로 선택된 primitive 분간 가능)
+
 	PhysicsAssetEditorState* State = GetActivePhysicsState();
 	if (!State || !State->EditingAsset) return;
 
@@ -1781,14 +1957,38 @@ void SPhysicsAssetEditorWindow::UpdateSelectionColors()
 	bool bBodyBatchDirty = false;
 	bool bConstraintBatchDirty = false;
 
-	// 헬퍼 람다: 특정 바디의 라인 색상 업데이트 (FLinesBatch 기반)
-	auto UpdateBodyColor = [&](int32 BodyIndex, const FVector4& Color)
+	// 헬퍼 람다: 특정 바디의 라인 및 메시 색상 업데이트
+	auto UpdateBodyColor = [&](int32 BodyIndex, const FVector4& LineColor, const FVector4& MeshColor)
 	{
+		// 라인 색상 업데이트
 		if (BodyIndex >= 0 && BodyIndex < State->BodyLineRanges.Num())
 		{
 			const PhysicsAssetEditorState::FBodyLineRange& Range = State->BodyLineRanges[BodyIndex];
-			State->BodyLinesBatch.SetColorRange(Range.StartIndex, Range.Count, Color);
+			State->BodyLinesBatch.SetColorRange(Range.StartIndex, Range.Count, LineColor);
 			bBodyBatchDirty = true;
+		}
+
+		// 메시 색상 업데이트 (메시 재생성 필요)
+		if (BodyIndex >= 0 && BodyIndex < State->BodyMeshComponents.Num() &&
+			BodyIndex < static_cast<int32>(State->EditingAsset->BodySetups.size()))
+		{
+			UTriangleMeshComponent* MeshComp = State->BodyMeshComponents[BodyIndex];
+			UBodySetup* Body = State->EditingAsset->BodySetups[BodyIndex];
+			if (MeshComp && Body)
+			{
+				FTransform BoneTransform;
+				USkeletalMeshComponent* SkeletalMeshComp = State->GetPreviewMeshComponent();
+				if (SkeletalMeshComp && Body->BoneIndex >= 0)
+				{
+					BoneTransform = SkeletalMeshComp->GetBoneWorldTransform(Body->BoneIndex);
+				}
+
+				FTrianglesBatch MeshBatch;
+				FPhysicsDebugUtils::GenerateBodyShapeMesh(Body, BoneTransform, MeshColor,
+					MeshBatch.Vertices, MeshBatch.Indices, MeshBatch.Colors);
+
+				MeshComp->SetMesh(MeshBatch);
+			}
 		}
 	};
 
@@ -1806,12 +2006,14 @@ void SPhysicsAssetEditorWindow::UpdateSelectionColors()
 	if (State->CachedSelectedBodyIndex != State->SelectedBodyIndex)
 	{
 		// 이전에 선택된 바디를 일반 색상으로
-		UpdateBodyColor(State->CachedSelectedBodyIndex, NormalColor);
+		FVector4 NormalMeshColor(0.9f, 0.9f, 0.9f, 0.15f);  // 옅은 흰색
+		UpdateBodyColor(State->CachedSelectedBodyIndex, NormalColor, NormalMeshColor);
 
 		// 새로 선택된 바디를 선택 색상으로 (바디 선택 모드일 때만)
 		if (State->bBodySelectionMode)
 		{
-			UpdateBodyColor(State->SelectedBodyIndex, SelectedColor);
+			FVector4 SelectedMeshColor(1.0f, 1.0f, 0.8f, 0.25f);  // 옅은 노란색
+			UpdateBodyColor(State->SelectedBodyIndex, SelectedColor, SelectedMeshColor);
 		}
 	}
 
@@ -2014,15 +2216,22 @@ FString SPhysicsAssetEditorWindow::ExtractFileName(const FString& Path)
 // 바디/제약 조건 작업
 // ────────────────────────────────────────────────────────────────
 
-void SPhysicsAssetEditorWindow::AutoGenerateBodies()
+void SPhysicsAssetEditorWindow::AutoGenerateBodies(EAggCollisionShape PrimitiveType, float MinBoneSize)
 {
 	PhysicsAssetEditorState* State = GetActivePhysicsState();
 	if (!State || !State->EditingAsset || !State->CurrentMesh) return;
 
-	const FSkeleton* Skeleton = State->CurrentMesh->GetSkeleton();
+	const FSkeletalMeshData* MeshData = State->CurrentMesh->GetSkeletalMeshData();
+	if (!MeshData) return;
+
+	const FSkeleton* Skeleton = &MeshData->Skeleton;
 	if (!Skeleton || Skeleton->Bones.IsEmpty()) return;
 
+	USkeletalMeshComponent* MeshComp = State->GetPreviewMeshComponent();
+	if (!MeshComp) return;
+
 	UPhysicsAsset* Asset = State->EditingAsset;
+	const int32 BoneCount = static_cast<int32>(Skeleton->Bones.size());
 
 	// 기존 상태 완전 초기화
 	Asset->ClearAll();
@@ -2032,58 +2241,47 @@ void SPhysicsAssetEditorWindow::AutoGenerateBodies()
 	State->CachedSelectedBodyIndex = -1;
 	State->CachedSelectedConstraintIndex = -1;
 
-	// 본 길이 계산을 위한 자식 본 맵 구축
-	TArray<TArray<int32>> ChildrenMap;
-	ChildrenMap.SetNum(static_cast<int32>(Skeleton->Bones.size()));
-	for (int32 i = 0; i < static_cast<int32>(Skeleton->Bones.size()); ++i)
+	// ────────────────────────────────────────────────
+	// 본별 Body 생성 (FBodyShapeCalculator 사용)
+	// ────────────────────────────────────────────────
+	int32 GeneratedBodies = 0;
+
+	for (int32 BoneIdx = 0; BoneIdx < BoneCount; ++BoneIdx)
 	{
-		int32 ParentIdx = Skeleton->Bones[i].ParentIndex;
-		if (ParentIdx >= 0 && ParentIdx < static_cast<int32>(Skeleton->Bones.size()))
+		const FBone& Bone = Skeleton->Bones[BoneIdx];
+
+		// 바디 먼저 생성 (빈 상태)
+		int32 BodyIndex = Asset->AddBody(Bone.Name, BoneIdx);
+		if (BodyIndex < 0) continue;
+
+		UBodySetup* Body = Asset->BodySetups[BodyIndex];
+		if (!Body) continue;
+
+		// FBodyShapeCalculator를 사용하여 Shape 생성
+		bool bSuccess = FBodyShapeCalculator::GenerateBodyShapeFromVertices(
+			Body,
+			BoneIdx,
+			State->CurrentMesh,
+			MeshComp,
+			PrimitiveType,
+			MinBoneSize
+		);
+
+		if (bSuccess)
 		{
-			ChildrenMap[ParentIdx].Add(i);
+			++GeneratedBodies;
+		}
+		else
+		{
+			// Shape 생성 실패 시 바디 제거
+			Asset->BodySetups.RemoveAt(BodyIndex);
 		}
 	}
 
-	// 모든 본에 대해 바디 생성
-	for (int32 i = 0; i < static_cast<int32>(Skeleton->Bones.size()); ++i)
-	{
-		const FBone& Bone = Skeleton->Bones[i];
-
-		// 본 위치 (BindPose 행렬의 Translation 부분: M[3][0..2])
-		FVector BonePos(Bone.BindPose.M[3][0], Bone.BindPose.M[3][1], Bone.BindPose.M[3][2]);
-
-		// 본 길이 계산 (자식 본까지의 거리 또는 기본값)
-		float BoneLength = 0.05f; // 기본값 (리프 본용)
-		if (!ChildrenMap[i].IsEmpty())
-		{
-			// 첫 번째 자식까지의 거리 계산
-			int32 ChildIdx = ChildrenMap[i][0];
-			const FBone& ChildBone = Skeleton->Bones[ChildIdx];
-			FVector ChildPos(ChildBone.BindPose.M[3][0], ChildBone.BindPose.M[3][1], ChildBone.BindPose.M[3][2]);
-			BoneLength = (ChildPos - BonePos).Size();
-		}
-
-		// 최소/최대 크기 제한 (더 보수적으로)
-		BoneLength = std::max(0.02f, std::min(BoneLength, 0.5f));
-
-		// 바디 생성
-		int32 BodyIndex = Asset->AddBody(Bone.Name, i);
-		if (BodyIndex >= 0)
-		{
-			UBodySetup* Body = Asset->BodySetups[BodyIndex];
-			if (Body)
-			{
-				// AggGeom에 캡슐 Shape 추가
-				FKSphylElem NewCapsule;
-				NewCapsule.Radius = BoneLength * 0.1f;       // 본 길이의 10%를 반지름으로
-				NewCapsule.Length = BoneLength * 0.7f;       // 본 길이의 70%를 전체 길이로
-				Body->AggGeom.SphylElems.Add(NewCapsule);
-			}
-		}
-	}
-
+	// ────────────────────────────────────────────────
 	// 부모-자식 본 사이에 제약 조건 생성
-	for (int32 i = 0; i < static_cast<int32>(Skeleton->Bones.size()); ++i)
+	// ────────────────────────────────────────────────
+	for (int32 i = 0; i < BoneCount; ++i)
 	{
 		int32 ParentBoneIdx = Skeleton->Bones[i].ParentIndex;
 		if (ParentBoneIdx < 0) continue;
@@ -2104,11 +2302,11 @@ void SPhysicsAssetEditorWindow::AutoGenerateBodies()
 	State->ClearSelection();
 	State->HideGizmo();
 
-	UE_LOG("[SPhysicsAssetEditorWindow] Auto-generated %d bodies and %d constraints",
-		(int)Asset->BodySetups.size(), (int)Asset->ConstraintSetups.size());
+	UE_LOG("[SPhysicsAssetEditorWindow] Auto-generated %d bodies and %d constraints (vertex-based)",
+		GeneratedBodies, (int)Asset->ConstraintSetups.size());
 }
 
-void SPhysicsAssetEditorWindow::AddBodyToBone(int32 BoneIndex)
+void SPhysicsAssetEditorWindow::AddBodyToBone(int32 BoneIndex, EAggCollisionShape PrimitiveType)
 {
 	PhysicsAssetEditorState* State = GetActivePhysicsState();
 	if (!State || !State->EditingAsset || !State->CurrentMesh) return;
@@ -2124,11 +2322,34 @@ void SPhysicsAssetEditorWindow::AddBodyToBone(int32 BoneIndex)
 		return;
 	}
 
+	USkeletalMeshComponent* MeshComp = State->GetPreviewMeshComponent();
+	if (!MeshComp) return;
+
 	FName BoneName = Skeleton->Bones[BoneIndex].Name;
 	int32 NewBodyIndex = State->EditingAsset->AddBody(BoneName, BoneIndex);
 
 	if (NewBodyIndex >= 0)
 	{
+		UBodySetup* Body = State->EditingAsset->BodySetups[NewBodyIndex];
+		if (Body)
+		{
+			// FBodyShapeCalculator를 사용하여 자동으로 primitive 생성
+			bool bSuccess = FBodyShapeCalculator::GenerateBodyShapeFromVertices(
+				Body,
+				BoneIndex,
+				State->CurrentMesh,
+				MeshComp,
+				PrimitiveType,
+				0.0f  // MinBoneSize = 0 (항상 생성)
+			);
+
+			if (!bSuccess)
+			{
+				UE_LOG("[SPhysicsAssetEditorWindow] Failed to generate shape for new body");
+				// 실패해도 바디는 유지 (빈 상태)
+			}
+		}
+
 		// 부모 본의 바디 찾기
 		int32 ParentBoneIndex = Skeleton->Bones[BoneIndex].ParentIndex;
 		if (ParentBoneIndex >= 0)
@@ -2196,7 +2417,7 @@ void SPhysicsAssetEditorWindow::RemoveSelectedConstraint()
 	}
 }
 
-void SPhysicsAssetEditorWindow::RegenerateSelectedBody()
+void SPhysicsAssetEditorWindow::RegenerateSelectedBody(EAggCollisionShape PrimitiveType)
 {
 	PhysicsAssetEditorState* State = GetActivePhysicsState();
 	if (!State || State->SelectedBodyIndex < 0) return;
@@ -2207,39 +2428,25 @@ void SPhysicsAssetEditorWindow::RegenerateSelectedBody()
 
 	int32 BoneIndex = Body->BoneIndex;
 
-	// 기존 Shape 모두 삭제
-	Body->AggGeom.SphereElems.Empty();
-	Body->AggGeom.BoxElems.Empty();
-	Body->AggGeom.SphylElems.Empty();
+	USkeletalMeshComponent* MeshComp = State->GetPreviewMeshComponent();
+	if (!MeshComp) return;
 
-	// 본 길이 기반으로 새 캡슐 생성
-	const FSkeleton* Skeleton = State->CurrentMesh->GetSkeleton();
-	if (!Skeleton || BoneIndex < 0 || BoneIndex >= static_cast<int32>(Skeleton->Bones.size())) return;
+	// FBodyShapeCalculator를 사용하여 정점 분석 기반으로 재생성
+	// MinBoneSize는 0으로 설정하여 모든 바디 재생성 허용 (이미 존재하는 바디)
+	bool bSuccess = FBodyShapeCalculator::GenerateBodyShapeFromVertices(
+		Body,
+		BoneIndex,
+		State->CurrentMesh,
+		MeshComp,
+		PrimitiveType,
+		0.0f  // MinBoneSize = 0 (이미 존재하는 바디이므로 재생성 허용)
+	);
 
-	const FBone& Bone = Skeleton->Bones[BoneIndex];
-	FVector BonePos(Bone.BindPose.M[3][0], Bone.BindPose.M[3][1], Bone.BindPose.M[3][2]);
-
-	// 본 길이 계산 (자식 본까지의 거리)
-	float BoneLength = 0.05f;  // 기본값
-	for (size_t i = 0; i < Skeleton->Bones.size(); ++i)
+	if (!bSuccess)
 	{
-		if (Skeleton->Bones[i].ParentIndex == BoneIndex)
-		{
-			const FBone& ChildBone = Skeleton->Bones[i];
-			FVector ChildPos(ChildBone.BindPose.M[3][0], ChildBone.BindPose.M[3][1], ChildBone.BindPose.M[3][2]);
-			BoneLength = (ChildPos - BonePos).Size();
-			break;
-		}
+		UE_LOG("[SPhysicsAssetEditorWindow] Failed to regenerate body for bone index %d", BoneIndex);
+		// 실패해도 기존 바디는 유지 (빈 상태가 됨)
 	}
-
-	// 최소/최대 크기 제한
-	BoneLength = std::max(0.02f, std::min(BoneLength, 0.5f));
-
-	// 캡슐 생성
-	FKSphylElem NewCapsule;
-	NewCapsule.Radius = BoneLength * 0.1f;
-	NewCapsule.Length = BoneLength * 0.7f;
-	Body->AggGeom.SphylElems.Add(NewCapsule);
 
 	State->bIsDirty = true;
 	State->RequestLinesRebuild();
@@ -2258,31 +2465,24 @@ void SPhysicsAssetEditorWindow::AddPrimitiveToBody(int32 BodyIndex, int32 Primit
 	{
 	case 0:  // Box
 	{
-		FKBoxElem NewBox;
-		NewBox.X = 10.0f;
-		NewBox.Y = 10.0f;
-		NewBox.Z = 10.0f;
-		NewBox.Center = FVector(0, 0, 0);
-		NewBox.Rotation = FQuat::Identity();
+		FKBoxElem NewBox(0.3f, 0.3f, 0.3f);
 		Body->AggGeom.BoxElems.Add(NewBox);
+		State->SelectPrimitive(BodyIndex, EAggCollisionShape::Box, Body->AggGeom.BoxElems.Num() - 1);
 		break;
 	}
 	case 1:  // Sphere
 	{
 		FKSphereElem NewSphere;
-		NewSphere.Radius = 5.0f;
-		NewSphere.Center = FVector(0, 0, 0);
+		NewSphere.Radius = 0.15f;
 		Body->AggGeom.SphereElems.Add(NewSphere);
+		State->SelectPrimitive(BodyIndex, EAggCollisionShape::Sphere, Body->AggGeom.SphereElems.Num() - 1);
 		break;
 	}
 	case 2:  // Capsule
 	{
-		FKSphylElem NewCapsule;
-		NewCapsule.Radius = 3.0f;
-		NewCapsule.Length = 10.0f;
-		NewCapsule.Center = FVector(0, 0, 0);
-		NewCapsule.Rotation = FQuat::Identity();
+		FKSphylElem NewCapsule(0.15f, 0.5f);
 		Body->AggGeom.SphylElems.Add(NewCapsule);
+		State->SelectPrimitive(BodyIndex, EAggCollisionShape::Sphyl, Body->AggGeom.SphylElems.Num() - 1);
 		break;
 	}
 	}
@@ -2356,9 +2556,9 @@ void SPhysicsAssetEditorWindow::OnMouseDown(FVector2D MousePos, uint32 Button)
 
 						auto T2 = std::chrono::high_resolution_clock::now();
 
-						// 모든 바디에 대해 레이캐스트
+						// 모든 바디에 대해 레이캐스트 (Primitive 레벨)
 						int32 ClosestBodyIndex = -1;
-						float ClosestT = FLT_MAX;
+						FPrimitiveHitResult ClosestPrimitiveHit;
 
 						USkeletalMeshComponent* SkelComp = State->GetPreviewMeshComponent();
 
@@ -2372,12 +2572,12 @@ void SPhysicsAssetEditorWindow::OnMouseDown(FVector2D MousePos, uint32 Button)
 								// 본 월드 트랜스폼
 								FTransform BoneWorldTransform = SkelComp->GetBoneWorldTransform(Body->BoneIndex);
 
-								float HitT;
-								if (IntersectRayBody(Ray, Body, BoneWorldTransform, HitT))
+								FPrimitiveHitResult HitResult;
+								if (PhysicsPickingHelper::IntersectRayBodyWithPrimitive(Ray, Body, BoneWorldTransform, HitResult))
 								{
-									if (HitT < ClosestT)
+									if (HitResult.HitT < ClosestPrimitiveHit.HitT)
 									{
-										ClosestT = HitT;
+										ClosestPrimitiveHit = HitResult;
 										ClosestBodyIndex = i;
 									}
 								}
@@ -2386,16 +2586,23 @@ void SPhysicsAssetEditorWindow::OnMouseDown(FVector2D MousePos, uint32 Button)
 
 						auto T3 = std::chrono::high_resolution_clock::now();
 
-						if (ClosestBodyIndex >= 0)
+						if (ClosestBodyIndex >= 0 && ClosestPrimitiveHit.IsValid())
 						{
-							// 바디 선택 (색상만 업데이트 - 전체 rebuild 불필요)
-							State->bBodySelectionMode = true;
-							State->SelectedBodyIndex = ClosestBodyIndex;
-							State->SelectedConstraintIndex = -1;
-							State->bSelectionColorDirty = true;
+							// Primitive 선택 (정확히 클릭된 primitive)
+							State->SelectPrimitive(ClosestBodyIndex, ClosestPrimitiveHit.PrimitiveType, ClosestPrimitiveHit.PrimitiveIndex);
 
-							// 기즈모 위치 업데이트
-							RepositionAnchorToBody(ClosestBodyIndex);
+							// 선택된 바디의 본 인덱스도 업데이트 (그래프 동기화)
+							UBodySetup* SelectedBody = State->EditingAsset->BodySetups[ClosestBodyIndex];
+							if (SelectedBody)
+							{
+								State->SelectedBoneIndex = SelectedBody->BoneIndex;
+							}
+
+							// 그래프 기준도 선택된 바디로 업데이트
+							State->GraphPivotBodyIndex = ClosestBodyIndex;
+
+							// 기즈모 위치 업데이트 (선택된 primitive 기준)
+							RepositionAnchorToPrimitive();
 						}
 						else
 						{
@@ -2469,7 +2676,8 @@ void SPhysicsAssetEditorWindow::CreateSubWidgets()
 
 	// SkeletonTreeWidget 콜백 연결
 	SkeletonTreeWidget->OnAddBody.Add([this](int32 BoneIndex) {
-		AddBodyToBone(BoneIndex);
+		// 기본값으로 Capsule 사용
+		AddBodyToBone(BoneIndex, EAggCollisionShape::Sphyl);
 	});
 
 	SkeletonTreeWidget->OnRemoveBody.Add([this](int32 BodyIndex) {
@@ -2565,12 +2773,16 @@ void SPhysicsAssetEditorWindow::UpdateSubWidgetEditorState()
 // 기즈모 연동
 // ────────────────────────────────────────────────────────────────
 
-void SPhysicsAssetEditorWindow::RepositionAnchorToBody(int32 BodyIndex)
+void SPhysicsAssetEditorWindow::RepositionAnchorToPrimitive()
 {
 	PhysicsAssetEditorState* State = GetActivePhysicsState();
 	if (!State || !State->EditingAsset || !State->PreviewActor || !State->World)
 		return;
 
+	if (!State->HasPrimitiveSelection())
+		return;
+
+	int32 BodyIndex = State->SelectedBodyIndex;
 	if (BodyIndex < 0 || BodyIndex >= static_cast<int32>(State->EditingAsset->BodySetups.size()))
 		return;
 
@@ -2600,36 +2812,52 @@ void SPhysicsAssetEditorWindow::RepositionAnchorToBody(int32 BodyIndex)
 		BoneWorldTransform = MeshComp->GetWorldTransform();
 	}
 
-	// AggGeom의 첫 번째 Shape 중심을 기즈모 위치로 사용
+	// 선택된 Primitive의 Center/Rotation 가져오기
 	FVector ShapeCenter = FVector(0.0f, 0.0f, 0.0f);
 	FQuat ShapeRotation = FQuat::Identity();
-	if (!Body->AggGeom.SphereElems.IsEmpty())
+
+	EAggCollisionShape PrimType = State->SelectedPrimitive.PrimitiveType;
+	int32 PrimIndex = State->SelectedPrimitive.PrimitiveIndex;
+
+	switch (PrimType)
 	{
-		ShapeCenter = Body->AggGeom.SphereElems[0].Center;
-	}
-	else if (!Body->AggGeom.BoxElems.IsEmpty())
-	{
-		ShapeCenter = Body->AggGeom.BoxElems[0].Center;
-		ShapeRotation = Body->AggGeom.BoxElems[0].Rotation;
-	}
-	else if (!Body->AggGeom.SphylElems.IsEmpty())
-	{
-		ShapeCenter = Body->AggGeom.SphylElems[0].Center;
-		ShapeRotation = Body->AggGeom.SphylElems[0].Rotation;
+	case EAggCollisionShape::Sphere:
+		if (PrimIndex >= 0 && PrimIndex < Body->AggGeom.SphereElems.Num())
+		{
+			ShapeCenter = Body->AggGeom.SphereElems[PrimIndex].Center;
+			// Sphere has no rotation
+		}
+		break;
+	case EAggCollisionShape::Box:
+		if (PrimIndex >= 0 && PrimIndex < Body->AggGeom.BoxElems.Num())
+		{
+			ShapeCenter = Body->AggGeom.BoxElems[PrimIndex].Center;
+			ShapeRotation = Body->AggGeom.BoxElems[PrimIndex].Rotation;
+		}
+		break;
+	case EAggCollisionShape::Sphyl:
+		if (PrimIndex >= 0 && PrimIndex < Body->AggGeom.SphylElems.Num())
+		{
+			ShapeCenter = Body->AggGeom.SphylElems[PrimIndex].Center;
+			ShapeRotation = Body->AggGeom.SphylElems[PrimIndex].Rotation;
+		}
+		break;
+	default:
+		return;
 	}
 
-	// Shape의 로컬 트랜스폼을 본의 월드 트랜스폼으로 변환 (스케일 무시 - Shape Center는 스케일 독립적 오프셋)
+	// Shape의 로컬 트랜스폼을 본의 월드 트랜스폼으로 변환
 	FVector WorldCenter = BoneWorldTransform.Translation + BoneWorldTransform.Rotation.RotateVector(ShapeCenter);
 	FQuat WorldRotation = BoneWorldTransform.Rotation * ShapeRotation;
 
-	// 앵커를 바디의 월드 위치로 이동
+	// 앵커를 primitive의 월드 위치로 이동
 	Anchor->SetWorldLocation(WorldCenter);
 	Anchor->SetWorldRotation(WorldRotation);
 
 	// 앵커 편집 가능 상태로 설정
 	if (UBoneAnchorComponent* BoneAnchor = Cast<UBoneAnchorComponent>(Anchor))
 	{
-		BoneAnchor->SetSuppressWriteback(true);  // 본 수정 방지 (바디만 수정)
+		BoneAnchor->SetSuppressWriteback(true);  // 본 수정 방지
 		BoneAnchor->SetEditability(true);
 		BoneAnchor->SetVisibility(true);
 	}
@@ -2643,14 +2871,17 @@ void SPhysicsAssetEditorWindow::RepositionAnchorToBody(int32 BodyIndex)
 	}
 }
 
-void SPhysicsAssetEditorWindow::UpdateBodyTransformFromGizmo()
+void SPhysicsAssetEditorWindow::UpdatePrimitiveTransformFromGizmo()
 {
 	PhysicsAssetEditorState* State = GetActivePhysicsState();
 	if (!State || !State->EditingAsset || !State->PreviewActor || !State->World)
 		return;
 
-	if (State->SelectedBodyIndex < 0 ||
-		State->SelectedBodyIndex >= static_cast<int32>(State->EditingAsset->BodySetups.size()))
+	if (!State->HasPrimitiveSelection())
+		return;
+
+	int32 BodyIndex = State->SelectedBodyIndex;
+	if (BodyIndex < 0 || BodyIndex >= static_cast<int32>(State->EditingAsset->BodySetups.size()))
 		return;
 
 	ASkeletalMeshActor* SkelActor = State->GetPreviewSkeletalActor();
@@ -2666,7 +2897,7 @@ void SPhysicsAssetEditorWindow::UpdateBodyTransformFromGizmo()
 	if (!MeshComp || !Anchor || !Gizmo)
 		return;
 
-	UBodySetup* Body = State->EditingAsset->BodySetups[State->SelectedBodyIndex];
+	UBodySetup* Body = State->EditingAsset->BodySetups[BodyIndex];
 	if (!Body) return;
 
 	// 기즈모 모드 확인
@@ -2686,7 +2917,7 @@ void SPhysicsAssetEditorWindow::UpdateBodyTransformFromGizmo()
 		BoneWorldTransform = MeshComp->GetWorldTransform();
 	}
 
-	// 원하는 로컬 트랜스폼 계산: 본 월드 기준 앵커의 상대 트랜스폼 (스케일 무시 - Shape Center는 스케일 독립적 오프셋)
+	// 원하는 로컬 트랜스폼 계산: 본 월드 기준 앵커의 상대 트랜스폼
 	FQuat InvBoneRotation = BoneWorldTransform.Rotation.Inverse();
 	FVector DesiredLocalCenter = InvBoneRotation.RotateVector(AnchorWorldTransform.Translation - BoneWorldTransform.Translation);
 	FQuat DesiredLocalRotation = InvBoneRotation * AnchorWorldTransform.Rotation;
@@ -2701,36 +2932,47 @@ void SPhysicsAssetEditorWindow::UpdateBodyTransformFromGizmo()
 
 	bool bChanged = false;
 
-	// AggGeom의 첫 번째 Shape의 Center/Rotation 업데이트
-	// (기즈모는 첫 번째 Shape를 기준으로 위치함)
+	EAggCollisionShape PrimType = State->SelectedPrimitive.PrimitiveType;
+	int32 PrimIndex = State->SelectedPrimitive.PrimitiveIndex;
+
+	// 선택된 Primitive의 Center/Rotation 업데이트
 	switch (CurrentGizmoMode)
 	{
 	case EGizmoMode::Translate:
 		{
 			FVector NewCenter = DesiredLocalCenter;
-			if (!Body->AggGeom.SphereElems.IsEmpty())
+			switch (PrimType)
 			{
-				if (!VectorEquals(NewCenter, Body->AggGeom.SphereElems[0].Center, 0.001f))
+			case EAggCollisionShape::Sphere:
+				if (PrimIndex >= 0 && PrimIndex < Body->AggGeom.SphereElems.Num())
 				{
-					Body->AggGeom.SphereElems[0].Center = NewCenter;
-					bChanged = true;
+					if (!VectorEquals(NewCenter, Body->AggGeom.SphereElems[PrimIndex].Center, 0.001f))
+					{
+						Body->AggGeom.SphereElems[PrimIndex].Center = NewCenter;
+						bChanged = true;
+					}
 				}
-			}
-			else if (!Body->AggGeom.BoxElems.IsEmpty())
-			{
-				if (!VectorEquals(NewCenter, Body->AggGeom.BoxElems[0].Center, 0.001f))
+				break;
+			case EAggCollisionShape::Box:
+				if (PrimIndex >= 0 && PrimIndex < Body->AggGeom.BoxElems.Num())
 				{
-					Body->AggGeom.BoxElems[0].Center = NewCenter;
-					bChanged = true;
+					if (!VectorEquals(NewCenter, Body->AggGeom.BoxElems[PrimIndex].Center, 0.001f))
+					{
+						Body->AggGeom.BoxElems[PrimIndex].Center = NewCenter;
+						bChanged = true;
+					}
 				}
-			}
-			else if (!Body->AggGeom.SphylElems.IsEmpty())
-			{
-				if (!VectorEquals(NewCenter, Body->AggGeom.SphylElems[0].Center, 0.001f))
+				break;
+			case EAggCollisionShape::Sphyl:
+				if (PrimIndex >= 0 && PrimIndex < Body->AggGeom.SphylElems.Num())
 				{
-					Body->AggGeom.SphylElems[0].Center = NewCenter;
-					bChanged = true;
+					if (!VectorEquals(NewCenter, Body->AggGeom.SphylElems[PrimIndex].Center, 0.001f))
+					{
+						Body->AggGeom.SphylElems[PrimIndex].Center = NewCenter;
+						bChanged = true;
+					}
 				}
+				break;
 			}
 		}
 		break;
@@ -2739,23 +2981,30 @@ void SPhysicsAssetEditorWindow::UpdateBodyTransformFromGizmo()
 		{
 			FQuat NewRotation = DesiredLocalRotation;
 			// Box와 Capsule만 회전을 가짐 (Sphere는 회전 무의미)
-			if (!Body->AggGeom.BoxElems.IsEmpty())
+			switch (PrimType)
 			{
-				float Dot = std::abs(FQuat::Dot(Body->AggGeom.BoxElems[0].Rotation, NewRotation));
-				if (Dot < 0.9999f)
+			case EAggCollisionShape::Box:
+				if (PrimIndex >= 0 && PrimIndex < Body->AggGeom.BoxElems.Num())
 				{
-					Body->AggGeom.BoxElems[0].Rotation = NewRotation;
-					bChanged = true;
+					float Dot = std::abs(FQuat::Dot(Body->AggGeom.BoxElems[PrimIndex].Rotation, NewRotation));
+					if (Dot < 0.9999f)
+					{
+						Body->AggGeom.BoxElems[PrimIndex].Rotation = NewRotation;
+						bChanged = true;
+					}
 				}
-			}
-			else if (!Body->AggGeom.SphylElems.IsEmpty())
-			{
-				float Dot = std::abs(FQuat::Dot(Body->AggGeom.SphylElems[0].Rotation, NewRotation));
-				if (Dot < 0.9999f)
+				break;
+			case EAggCollisionShape::Sphyl:
+				if (PrimIndex >= 0 && PrimIndex < Body->AggGeom.SphylElems.Num())
 				{
-					Body->AggGeom.SphylElems[0].Rotation = NewRotation;
-					bChanged = true;
+					float Dot = std::abs(FQuat::Dot(Body->AggGeom.SphylElems[PrimIndex].Rotation, NewRotation));
+					if (Dot < 0.9999f)
+					{
+						Body->AggGeom.SphylElems[PrimIndex].Rotation = NewRotation;
+						bChanged = true;
+					}
 				}
+				break;
 			}
 		}
 		break;
@@ -2774,5 +3023,154 @@ void SPhysicsAssetEditorWindow::UpdateBodyTransformFromGizmo()
 		State->bIsDirty = true;
 		State->RequestSelectedBodyLinesUpdate();  // 라인 좌표 업데이트 (색상/개수 유지)
 	}
+}
+
+// ────────────────────────────────────────────────────────────────
+// 시뮬레이션
+// ────────────────────────────────────────────────────────────────
+
+void SPhysicsAssetEditorWindow::StartSimulation()
+{
+	PhysicsAssetEditorState* State = GetActivePhysicsState();
+	if (!State || !State->EditingAsset || State->bSimulating) return;
+
+	UWorld* World = State->World;
+	if (!World) return;
+
+	// 1. 에디터 전용 PhysScene 생성
+	if (!State->SimulationPhysScene)
+	{
+		State->SimulationPhysScene = std::make_unique<FPhysScene>(World);
+		State->SimulationPhysScene->InitPhysScene();
+		UE_LOG("[PhysicsAssetEditor] 시뮬레이션용 PhysScene 생성");
+	}
+
+	FPhysScene* PhysScene = State->SimulationPhysScene.get();
+
+	// 2. 바닥 박스 액터 생성 (10000 x 10000)
+	if (!State->FloorActor)
+	{
+		State->FloorActor = World->SpawnActor<ABoxActor>();
+		if (State->FloorActor)
+		{
+			// BoxComponent 설정
+			UBoxComponent* BoxComp = State->FloorActor->GetBoxComponent();
+			if (BoxComp)
+			{
+				// BoxExtent는 반 크기이므로 5000으로 설정 (실제 크기 10000)
+				BoxComp->SetBoxExtent(FVector(5000.0f, 5000.0f, 1.0f));
+				BoxComp->SetSimulatePhysics(false);  // 바닥은 Static
+
+				// 바닥을 시뮬레이션 PhysScene에 등록
+				BoxComp->GetBodyInstance().InitBody(BoxComp->GetBodySetup(), BoxComp->GetWorldTransform(), BoxComp, PhysScene);
+			}
+
+			// 위치: 캐릭터 아래
+			FTransform FloorTransform;
+			FloorTransform.Translation = FVector(0.0f, 0.0f, -1.0f);
+			FloorTransform.Rotation = FQuat::Identity();
+			FloorTransform.Scale3D = FVector(1.0f, 1.0f, 1.0f);
+			State->FloorActor->SetActorTransform(FloorTransform);
+
+			UE_LOG("[PhysicsAssetEditor] 시뮬레이션 바닥 생성 완료 (10000 x 10000)");
+		}
+	}
+
+	// 3. SkeletalMeshComponent에 랙돌 초기화 (시뮬레이션 PhysScene 사용)
+	USkeletalMeshComponent* MeshComp = State->GetPreviewMeshComponent();
+	if (MeshComp && State->EditingAsset)
+	{
+		// PhysicsAsset 연결
+		MeshComp->SetPhysicsAsset(State->EditingAsset);
+
+		// 랙돌 초기화 (에디터 전용 PhysScene 사용)
+		MeshComp->InitRagdoll(PhysScene);
+
+		// 시뮬레이션 시작
+		MeshComp->SetSimulatePhysics(true);
+
+		UE_LOG("[PhysicsAssetEditor] 랙돌 시뮬레이션 시작");
+	}
+
+	// 4. 기즈모 숨기기
+	State->HideGizmo();
+
+	// 5. 시각 디버그 끄기 (바디/제약조건 라인 및 메시 숨기기)
+	State->bShowBodies = false;
+	State->bShowConstraints = false;
+	if (State->BodyPreviewLineComponent)
+		State->BodyPreviewLineComponent->SetLineVisible(false);
+	if (State->ConstraintPreviewLineComponent)
+		State->ConstraintPreviewLineComponent->SetLineVisible(false);
+	// 메시 컴포넌트도 숨기기
+	for (UTriangleMeshComponent* MeshComp : State->BodyMeshComponents)
+	{
+		if (MeshComp) MeshComp->SetMeshVisible(false);
+	}
+	if (State->ConstraintMeshComponent)
+		State->ConstraintMeshComponent->SetMeshVisible(false);
+
+	State->bSimulating = true;
+}
+
+void SPhysicsAssetEditorWindow::StopSimulation()
+{
+	PhysicsAssetEditorState* State = GetActivePhysicsState();
+	if (!State || !State->bSimulating) return;
+
+	// 1. 랙돌 종료 (PhysScene 해제 전에)
+	USkeletalMeshComponent* MeshComp = State->GetPreviewMeshComponent();
+	if (MeshComp)
+	{
+		MeshComp->SetSimulatePhysics(false);
+		MeshComp->TermRagdoll();
+
+		// RefPose로 리셋
+		MeshComp->ResetToRefPose();
+
+		UE_LOG("[PhysicsAssetEditor] 랙돌 시뮬레이션 종료");
+	}
+
+	// 2. 바닥 액터의 물리 바디 정리 (PhysScene 해제 전에)
+	if (State->FloorActor)
+	{
+		UBoxComponent* BoxComp = State->FloorActor->GetBoxComponent();
+		if (BoxComp)
+		{
+			BoxComp->GetBodyInstance().TermBody();
+		}
+
+		State->FloorActor->Destroy();
+		State->FloorActor = nullptr;
+
+		UE_LOG("[PhysicsAssetEditor] 시뮬레이션 바닥 제거");
+	}
+
+	// 3. 시뮬레이션 PhysScene 해제
+	if (State->SimulationPhysScene)
+	{
+		State->SimulationPhysScene.reset();
+		UE_LOG("[PhysicsAssetEditor] 시뮬레이션용 PhysScene 해제");
+	}
+
+	// 4. Shape 라인 재구성 (포즈가 리셋되었으므로)
+	State->RequestLinesRebuild();
+
+	// 5. 시각 디버그 다시 켜기 (라인 및 메시)
+	State->bShowBodies = true;
+	State->bShowConstraints = true;
+	if (State->BodyPreviewLineComponent)
+		State->BodyPreviewLineComponent->SetLineVisible(true);
+	if (State->ConstraintPreviewLineComponent)
+		State->ConstraintPreviewLineComponent->SetLineVisible(true);
+	// 메시 컴포넌트도 다시 보이기
+	for (UTriangleMeshComponent* MeshComp : State->BodyMeshComponents)
+	{
+		if (MeshComp) MeshComp->SetMeshVisible(true);
+	}
+	if (State->ConstraintMeshComponent)
+		State->ConstraintMeshComponent->SetMeshVisible(true);
+
+	State->bSimulating = false;
 }
 
