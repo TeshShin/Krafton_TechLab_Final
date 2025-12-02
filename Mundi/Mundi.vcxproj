@@ -453,6 +453,7 @@ xcopy /y /d "$(ProjectDir)ThirdParty\lib\physx\$(Configuration)\*.dll" "$(OutDir
     <ClCompile Include="Source\Runtime\Engine\PhysicsEngine\AggregateGeom.cpp" />
     <ClCompile Include="Source\Runtime\Engine\PhysicsEngine\BodyInstance.cpp" />
     <ClCompile Include="Source\Runtime\Engine\PhysicsEngine\BodySetup.cpp" />
+    <ClCompile Include="Source\Runtime\Engine\PhysicsEngine\BodyShapeCalculator.cpp" />
     <ClCompile Include="Source\Runtime\Engine\PhysicsEngine\BoxElem.cpp" />
     <ClCompile Include="Source\Runtime\Engine\PhysicsEngine\ConstraintInstance.cpp" />
     <ClCompile Include="Source\Runtime\Engine\PhysicsEngine\PhysicalMaterial.cpp" />
@@ -1010,6 +1011,7 @@ xcopy /y /d "$(ProjectDir)ThirdParty\lib\physx\$(Configuration)\*.dll" "$(OutDir
     <ClInclude Include="Source\Runtime\Engine\PhysicsEngine\AggregateGeom.h" />
     <ClInclude Include="Source\Runtime\Engine\PhysicsEngine\BodyInstance.h" />
     <ClInclude Include="Source\Runtime\Engine\PhysicsEngine\BodySetup.h" />
+    <ClInclude Include="Source\Runtime\Engine\PhysicsEngine\BodyShapeCalculator.h" />
     <ClInclude Include="Source\Runtime\Engine\PhysicsEngine\BoxElem.h" />
     <ClInclude Include="Source\Runtime\Engine\PhysicsEngine\ConstraintInstance.h" />
     <ClInclude Include="Source\Runtime\Engine\PhysicsEngine\EAggCollisionShape.h" />

@@ -104,11 +104,11 @@ void UToolsWidget::RenderGenerationSection()
 		{
 			if (strcmp(ButtonText, "Re-generate Bodies") == 0)
 			{
-				EditorWindow->RegenerateSelectedBody();
+				EditorWindow->RegenerateSelectedBody(SelectedPrimitiveType);
 			}
 			else if (strcmp(ButtonText, "Add Bodies") == 0)
 			{
-				EditorWindow->AddBodyToBone(EditorState->SelectedBoneIndex);
+				EditorWindow->AddBodyToBone(EditorState->SelectedBoneIndex, SelectedPrimitiveType);
 			}
 			else  // Generate All Bodies
 			{
