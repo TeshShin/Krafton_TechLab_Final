@@ -1,13 +1,14 @@
 ﻿#pragma once
 
-#include "PhysicsTypes.h"
+#include "ELinearConstraintMotion.h"
+#include "EAngularConstraintMotion.h"
 #include "FConstraintSetup.generated.h"
 
 /**
  * FConstraintSetup
  *
  * 두 바디 간의 물리 제약 조건 설정
- * UPhysicsConstraintTemplate에서 필수 속성만 추출
+ * Unreal Engine 스타일의 Motion 기반 설계
  */
 USTRUCT(DisplayName="제약 조건 설정", Description="두 바디 간의 물리 제약 조건 설정")
 struct FConstraintSetup
@@ -18,43 +19,59 @@ public:
 	// ────────────────────────────────────────────────
 	// 기본 정보
 	// ────────────────────────────────────────────────
-	UPROPERTY(EditAnywhere, Category="Joint", Tooltip="제약 조건 이름")
+	UPROPERTY()
 	FName JointName;
 
 	// ────────────────────────────────────────────────
 	// 연결된 바디
 	// ────────────────────────────────────────────────
-	UPROPERTY(EditAnywhere, Category="Joint", Tooltip="부모 바디 인덱스")
+	UPROPERTY()
 	int32 ParentBodyIndex = -1;
 
-	UPROPERTY(EditAnywhere, Category="Joint", Tooltip="자식 바디 인덱스")
+	UPROPERTY()
 	int32 ChildBodyIndex = -1;
 
 	// ────────────────────────────────────────────────
-	// 제약 조건 타입
+	// Linear Constraint (위치 제한)
 	// ────────────────────────────────────────────────
-	UPROPERTY(EditAnywhere, Category="Joint", Tooltip="제약 조건 타입")
-	EConstraintType ConstraintType = EConstraintType::BallAndSocket;
+	UPROPERTY(EditAnywhere, Category="Linear", Tooltip="X축 선형 이동 타입")
+	ELinearConstraintMotion LinearXMotion = ELinearConstraintMotion::Locked;
 
-	// ────────────────────────────────────────────────
-	// 각도 제한 (degrees)
-	// BallAndSocket: Swing1, Swing2, TwistMin/Max 모두 사용
-	// Hinge: Swing1만 사용 (회전축 제한)
-	// ────────────────────────────────────────────────
-	UPROPERTY(EditAnywhere, Category="Limits", Tooltip="Y축 회전 제한 (degrees)")
-	float Swing1Limit = 45.0f;
+	UPROPERTY(EditAnywhere, Category="Linear", Tooltip="Y축 선형 이동 타입")
+	ELinearConstraintMotion LinearYMotion = ELinearConstraintMotion::Locked;
 
-	UPROPERTY(EditAnywhere, Category="Limits", Tooltip="Z축 회전 제한 (degrees)")
-	float Swing2Limit = 45.0f;
+	UPROPERTY(EditAnywhere, Category="Linear", Tooltip="Z축 선형 이동 타입")
+	ELinearConstraintMotion LinearZMotion = ELinearConstraintMotion::Locked;
 
-	UPROPERTY(EditAnywhere, Category="Limits", Tooltip="X축 회전 최소 (degrees)")
-	float TwistLimitMin = -45.0f;
-
-	UPROPERTY(EditAnywhere, Category="Limits", Tooltip="X축 회전 최대 (degrees)")
-	float TwistLimitMax = 45.0f;
+	UPROPERTY(EditAnywhere, Category="Linear", Tooltip="선형 이동 제한 거리 (cm)")
+	float LinearLimit = 0.0f;
 
 	// ────────────────────────────────────────────────
-	// 제약 조건 강도 (PhysX 연동 시 활용)
+	// Angular Constraint - Swing (Cone 제한)
+	// ────────────────────────────────────────────────
+	UPROPERTY(EditAnywhere, Category="Angular", Tooltip="Swing1 (Y축 회전) 타입")
+	EAngularConstraintMotion Swing1Motion = EAngularConstraintMotion::Limited;
+
+	UPROPERTY(EditAnywhere, Category="Angular", Tooltip="Swing2 (Z축 회전) 타입")
+	EAngularConstraintMotion Swing2Motion = EAngularConstraintMotion::Limited;
+
+	UPROPERTY(EditAnywhere, Category="Angular", Tooltip="Swing1 제한 각도 (degrees)")
+	float Swing1LimitDegrees = 45.0f;
+
+	UPROPERTY(EditAnywhere, Category="Angular", Tooltip="Swing2 제한 각도 (degrees)")
+	float Swing2LimitDegrees = 45.0f;
+
+	// ────────────────────────────────────────────────
+	// Angular Constraint - Twist (X축 회전)
+	// ────────────────────────────────────────────────
+	UPROPERTY(EditAnywhere, Category="Angular", Tooltip="Twist (X축 회전) 타입")
+	EAngularConstraintMotion TwistMotion = EAngularConstraintMotion::Limited;
+
+	UPROPERTY(EditAnywhere, Category="Angular", Tooltip="Twist 제한 각도 (±degrees, 대칭)")
+	float TwistLimitDegrees = 45.0f;
+
+	// ────────────────────────────────────────────────
+	// Drive (스프링/댐퍼)
 	// ────────────────────────────────────────────────
 	UPROPERTY(EditAnywhere, Category="Drive", Tooltip="스프링 강성")
 	float Stiffness = 0.0f;
@@ -76,6 +93,25 @@ public:
 		: JointName(InJointName)
 		, ParentBodyIndex(InParentIndex)
 		, ChildBodyIndex(InChildIndex)
-		, ConstraintType(EConstraintType::BallAndSocket)
 	{}
+
+	// ────────────────────────────────────────────────
+	// 헬퍼: Linear motion 중 하나라도 Limited인지
+	// ────────────────────────────────────────────────
+	bool HasLinearLimit() const
+	{
+		return LinearXMotion == ELinearConstraintMotion::Limited ||
+		       LinearYMotion == ELinearConstraintMotion::Limited ||
+		       LinearZMotion == ELinearConstraintMotion::Limited;
+	}
+
+	// ────────────────────────────────────────────────
+	// 헬퍼: Angular motion 중 하나라도 Limited인지
+	// ────────────────────────────────────────────────
+	bool HasAngularLimit() const
+	{
+		return Swing1Motion == EAngularConstraintMotion::Limited ||
+		       Swing2Motion == EAngularConstraintMotion::Limited ||
+		       TwistMotion == EAngularConstraintMotion::Limited;
+	}
 };

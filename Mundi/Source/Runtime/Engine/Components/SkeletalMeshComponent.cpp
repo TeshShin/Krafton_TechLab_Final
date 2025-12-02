@@ -978,13 +978,11 @@ void USkeletalMeshComponent::InitTestRagdoll(FPhysScene* InPhysScene)
         Setup.JointName = FName(Bone.Name + "_Joint");
         Setup.ParentBodyIndex = ParentIndex;
         Setup.ChildBodyIndex = BoneIndex;
-        Setup.ConstraintType = EConstraintType::BallAndSocket;
 
-        // 기본 각도 제한 설정
-        Setup.Swing1Limit = 30.0f;
-        Setup.Swing2Limit = 30.0f;
-        Setup.TwistLimitMin = -20.0f;
-        Setup.TwistLimitMax = 20.0f;
+        // 기본 각도 제한 설정 (Motion 타입은 기본값 Limited 사용)
+        Setup.Swing1LimitDegrees = 30.0f;
+        Setup.Swing2LimitDegrees = 30.0f;
+        Setup.TwistLimitDegrees = 20.0f;
         Setup.Stiffness = 100.0f;
         Setup.Damping = 10.0f;
 

@@ -1,9 +1,10 @@
-﻿#include "pch.h"
+#include "pch.h"
 #include "ConstraintPropertiesWidget.h"
 #include "ImGui/imgui.h"
 #include "Source/Runtime/Engine/Viewer/PhysicsAssetEditorState.h"
 #include "Source/Runtime/Engine/PhysicsEngine/PhysicsAsset.h"
 #include "Source/Runtime/Engine/PhysicsEngine/FConstraintSetup.h"
+#include "Source/Slate/Widgets/PropertyRenderer.h"
 
 IMPLEMENT_CLASS(UConstraintPropertiesWidget);
 
@@ -36,74 +37,68 @@ void UConstraintPropertiesWidget::RenderWidget()
 	ImGui::Text("Constraint: %s", Constraint.JointName.ToString().c_str());
 	ImGui::Separator();
 
-	// 제약 조건 타입
-	const char* ConstraintTypes[] = { "Ball and Socket", "Hinge" };
-	int32 CurrentType = static_cast<int32>(Constraint.ConstraintType);
-	if (ImGui::Combo("Type", &CurrentType, ConstraintTypes, IM_ARRAYSIZE(ConstraintTypes)))
+	// FConstraintSetup struct의 reflection 정보 가져오기
+	UStruct* StructType = UStruct::FindStruct("FConstraintSetup");
+	if (!StructType)
 	{
-		Constraint.ConstraintType = static_cast<EConstraintType>(CurrentType);
-		EditorState->bIsDirty = true;
-		EditorState->RequestLinesRebuild();  // 실시간 시각화 업데이트
-		bWasModified = true;
+		ImGui::Text("[Error: FConstraintSetup not registered]");
+		return;
 	}
 
-	// 각도 제한
-	if (ImGui::CollapsingHeader("Limits", ImGuiTreeNodeFlags_DefaultOpen))
+	// TODO: PropertyRenderer에 RenderStructPropertiesWithCategories() 추가 후 공통 API로 교체
+	// 현재는 임시로 Category 그룹핑 로직을 직접 구현
+
+	// 카테고리별 그룹핑
+	TArray<TPair<FString, TArray<const FProperty*>>> CategorizedProps;
+	TMap<FString, int32> CategoryIndexMap;
+
+	for (const FProperty& Prop : StructType->GetAllProperties())
 	{
-		bWasModified |= RenderLimitProperties(Constraint);
-	}
+		// 에디터 전용 필드 스킵
+		if (strcmp(Prop.Name, "bSelected") == 0)
+			continue;
 
-	// 강도/댐핑
-	if (ImGui::CollapsingHeader("Stiffness & Damping"))
-	{
-		if (ImGui::DragFloat("Stiffness", &Constraint.Stiffness, 0.1f, 0.0f, 10000.0f))
+		if (Prop.bIsEditAnywhere)
 		{
-			EditorState->bIsDirty = true;
-			bWasModified = true;
-		}
-		if (ImGui::DragFloat("Damping", &Constraint.Damping, 0.1f, 0.0f, 1000.0f))
-		{
-			EditorState->bIsDirty = true;
-			bWasModified = true;
-		}
-	}
-}
+			FString CategoryName = Prop.Category ? Prop.Category : "Default";
+			int32* IndexPtr = CategoryIndexMap.Find(CategoryName);
 
-bool UConstraintPropertiesWidget::RenderLimitProperties(FConstraintSetup& Constraint)
-{
-	bool bChanged = false;
-
-	if (ImGui::DragFloat("Swing1 Limit", &Constraint.Swing1Limit, 1.0f, 0.0f, 180.0f))
-	{
-		EditorState->bIsDirty = true;
-		EditorState->RequestLinesRebuild();  // 실시간 시각화 업데이트
-		bChanged = true;
-	}
-
-	// BallAndSocket만 Swing2와 Twist 사용
-	if (Constraint.ConstraintType == EConstraintType::BallAndSocket)
-	{
-		if (ImGui::DragFloat("Swing2 Limit", &Constraint.Swing2Limit, 1.0f, 0.0f, 180.0f))
-		{
-			EditorState->bIsDirty = true;
-			EditorState->RequestLinesRebuild();  // 실시간 시각화 업데이트
-			bChanged = true;
-		}
-
-		if (ImGui::DragFloat("Twist Min", &Constraint.TwistLimitMin, 1.0f, -180.0f, 0.0f))
-		{
-			EditorState->bIsDirty = true;
-			EditorState->RequestLinesRebuild();  // 실시간 시각화 업데이트
-			bChanged = true;
-		}
-
-		if (ImGui::DragFloat("Twist Max", &Constraint.TwistLimitMax, 1.0f, 0.0f, 180.0f))
-		{
-			EditorState->bIsDirty = true;
-			EditorState->RequestLinesRebuild();  // 실시간 시각화 업데이트
-			bChanged = true;
+			if (IndexPtr)
+			{
+				CategorizedProps[*IndexPtr].second.Add(&Prop);
+			}
+			else
+			{
+				TArray<const FProperty*> NewPropArray;
+				NewPropArray.Add(&Prop);
+				int32 NewIndex = CategorizedProps.Add(
+					TPair<FString, TArray<const FProperty*>>(CategoryName, NewPropArray));
+				CategoryIndexMap.Add(CategoryName, NewIndex);
+			}
 		}
 	}
 
-	return bChanged;
+	// 카테고리별 렌더링
+	for (auto& Pair : CategorizedProps)
+	{
+		const FString& Category = Pair.first;
+		const TArray<const FProperty*>& Props = Pair.second;
+
+		if (ImGui::CollapsingHeader(Category.c_str(), ImGuiTreeNodeFlags_DefaultOpen))
+		{
+			for (const FProperty* Prop : Props)
+			{
+				ImGui::PushID(Prop);
+
+				if (UPropertyRenderer::RenderProperty(*Prop, &Constraint))
+				{
+					EditorState->bIsDirty = true;
+					EditorState->RequestLinesRebuild();
+					bWasModified = true;
+				}
+
+				ImGui::PopID();
+			}
+		}
+	}
 }

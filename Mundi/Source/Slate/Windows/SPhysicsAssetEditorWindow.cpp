@@ -356,19 +356,19 @@ static void GenerateConstraintVisualization(
 	float ConeLength = FMath::Max(0.05f, Distance * 0.3f);
 
 	// 4. Swing Limit 원뿔 (각도가 유의미할 때만)
-	if (Constraint.Swing1Limit > 1.0f || Constraint.Swing2Limit > 1.0f)
+	if (Constraint.Swing1LimitDegrees > 1.0f || Constraint.Swing2LimitDegrees > 1.0f)
 	{
 		GenerateSwingConeLimitLines(JointPos, JointRotation,
-			Constraint.Swing1Limit, Constraint.Swing2Limit, ConeLength, SwingColor, OutBatch);
+			Constraint.Swing1LimitDegrees, Constraint.Swing2LimitDegrees, ConeLength, SwingColor, OutBatch);
 	}
 
-	// 5. Twist Limit 원호 (각도가 유의미할 때만)
-	float TwistRange = Constraint.TwistLimitMax - Constraint.TwistLimitMin;
+	// 5. Twist Limit 원호 (각도가 유의미할 때만, 대칭: ±TwistLimitDegrees)
+	float TwistRange = Constraint.TwistLimitDegrees * 2.0f;
 	if (TwistRange > 1.0f && TwistRange < 359.0f)
 	{
 		float ArcRadius = ConeLength * 0.5f;
 		GenerateTwistLimitLines(JointPos, JointRotation,
-			Constraint.TwistLimitMin, Constraint.TwistLimitMax, ArcRadius, TwistColor, OutBatch);
+			-Constraint.TwistLimitDegrees, Constraint.TwistLimitDegrees, ArcRadius, TwistColor, OutBatch);
 	}
 }
 
@@ -543,20 +543,20 @@ static void GenerateConstraintMeshVisualization(
 	float ConeLength = FMath::Max(0.02f, Distance * 0.3f);  // 본 거리의 30%
 
 	// 4. Swing Limit 원뿔 면 (각도가 유의미할 때만)
-	if (Constraint.Swing1Limit > 1.0f || Constraint.Swing2Limit > 1.0f)
+	if (Constraint.Swing1LimitDegrees > 1.0f || Constraint.Swing2LimitDegrees > 1.0f)
 	{
 		GenerateSwingConeMesh(JointPos, JointRotation,
-			Constraint.Swing1Limit, Constraint.Swing2Limit, ConeLength, SwingColor,
+			Constraint.Swing1LimitDegrees, Constraint.Swing2LimitDegrees, ConeLength, SwingColor,
 			OutVertices, OutIndices, OutColors);
 	}
 
-	// 5. Twist Limit 부채꼴 면 (각도가 유의미할 때만)
-	float TwistRange = Constraint.TwistLimitMax - Constraint.TwistLimitMin;
+	// 5. Twist Limit 부채꼴 면 (각도가 유의미할 때만, 대칭: ±TwistLimitDegrees)
+	float TwistRange = Constraint.TwistLimitDegrees * 2.0f;
 	if (TwistRange > 1.0f && TwistRange < 359.0f)
 	{
 		float ArcRadius = ConeLength * 0.5f;
 		GenerateTwistFanMesh(JointPos, JointRotation,
-			Constraint.TwistLimitMin, Constraint.TwistLimitMax, ArcRadius, TwistColor,
+			-Constraint.TwistLimitDegrees, Constraint.TwistLimitDegrees, ArcRadius, TwistColor,
 			OutVertices, OutIndices, OutColors);
 	}
 }
@@ -1533,6 +1533,7 @@ void SPhysicsAssetEditorWindow::RenderRightPanel()
 	ImGui::Separator();
 	ImGui::Spacing();
 
+	ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(7, 5));
 	ImGui::BeginChild("DetailsPanel", ImVec2(0, detailsHeight - 40), false);
 	{
 		// 선택된 바디 또는 제약 조건의 속성 표시
@@ -1550,6 +1551,7 @@ void SPhysicsAssetEditorWindow::RenderRightPanel()
 		}
 	}
 	ImGui::EndChild();
+	ImGui::PopStyleVar();
 
 	// === 수평 분할선 ===
 	ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.3f, 0.3f, 0.3f, 0.5f));
@@ -1564,6 +1566,7 @@ void SPhysicsAssetEditorWindow::RenderRightPanel()
 	ImGui::Separator();
 	ImGui::Spacing();
 
+	ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(7, 5));
 	ImGui::BeginChild("ToolsPanel", ImVec2(0, 0), false);
 	{
 		if (ToolsWidget)
@@ -1572,6 +1575,7 @@ void SPhysicsAssetEditorWindow::RenderRightPanel()
 		}
 	}
 	ImGui::EndChild();
+	ImGui::PopStyleVar();
 }
 
 void SPhysicsAssetEditorWindow::RenderBottomPanel()

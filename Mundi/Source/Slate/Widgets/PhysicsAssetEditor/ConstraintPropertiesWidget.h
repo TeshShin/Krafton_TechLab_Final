@@ -9,7 +9,7 @@ struct FConstraintSetup;
  * UConstraintPropertiesWidget
  *
  * Physics Asset Editor의 우측 패널 (제약 조건 선택 시)
- * 제약 조건 타입 및 각도 제한 편집 UI
+ * Reflection 기반으로 FConstraintSetup 프로퍼티 편집
  *
  * UWidget 기반 인스턴스로 에디터 상태와 연결
  */
@@ -37,7 +37,4 @@ public:
 private:
 	PhysicsAssetEditorState* EditorState = nullptr;
 	bool bWasModified = false;
-
-	// 렌더링 헬퍼
-	bool RenderLimitProperties(FConstraintSetup& Constraint);
 };

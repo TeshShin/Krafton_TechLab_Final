@@ -1,11 +1,15 @@
-﻿#pragma once
+#pragma once
 
 /**
- * EConstraintType
+ * EConstraintType (DEPRECATED)
  *
- * 물리 제약 조건 타입
- * UE의 11개 타입에서 핵심 2개로 단순화
+ * 이 enum은 더 이상 사용되지 않습니다.
+ * 대신 ELinearConstraintMotion과 EAngularConstraintMotion을 사용하세요.
+ *
+ * @deprecated Use ELinearConstraintMotion and EAngularConstraintMotion instead
  */
+
+// DEPRECATED - 하위 호환성을 위해 유지
 UENUM()
 enum class EConstraintType : uint8
 {
@@ -13,7 +17,7 @@ enum class EConstraintType : uint8
 	Hinge,          // 힌지 조인트 (1축 회전)
 };
 
-/** Constraint 타입 이름 반환 */
+[[deprecated("Use ELinearConstraintMotion and EAngularConstraintMotion instead")]]
 inline const char* GetConstraintTypeName(EConstraintType Type)
 {
 	switch (Type)

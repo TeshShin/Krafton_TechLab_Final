@@ -2,7 +2,8 @@
 
 #include "Source/Runtime/Core/Math/Vector.h"
 #include "EPhysicsShapeType.h"
-#include "EConstraintType.h"
+#include "ELinearConstraintMotion.h"
+#include "EAngularConstraintMotion.h"
 
 /**
  * IPhysicsAssetPreview

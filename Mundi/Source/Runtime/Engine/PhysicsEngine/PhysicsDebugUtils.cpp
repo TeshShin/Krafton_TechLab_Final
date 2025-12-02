@@ -464,20 +464,20 @@ void FPhysicsDebugUtils::GenerateConstraintMeshVisualization(
 	float ConeLength = FMath::Max(0.02f, Distance * 0.3f);  // 본 거리의 30%
 
 	// 4. Swing Limit 원뿔 면 (각도가 유의미할 때만)
-	if (Constraint.Swing1Limit > 1.0f || Constraint.Swing2Limit > 1.0f)
+	if (Constraint.Swing1LimitDegrees > 1.0f || Constraint.Swing2LimitDegrees > 1.0f)
 	{
 		GenerateSwingConeMesh(JointPos, JointRotation,
-			Constraint.Swing1Limit, Constraint.Swing2Limit, ConeLength, SwingColor,
+			Constraint.Swing1LimitDegrees, Constraint.Swing2LimitDegrees, ConeLength, SwingColor,
 			OutVertices, OutIndices, OutColors);
 	}
 
-	// 5. Twist Limit 부채꼴 면 (각도가 유의미할 때만)
-	float TwistRange = Constraint.TwistLimitMax - Constraint.TwistLimitMin;
+	// 5. Twist Limit 부채꼴 면 (각도가 유의미할 때만, 대칭: ±TwistLimitDegrees)
+	float TwistRange = Constraint.TwistLimitDegrees * 2.0f;
 	if (TwistRange > 1.0f && TwistRange < 359.0f)
 	{
 		float ArcRadius = ConeLength * 0.5f;
 		GenerateTwistFanMesh(JointPos, JointRotation,
-			Constraint.TwistLimitMin, Constraint.TwistLimitMax, ArcRadius, TwistColor,
+			-Constraint.TwistLimitDegrees, Constraint.TwistLimitDegrees, ArcRadius, TwistColor,
 			OutVertices, OutIndices, OutColors);
 	}
 }

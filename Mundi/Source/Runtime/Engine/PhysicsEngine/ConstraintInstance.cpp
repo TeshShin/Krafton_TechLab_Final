@@ -135,6 +135,33 @@ void FConstraintInstance::UpdateFromSetup(const FConstraintSetup& Setup)
     ConfigureJointDrive(Setup);
 }
 
+namespace
+{
+    // ELinearConstraintMotion -> PxD6Motion 변환
+    PxD6Motion::Enum ToPxD6Motion(ELinearConstraintMotion Motion)
+    {
+        switch (Motion)
+        {
+        case ELinearConstraintMotion::Free:    return PxD6Motion::eFREE;
+        case ELinearConstraintMotion::Limited: return PxD6Motion::eLIMITED;
+        case ELinearConstraintMotion::Locked:  return PxD6Motion::eLOCKED;
+        default:                               return PxD6Motion::eLOCKED;
+        }
+    }
+
+    // EAngularConstraintMotion -> PxD6Motion 변환
+    PxD6Motion::Enum ToPxD6Motion(EAngularConstraintMotion Motion)
+    {
+        switch (Motion)
+        {
+        case EAngularConstraintMotion::Free:    return PxD6Motion::eFREE;
+        case EAngularConstraintMotion::Limited: return PxD6Motion::eLIMITED;
+        case EAngularConstraintMotion::Locked:  return PxD6Motion::eLOCKED;
+        default:                                return PxD6Motion::eLOCKED;
+        }
+    }
+}
+
 void FConstraintInstance::ConfigureJointMotion(const FConstraintSetup& Setup)
 {
     if (!Joint)
@@ -142,17 +169,23 @@ void FConstraintInstance::ConfigureJointMotion(const FConstraintSetup& Setup)
         return;
     }
 
-    // 기본: 모든 선형 축 잠금 (위치 고정)
-    Joint->setMotion(PxD6Axis::eX, PxD6Motion::eLOCKED);
-    Joint->setMotion(PxD6Axis::eY, PxD6Motion::eLOCKED);
-    Joint->setMotion(PxD6Axis::eZ, PxD6Motion::eLOCKED);
+    // Linear 축 설정
+    Joint->setMotion(PxD6Axis::eX, ToPxD6Motion(Setup.LinearXMotion));
+    Joint->setMotion(PxD6Axis::eY, ToPxD6Motion(Setup.LinearYMotion));
+    Joint->setMotion(PxD6Axis::eZ, ToPxD6Motion(Setup.LinearZMotion));
 
-    // 모든 회전축 제한 (BallAndSocket)
-    Joint->setMotion(PxD6Axis::eTWIST, PxD6Motion::eLIMITED);
-    Joint->setMotion(PxD6Axis::eSWING1, PxD6Motion::eLIMITED);
-    Joint->setMotion(PxD6Axis::eSWING2, PxD6Motion::eLIMITED);
+    // Angular 축 설정
+    Joint->setMotion(PxD6Axis::eTWIST,  ToPxD6Motion(Setup.TwistMotion));
+    Joint->setMotion(PxD6Axis::eSWING1, ToPxD6Motion(Setup.Swing1Motion));
+    Joint->setMotion(PxD6Axis::eSWING2, ToPxD6Motion(Setup.Swing2Motion));
 
-    UE_LOG("[Joint] ConfigureJointMotion: Linear=LOCKED, Angular=LIMITED");
+    UE_LOG("[Joint] ConfigureJointMotion: Linear(%s,%s,%s) Angular(Twist=%s,Swing1=%s,Swing2=%s)",
+        GetLinearConstraintMotionName(Setup.LinearXMotion),
+        GetLinearConstraintMotionName(Setup.LinearYMotion),
+        GetLinearConstraintMotionName(Setup.LinearZMotion),
+        GetAngularConstraintMotionName(Setup.TwistMotion),
+        GetAngularConstraintMotionName(Setup.Swing1Motion),
+        GetAngularConstraintMotionName(Setup.Swing2Motion));
 }
 
 void FConstraintInstance::ConfigureJointLimits(const FConstraintSetup& Setup)
@@ -162,25 +195,48 @@ void FConstraintInstance::ConfigureJointLimits(const FConstraintSetup& Setup)
         return;
     }
 
-    // Setup에서 각도 가져오기
-    float Swing1Rad = DegreesToRadians(Setup.Swing1Limit);
-    float Swing2Rad = DegreesToRadians(Setup.Swing2Limit);
-    float TwistMinRad = DegreesToRadians(Setup.TwistLimitMin);
-    float TwistMaxRad = DegreesToRadians(Setup.TwistLimitMax);
+    // ─────────────────────────────────────────────────────────────
+    // Linear Limit (LIMITED인 축이 있을 때만)
+    // ─────────────────────────────────────────────────────────────
+    if (Setup.HasLinearLimit())
+    {
+        // PhysX는 cm 단위 사용 (Unreal과 동일)
+        PxJointLinearLimit LinearLimit(GPhysXSDK->getTolerancesScale(), Setup.LinearLimit, 0.05f);
+        LinearLimit.stiffness = 0.0f;
+        LinearLimit.damping = 0.0f;
+        LinearLimit.restitution = 0.0f;
+        Joint->setLinearLimit(LinearLimit);
+    }
 
-    // Swing 제한 (Cone Limit)
-    PxJointLimitCone SwingLimit(Swing1Rad, Swing2Rad, 0.05f);
-    SwingLimit.stiffness = 0.0f;
-    SwingLimit.damping = 0.0f;
-    SwingLimit.restitution = 0.0f;
-    Joint->setSwingLimit(SwingLimit);
+    // ─────────────────────────────────────────────────────────────
+    // Angular Limit - Swing (Cone)
+    // ─────────────────────────────────────────────────────────────
+    if (Setup.Swing1Motion == EAngularConstraintMotion::Limited ||
+        Setup.Swing2Motion == EAngularConstraintMotion::Limited)
+    {
+        float Swing1Rad = DegreesToRadians(Setup.Swing1LimitDegrees);
+        float Swing2Rad = DegreesToRadians(Setup.Swing2LimitDegrees);
 
-    // Twist 제한 (Angular Pair Limit)
-    PxJointAngularLimitPair TwistLimit(TwistMinRad, TwistMaxRad, 0.05f);
-    TwistLimit.stiffness = 0.0f;
-    TwistLimit.damping = 0.0f;
-    TwistLimit.restitution = 0.0f;
-    Joint->setTwistLimit(TwistLimit);
+        PxJointLimitCone SwingLimit(Swing1Rad, Swing2Rad, 0.05f);
+        SwingLimit.stiffness = 0.0f;
+        SwingLimit.damping = 0.0f;
+        SwingLimit.restitution = 0.0f;
+        Joint->setSwingLimit(SwingLimit);
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // Angular Limit - Twist (대칭: ±TwistLimitDegrees)
+    // ─────────────────────────────────────────────────────────────
+    if (Setup.TwistMotion == EAngularConstraintMotion::Limited)
+    {
+        float TwistRad = DegreesToRadians(Setup.TwistLimitDegrees);
+
+        PxJointAngularLimitPair TwistLimit(-TwistRad, TwistRad, 0.05f);
+        TwistLimit.stiffness = 0.0f;
+        TwistLimit.damping = 0.0f;
+        TwistLimit.restitution = 0.0f;
+        Joint->setTwistLimit(TwistLimit);
+    }
 
     // 프로젝션 활성화 - 제한 위반 시 강제 보정
     Joint->setProjectionLinearTolerance(0.1f);
