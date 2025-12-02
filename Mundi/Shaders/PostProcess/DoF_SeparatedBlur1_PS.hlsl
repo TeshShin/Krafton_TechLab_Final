@@ -41,8 +41,18 @@ float4 mainPS(float4 position : SV_Position, float2 texcoord : TEXCOORD0) : SV_T
     // 텍스처 해상도 (ScreenSize.xy에서 가져오기)
     float2 pixelSize = 1.0 / ScreenSize.xy;
 
-    // CoC에 블러 스케일 적용 (적절한 증폭으로 보케 형성)
-    float blurScale = centerCoC * FDepthOfFieldBuffer.NearBlurScale * 8.0;
+    // CoC 텍스처에서 Near/Far 구분하여 적절한 블러 스케일 적용
+    float4 cocSample = g_CoCTexture.Sample(g_LinearSampler, texcoord);
+    float farCoC = cocSample.r;
+    float nearCoC = cocSample.g;
+
+    // Near와 Far 중 어느 것이 더 큰지 확인하여 적절한 스케일 사용
+    float blurScaleMultiplier = (nearCoC > farCoC) ? FDepthOfFieldBuffer.NearBlurScale : FDepthOfFieldBuffer.FarBlurScale;
+
+    // 블러 범위 계산: Dilated CoC 사용 (전경 블러가 배경으로 번지도록)
+    // Near 블러는 주변의 최대 CoC를 사용해야 영역이 축소되지 않음
+    float blurRadius = (nearCoC > farCoC) ? max(nearCoC, centerCoC) : centerCoC;
+    float blurScale = blurRadius * blurScaleMultiplier * 8.0;
 
     // BokehRotation 적용
     float2 rotatedDirection = RotateVector(BLUR_DIRECTION, FDepthOfFieldBuffer.BokehRotation);
@@ -72,9 +82,21 @@ float4 mainPS(float4 position : SV_Position, float2 texcoord : TEXCOORD0) : SV_T
         // smoothstep 사용으로 매우 부드러운 전환
         float hexWeight = lerp(0.6, 1.0, smoothstep(0.0, 1.0, edgeDistance));
 
-        // CoC 기반 샘플 가중치: 비슷한 CoC를 가진 샘플에 더 높은 가중치 (bleeding 방지)
+        // CoC 기반 샘플 가중치
+        // Near 블러: 전경(높은 CoC)에서 배경(낮은 CoC)으로 번져야 하므로 CoC가 작은 샘플도 포함
+        // Far 블러: 배경(높은 CoC)이 전경(낮은 CoC)으로 번지면 안 되므로 CoC 차이 체크 필요
         float cocDiff = abs(sampleCoC - centerCoC);
-        float cocWeight = saturate(1.0 - cocDiff * 3.0);
+        float cocWeight;
+        if (nearCoC > farCoC)
+        {
+            // Near 블러: sampleCoC가 centerCoC보다 작아도 허용 (전경->배경 번짐)
+            cocWeight = (sampleCoC <= centerCoC) ? 1.0 : saturate(1.0 - cocDiff * 3.0);
+        }
+        else
+        {
+            // Far 블러: 비슷한 CoC만 허용 (bleeding 방지)
+            cocWeight = saturate(1.0 - cocDiff * 3.0);
+        }
 
         // 가우시안 유사 감쇠 (라인 아티팩트 완화)
         // 중심에서 멀어질수록 부드럽게 감소

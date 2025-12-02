@@ -40,9 +40,11 @@ float4 mainPS(float4 position : SV_Position, float2 texcoord : TEXCOORD0) : SV_T
             // 거리 기반 가중치 (가까운 픽셀이 더 큰 영향)
             float weight = saturate(1.0 - distance / 3.5);
 
-            // 가중치를 적용한 최대값 찾기 (블러 영역이 주변으로 확장됨)
+            // Far CoC: 가중치를 적용한 최대값 (배경이 전경으로 번지는 것 방지)
             maxFarCoC = max(maxFarCoC, sampleCoC.r * weight);
-            maxNearCoC = max(maxNearCoC, sampleCoC.g * weight);
+
+            // Near CoC: 가중치 없이 순수 최대값 (전경이 배경으로 자유롭게 번지도록)
+            maxNearCoC = max(maxNearCoC, sampleCoC.g);
         }
     }
 
