@@ -405,9 +405,6 @@ void UEditorEngine::StartPIE()
 
     // World Settings 기반 GameMode 생성 및 모든 액터 BeginPlay 호출
     GWorld->BeginPlay();
-
-    // NOTE: BeginPlay 중에 삭제된 액터 삭제 후 Tick 시작
-    GWorld->CleanUpPendingKill();
 }
 
 void UEditorEngine::EndPIE()

@@ -713,6 +713,7 @@ void AActor::DuplicateSubObjects()
 		}
 	}
 
+	bHasBegunPlay = false;
 	LuaGameObject = nullptr;
 }
 
