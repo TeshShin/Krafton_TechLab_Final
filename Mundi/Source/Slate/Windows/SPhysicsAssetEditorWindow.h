@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 #include "SViewerWindow.h"
 #include "Source/Runtime/Engine/Viewer/ViewerState.h"
 
@@ -69,7 +69,7 @@ private:
 	void RemoveAllBodies();
 	void AutoCreateConstraints();
 
-	// 시각화 라인 재구성 (최적화된 버전)
+	// 시각화 라인 재구성
 	void RebuildBoneTMCache();          // BoneTM 캐시 갱신
 	void RebuildUnselectedBodyLines();  // 비선택 바디 라인 (초록색)
 	void RebuildSelectedBodyLines();    // 선택 바디 라인 (노란색)

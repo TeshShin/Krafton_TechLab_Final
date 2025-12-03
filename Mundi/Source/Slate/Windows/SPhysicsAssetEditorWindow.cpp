@@ -153,7 +153,22 @@ void SPhysicsAssetEditorWindow::OnUpdate(float DeltaSeconds)
 		State->LastSelectedBodyIndex = State->SelectedBodyIndex;
 	}
 
-	// Shape 라인 재생성
+	// 본 라인 재구성
+	if (State->bShowBones && State->PreviewActor && State->bBoneLinesDirty)
+	{
+		USkeletalMeshComponent* MeshComp = State->PreviewActor->GetSkeletalMeshComponent();
+		if (MeshComp && MeshComp->GetSkeletalMesh())
+		{
+			if (ULineComponent* LineComp = State->PreviewActor->GetBoneLineComponent())
+			{
+				LineComp->SetLineVisible(true);
+			}
+			State->PreviewActor->RebuildBoneLines(State->SelectedBoneIndex);
+			State->bBoneLinesDirty = false;
+		}
+	}
+
+	// Shape 라인 재생성 (바디 와이어프레임)
 	if (State->bShowBodies)
 	{
 		// 1. BoneTM 캐시 갱신 (바디 추가/삭제/메시 변경 시에만)

@@ -156,6 +156,10 @@ ViewerState* PhysicsAssetEditorBootstrap::CreateViewerState(const char* Name, UW
 			State->bBoneTMCacheDirty = true;
 			State->bAllBodyLinesDirty = true;
 			State->bSelectedBodyLineDirty = true;
+
+			// 본 라인 표시 (ViewerState에서 상속)
+			State->bShowBones = true;
+			State->bBoneLinesDirty = true;
 		}
 	}
 
