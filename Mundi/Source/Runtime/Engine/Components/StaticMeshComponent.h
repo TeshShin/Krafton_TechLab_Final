@@ -52,10 +52,10 @@ public:
 	// ====================================================================
 
 	/** 임시 디버그용 */
-	UBodySetup* BodySetup;
+	// UBodySetup* BodySetup;
 
 	/** 임시 디버그용 */
-	virtual UBodySetup* GetBodySetup() override { return BodySetup;} 
+	// virtual UBodySetup* GetBodySetup() override { return BodySetup;} 
 
 protected:
 	void OnUpdateTransform(EUpdateTransformFlags UpdateTransformFlags, ETeleportType Teleport = ETeleportType::None) override;

@@ -101,8 +101,6 @@ UVehicleMovementComponent::~UVehicleMovementComponent()
 void UVehicleMovementComponent::InitializeComponent()
 {
     Super::InitializeComponent();
-    
-    PInputData = new PxVehicleDrive4WRawInputData();
 }
 
 void UVehicleMovementComponent::BeginPlay()
@@ -115,6 +113,11 @@ void UVehicleMovementComponent::BeginPlay()
 void UVehicleMovementComponent::OnRegister(UWorld* InWorld)
 {
     Super::OnRegister(InWorld);
+    
+    if (!PInputData)
+    {
+        PInputData = new PxVehicleDrive4WRawInputData();
+    }
 }
 
 void UVehicleMovementComponent::OnUnregister()
@@ -334,10 +337,8 @@ void UVehicleMovementComponent::SetupDriveSimulationData(physx::PxRigidDynamic* 
 
 void UVehicleMovementComponent::SetupBatchQuery()
 {
-    if (SuspensionBatchQuery &&
-        BatchQueryResults    &&
-        BatchQueryTouchBuffer) { return; }
-
+    ReleaseBatchQuery();
+    
     if (!PVehicleDrive) { return; }
     
     PxScene* Scene = PVehicleDrive->getRigidDynamicActor()->getScene();

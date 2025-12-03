@@ -566,8 +566,8 @@ bool UCharacterMovementComponent::FindFloor(FFindFloorResult& OutFloorResult, fl
 		OutFloorResult.HitLocation = Hit.ImpactPoint;
 		OutFloorResult.FloorNormal = Hit.ImpactNormal;
 		OutFloorResult.FloorZ = Hit.ImpactPoint.Z;
-		OutFloorResult.HitActor = Hit.Actor;
-		OutFloorResult.HitComponent = Hit.Component;
+		OutFloorResult.HitActor = Hit.Actor.Get();
+		OutFloorResult.HitComponent = Hit.Component.Get();
 		OutFloorResult.bWalkableFloor = IsWalkable(Hit.ImpactNormal);
 
 		return true;

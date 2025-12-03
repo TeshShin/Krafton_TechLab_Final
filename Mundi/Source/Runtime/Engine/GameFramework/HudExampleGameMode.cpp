@@ -17,8 +17,8 @@
 
 AHudExampleGameMode::AHudExampleGameMode()
 {
-	// 기본 Pawn 클래스를 DancingCharacter로 설정
-	DefaultPawnClass = AVehicle::StaticClass();
+	DefaultPawnClass = ADancingCharacter::StaticClass();
+	// DefaultPawnClass = AVehicle::StaticClass();
 }
 
 // ────────────────────────────────────────────────────────────────────────────

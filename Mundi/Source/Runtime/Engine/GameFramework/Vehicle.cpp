@@ -10,29 +10,9 @@ AVehicle::AVehicle()
     FString ChassisFileName = GDataDir + "/Model/Buggy/Buggy_Chassis.obj";
     ChassisMesh->SetStaticMesh(ChassisFileName);
     SetRootComponent(ChassisMesh);
-    /** 디버그용 코드 */
-    {
-        if (ChassisMesh) { DeleteObject(ChassisMesh->BodySetup); }
-        
-        ChassisMesh->BodySetup = NewObject<UBodySetup>();
-
-        ChassisMesh->BodySetup->AggGeom.EmptyElements();
-
-        FKBoxElem BoxElem;
-
-        // @todo 하드코딩된 값 사용
-        BoxElem.X = 3.953f;
-        BoxElem.Y = 1.0f;
-        BoxElem.Z = 0.954f;
-
-        BoxElem.Center = FVector(0, 0, 0.723);
-        BoxElem.Rotation = FQuat::Identity();
-
-        ChassisMesh->BodySetup->AggGeom.BoxElems.Add(BoxElem);
-    }
     
     ChassisMesh->SetSimulatePhysics(true);
-    // ChassisMesh->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
+    ChassisMesh->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
 
     FString WheelFileName[4] = {
         "/Model/Buggy/Buggy_Wheel_LF.obj",
@@ -48,7 +28,7 @@ AVehicle::AVehicle()
         WheelMeshes[i] = CreateDefaultSubobject<UStaticMeshComponent>(WheelName);
         WheelMeshes[i]->SetupAttachment(ChassisMesh);
         WheelMeshes[i]->SetSimulatePhysics(false);
-        // WheelMeshes[i]->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+        WheelMeshes[i]->SetCollisionEnabled(ECollisionEnabled::NoCollision);
         WheelMeshes[i]->SetStaticMesh(GDataDir + WheelFileName[i]);
     }
 
