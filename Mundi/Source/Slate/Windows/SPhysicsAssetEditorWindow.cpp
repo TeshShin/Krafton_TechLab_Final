@@ -232,7 +232,7 @@ void SPhysicsAssetEditorWindow::OnMouseDown(FVector2D MousePos, uint32 Button)
 				// === 1. 컨스트레인트 피킹 (바디보다 우선) ===
 				if (PhysAsset && State->bShowConstraints && Skeleton)
 				{
-					const float ConstraintPickRadius = 0.05f;  // 피킹 반경 (미터)
+					const float ConstraintPickRadius = 0.1f;  // 피킹 반경 (미터)
 					float BestConstraintDist = FLT_MAX;
 					int32 BestConstraintIndex = -1;
 
@@ -630,10 +630,11 @@ void SPhysicsAssetEditorWindow::OnUpdate(float DeltaSeconds)
 		State->LastSelectedBodyIndex = State->SelectedBodyIndex;
 	}
 
-	// 선택 컨스트레인트 변경 감지 (전체 재생성 - 색상 변경 필요)
+	// 선택 컨스트레인트 변경 감지
 	if (State->SelectedConstraintIndex != State->LastSelectedConstraintIndex)
 	{
-		State->bAllConstraintLinesDirty = true;  // 전체 재생성으로 색상 갱신
+		State->bAllConstraintLinesDirty = true;      // 비선택 Constraint 재생성 (이전 선택 제거)
+		State->bSelectedConstraintLineDirty = true;  // 새 선택 Constraint 그리기
 		State->LastSelectedConstraintIndex = State->SelectedConstraintIndex;
 	}
 
@@ -2274,9 +2275,8 @@ void SPhysicsAssetEditorWindow::RenderConstraintDetails(UPhysicsConstraintTempla
 		ImGui::Text("Swing1 제한각:");
 		ImGui::SameLine(120.0f);
 		ImGui::SetNextItemWidth(-1);
-		if (ImGui::InputFloat("##Swing1Limit", &CI.Swing1LimitAngle, 1.0f, 10.0f, "%.1f"))
+		if (ImGui::DragFloat("##Swing1Limit", &CI.Swing1LimitAngle, 0.5f, 0.0f, 180.0f, "%.1f"))
 		{
-			CI.Swing1LimitAngle = std::clamp(CI.Swing1LimitAngle, 0.0f, 180.0f);
 			bChanged = true;
 		}
 
@@ -2284,9 +2284,8 @@ void SPhysicsAssetEditorWindow::RenderConstraintDetails(UPhysicsConstraintTempla
 		ImGui::Text("Swing2 제한각:");
 		ImGui::SameLine(120.0f);
 		ImGui::SetNextItemWidth(-1);
-		if (ImGui::InputFloat("##Swing2Limit", &CI.Swing2LimitAngle, 1.0f, 10.0f, "%.1f"))
+		if (ImGui::DragFloat("##Swing2Limit", &CI.Swing2LimitAngle, 0.5f, 0.0f, 180.0f, "%.1f"))
 		{
-			CI.Swing2LimitAngle = std::clamp(CI.Swing2LimitAngle, 0.0f, 180.0f);
 			bChanged = true;
 		}
 
@@ -2294,9 +2293,8 @@ void SPhysicsAssetEditorWindow::RenderConstraintDetails(UPhysicsConstraintTempla
 		ImGui::Text("Twist 제한각:");
 		ImGui::SameLine(120.0f);
 		ImGui::SetNextItemWidth(-1);
-		if (ImGui::InputFloat("##TwistLimit", &CI.TwistLimitAngle, 1.0f, 10.0f, "%.1f"))
+		if (ImGui::DragFloat("##TwistLimit", &CI.TwistLimitAngle, 0.5f, 0.0f, 180.0f, "%.1f"))
 		{
-			CI.TwistLimitAngle = std::clamp(CI.TwistLimitAngle, 0.0f, 180.0f);
 			bChanged = true;
 		}
 
@@ -2379,7 +2377,7 @@ void SPhysicsAssetEditorWindow::RenderConstraintDetails(UPhysicsConstraintTempla
 	if (bChanged)
 	{
 		State->bIsDirty = true;
-		State->bSelectedConstraintLineDirty = true;  // 선택된 컨스트레인트만 업데이트
+		State->bSelectedConstraintLineDirty = true;  // 선택된 Constraint만 업데이트 (최적화)
 	}
 }
 
@@ -3696,34 +3694,49 @@ static void DrawConstraintVisualization(
 	FTransform ChildBoneTM = MeshComp->GetBoneWorldTransform(ChildBoneIndex);
 	ChildBoneTM.Rotation.Normalize();
 
-	FVector Origin = ChildBoneTM.Translation;
+	// Joint Frame 위치 적용 (Frame2Loc 사용 - 자식 본 로컬 공간에서의 오프셋)
+	// 자식 본 로컬 좌표에서의 위치를 월드 좌표로 변환
+	FVector JointLocalPos = Instance.Frame2Loc;
+	FVector Origin = ChildBoneTM.Translation + ChildBoneTM.Rotation.RotateVector(JointLocalPos);
 
-	// 부모 본 방향 계산 (Twist 축)
-	FVector TwistAxis = FVector(1, 0, 0);  // 기본 X축
+	// Joint Frame 회전 적용 (Frame2Rot 사용 - 자식 본 기준)
+	// Frame2Rot는 Euler(ZYX, Degrees) 형태로 저장되어 있음
+	FQuat JointFrameRot = FQuat::MakeFromEulerZYX(Instance.Frame2Rot);
+
+	// 자식 본의 월드 회전에 Joint Frame 회전 적용
+	FQuat JointWorldRot = ChildBoneTM.Rotation * JointFrameRot;
+	JointWorldRot.Normalize();
+
+	// Joint Frame 기준 축 계산 (PhysX D6: Twist=X, Swing1=Y, Swing2=Z)
+	FVector TwistAxis = JointWorldRot.RotateVector(FVector(1, 0, 0));
+	FVector Swing1Axis = JointWorldRot.RotateVector(FVector(0, 1, 0));
+	FVector Swing2Axis = JointWorldRot.RotateVector(FVector(0, 0, 1));
+
+	// === 부모 본 공간 축 그리기 (Frame1 기준) ===
+	FQuat ParentJointFrameRot = FQuat::MakeFromEulerZYX(Instance.Frame1Rot);
 	FName ParentBoneName = Instance.ConstraintBone1;
 	auto parentIt = Skeleton->BoneNameToIndex.find(ParentBoneName.ToString());
 	if (parentIt != Skeleton->BoneNameToIndex.end())
 	{
 		int32 ParentBoneIndex = parentIt->second;
 		FTransform ParentBoneTM = MeshComp->GetBoneWorldTransform(ParentBoneIndex);
-		FVector ToChild = Origin - ParentBoneTM.Translation;
-		if (ToChild.Size() > 0.001f)
-		{
-			TwistAxis = ToChild.GetNormalized();
-		}
-	}
+		ParentBoneTM.Rotation.Normalize();
 
-	// 로컬 축 계산 (Swing1 = Y축 기반, Swing2 = Z축 기반)
-	FVector Swing1Axis, Swing2Axis;
-	if (FMath::Abs(TwistAxis.Z) < 0.999f)
-	{
-		Swing1Axis = FVector::Cross(FVector(0, 0, 1), TwistAxis).GetNormalized();
+		// 부모 본 로컬 공간에서 Joint 위치
+		FVector ParentJointPos = ParentBoneTM.Translation + ParentBoneTM.Rotation.RotateVector(Instance.Frame1Loc);
+		FQuat ParentJointWorldRot = ParentBoneTM.Rotation * ParentJointFrameRot;
+		ParentJointWorldRot.Normalize();
+
+		// 부모 Joint Frame 축
+		FVector ParentTwistAxis = ParentJointWorldRot.RotateVector(FVector(1, 0, 0));
+		FVector ParentSwing1Axis = ParentJointWorldRot.RotateVector(FVector(0, 1, 0));
+		FVector ParentSwing2Axis = ParentJointWorldRot.RotateVector(FVector(0, 0, 1));
+
+		const float AxisLength = ConeLength * 1.2f;
+		PDI->DrawLine(ParentJointPos, ParentJointPos + ParentTwistAxis * AxisLength, FLinearColor(1.0f, 0.0f, 0.0f, 1.0f));   // X축 - 빨강
+		PDI->DrawLine(ParentJointPos, ParentJointPos + ParentSwing1Axis * AxisLength, FLinearColor(0.0f, 1.0f, 0.0f, 1.0f)); // Y축 - 초록
+		PDI->DrawLine(ParentJointPos, ParentJointPos + ParentSwing2Axis * AxisLength, FLinearColor(0.0f, 0.0f, 1.0f, 1.0f)); // Z축 - 파랑
 	}
-	else
-	{
-		Swing1Axis = FVector::Cross(FVector(1, 0, 0), TwistAxis).GetNormalized();
-	}
-	Swing2Axis = FVector::Cross(TwistAxis, Swing1Axis).GetNormalized();
 
 	// === Swing 콘 그리기 ===
 	float Swing1Rad = DegreesToRadians(Instance.Swing1LimitAngle);
@@ -3843,25 +3856,24 @@ void SPhysicsAssetEditorWindow::RebuildUnselectedConstraintLines()
 	const FLinearColor SelectedSwingColor(1.0f, 0.5f, 0.0f, 1.0f);     // 주황색 (선택 Swing)
 	const FLinearColor SelectedTwistColor(0.0f, 1.0f, 1.0f, 1.0f);     // 청록색 (선택 Twist)
 
-	// 모든 Constraint 렌더링 (선택된 Constraint는 다른 색상)
+	// 비선택 Constraint만 렌더링 (선택된 Constraint는 SelectedConstraintPDI에서 별도 렌더링)
 	int32 ConstraintCount = PhysAsset->GetConstraintCount();
 	for (int32 ConstraintIdx = 0; ConstraintIdx < ConstraintCount; ++ConstraintIdx)
 	{
+		// 선택된 Constraint는 건너뛰기 (SelectedConstraintPDI에서 그림)
+		if (ConstraintIdx == State->SelectedConstraintIndex)
+			continue;
+
 		UPhysicsConstraintTemplate* Constraint = PhysAsset->ConstraintSetup[ConstraintIdx];
 		if (!Constraint) continue;
-
-		// 선택 여부에 따라 색상 선택
-		bool bSelected = (ConstraintIdx == State->SelectedConstraintIndex);
-		const FLinearColor& SwingColor = bSelected ? SelectedSwingColor : UnselectedSwingColor;
-		const FLinearColor& TwistColor = bSelected ? SelectedTwistColor : UnselectedTwistColor;
 
 		DrawConstraintVisualization(
 			State->ConstraintPDI,
 			Constraint->DefaultInstance,
 			MeshComp,
 			Skeleton,
-			SwingColor,
-			TwistColor
+			UnselectedSwingColor,
+			UnselectedTwistColor
 		);
 	}
 
@@ -3873,9 +3885,46 @@ void SPhysicsAssetEditorWindow::RebuildSelectedConstraintLines()
 	PhysicsAssetEditorState* State = GetActivePhysicsState();
 	if (!State || !State->SelectedConstraintPDI) return;
 
-	// 선택 Constraint 라인 클리어만 수행 (더 이상 오버레이 렌더링하지 않음)
-	// 선택된 Constraint는 RebuildUnselectedConstraintLines()에서 다른 색상으로 렌더링됨
+	// 선택 Constraint PDI 클리어
 	State->SelectedConstraintPDI->Clear();
+
+	// 선택된 Constraint가 있으면 그리기
+	UPhysicsAsset* PhysAsset = State->EditingPhysicsAsset;
+	if (PhysAsset && State->SelectedConstraintIndex >= 0 &&
+		State->SelectedConstraintIndex < PhysAsset->GetConstraintCount())
+	{
+		// 스켈레탈 메시 정보
+		USkeletalMeshComponent* MeshComp = nullptr;
+		USkeletalMesh* Mesh = nullptr;
+		if (State->PreviewActor)
+		{
+			MeshComp = State->PreviewActor->GetSkeletalMeshComponent();
+			if (MeshComp)
+			{
+				Mesh = MeshComp->GetSkeletalMesh();
+			}
+		}
+		const FSkeleton* Skeleton = Mesh ? Mesh->GetSkeleton() : nullptr;
+
+		if (Skeleton && MeshComp)
+		{
+			const FLinearColor SelectedSwingColor(1.0f, 0.5f, 0.0f, 1.0f);  // 주황색
+			const FLinearColor SelectedTwistColor(0.0f, 1.0f, 1.0f, 1.0f);  // 청록색
+
+			UPhysicsConstraintTemplate* Constraint = PhysAsset->ConstraintSetup[State->SelectedConstraintIndex];
+			if (Constraint)
+			{
+				DrawConstraintVisualization(
+					State->SelectedConstraintPDI,
+					Constraint->DefaultInstance,
+					MeshComp,
+					Skeleton,
+					SelectedSwingColor,
+					SelectedTwistColor
+				);
+			}
+		}
+	}
 
 	State->bSelectedConstraintLineDirty = false;
 }
