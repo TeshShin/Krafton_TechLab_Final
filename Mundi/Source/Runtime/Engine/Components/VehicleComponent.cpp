@@ -458,18 +458,19 @@ void UVehicleComponent::PostPhysicsTick(float DeltaTime)
 
 		if (UInputManager::GetInstance().IsKeyDown('W'))
 		{
+			PhysXVehicle->mDriveDynData.mUseAutoGears = true;
 			PhysXVehicle->mDriveDynData.setCurrentGear(PxVehicleGearsData::eFIRST);
 			Accel = 1.0f;
 		}
 
 		if (UInputManager::GetInstance().IsKeyDown('D'))
 		{
-			LeftSteer = 1.0f;
+			LeftSteer = 0.5f;
 		}
 
 		if (UInputManager::GetInstance().IsKeyDown('A'))
 		{
-			RightSteer = 1.0f;
+			RightSteer = 0.5f;
 		}
 
 		if (UInputManager::GetInstance().IsKeyDown('S'))

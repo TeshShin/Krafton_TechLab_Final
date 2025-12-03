@@ -18,7 +18,7 @@ AVehicleActor::AVehicleActor()
 	VehicleBodyComponent->SetStaticMesh(GDataDir + "/Model/Vehicles/SportsCar_Body.fbx");
 	VehicleBodyComponent->SetupAttachment(RootComponent);
 	VehicleBodyComponent->bIsStatic = true;
-	VehicleBodyComponent->SetRelativeLocation(FVector(2.048f, 0, -10.0f));
+	VehicleBodyComponent->SetRelativeLocation(FVector(0.2048f, 0, -1.0f));
 
 	VehicleWheelComponents.Empty();
 	for (int WheelIndex = 0; WheelIndex < VehicleComponent->VehicleData.NumWheels; WheelIndex++)
