@@ -310,10 +310,12 @@ FTransform USkeletalMeshComponent::GetBoneLocalTransform(int32 BoneIndex) const
 
 FTransform USkeletalMeshComponent::GetBoneWorldTransform(int32 BoneIndex)
 {
-    if (CurrentLocalSpacePose.Num() > BoneIndex && BoneIndex >= 0)
+    if (CurrentComponentSpacePose.Num() > BoneIndex && BoneIndex >= 0)
     {
-        // 뼈의 컴포넌트 공간 트랜스폼 * 컴포넌트의 월드 트랜스폼
-        FTransform Result = GetWorldTransform().GetWorldTransform(CurrentComponentSpacePose[BoneIndex]);
+        // RenderDebugVolume과 동일한 방식: Matrix 곱셈
+        FMatrix ComponentToWorld = GetWorldMatrix();
+        FMatrix BoneWorldMatrix = CurrentComponentSpacePose[BoneIndex].ToMatrix() * ComponentToWorld;
+        FTransform Result(BoneWorldMatrix);
 
         // TODO: Leaf 노드 본에서 Scale3D가 0이 되는 근본 원인 분석 필요
         // Scale3D가 0인 경우 (1,1,1)로 보정 (유효하지 않은 Scale 방지)
@@ -1138,10 +1140,10 @@ void USkeletalMeshComponent::RenderDebugVolume(URenderer* Renderer) const
     FVector4 DebugColor(0.0f, 1.0f, 0.0f, 0.3f); // 반투명 녹색
     FPhysicsDebugUtils::GeneratePhysicsAssetDebugMesh(PhysicsAsset, BoneTransforms, DebugColor, BodyTriBatch);
 
-    // Constraint 삼각형/라인 배치 생성
+    // Constraint 삼각형/라인 배치 생성 (DebugSelectedConstraintIndex로 선택 하이라이팅)
     FTrianglesBatch ConstraintTriBatch;
     FLinesBatch ConstraintLineBatch;
-    FPhysicsDebugUtils::GenerateConstraintsDebugMesh(PhysicsAsset, BoneTransforms, -1, ConstraintTriBatch, ConstraintLineBatch);
+    FPhysicsDebugUtils::GenerateConstraintsDebugMesh(PhysicsAsset, BoneTransforms, DebugSelectedConstraintIndex, ConstraintTriBatch, ConstraintLineBatch);
 
     // Body 삼각형 렌더링
     if (BodyTriBatch.Vertices.Num() > 0)

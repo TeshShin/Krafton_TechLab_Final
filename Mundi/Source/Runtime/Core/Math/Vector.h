@@ -1524,9 +1524,9 @@ inline FTransform FTransform::Inverse() const
 	//(SRT)^(-1) = T^(-1)R^(-1)S^(-1). Translation Factor : (0,0,0,1)*T^(-1)R^(-1)S^(-1)
 	//InvTrans = -InvScale(InvRotation(Translation))
 	FVector Rotated = InvRot.RotateVector(Translation);
-	FVector Scaled(Translation.X * InvScale.X,
-		Translation.Y * InvScale.Y,
-		Translation.Z * InvScale.Z);
+	FVector Scaled(Rotated.X * InvScale.X,
+		Rotated.Y * InvScale.Y,
+		Rotated.Z * InvScale.Z);
 	FVector InvTrans(-Scaled);
 
 	FTransform Out;

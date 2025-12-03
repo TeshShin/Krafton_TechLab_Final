@@ -80,6 +80,8 @@ private:
 	// ────────────────────────────────────────────────
 	void RepositionAnchorToPrimitive();             // 기즈모 앵커를 선택된 primitive 위치로 이동
 	void UpdatePrimitiveTransformFromGizmo();       // 기즈모에서 primitive LocalTransform 업데이트
+	void RepositionAnchorToConstraint();            // 기즈모 앵커를 선택된 constraint 위치로 이동
+	void UpdateConstraintFrameFromGizmo();          // 기즈모에서 constraint Frame 업데이트 (Alt/Shift+Alt 지원)
 
 	// ────────────────────────────────────────────────
 	// 파일 작업

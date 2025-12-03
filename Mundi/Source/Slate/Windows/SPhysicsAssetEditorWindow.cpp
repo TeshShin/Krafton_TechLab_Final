@@ -14,6 +14,7 @@
 #include "Source/Runtime/Engine/PhysicsEngine/PhysicsTypes.h"
 #include "Source/Runtime/Engine/PhysicsEngine/BodySetup.h"
 #include "Source/Runtime/Engine/PhysicsEngine/FConstraintSetup.h"
+#include "Source/Runtime/Engine/PhysicsEngine/ConstraintInstance.h"
 #include "Source/Runtime/Engine/PhysicsEngine/PhysicsDebugUtils.h"
 #include "Source/Runtime/Engine/PhysicsEngine/BodyShapeCalculator.h"
 #include "Source/Runtime/Engine/Viewer/PhysicsPickingHelper.h"
@@ -50,6 +51,50 @@
 #include "BoxActor.h"
 #include "BoxComponent.h"
 #include "PhysScene.h"
+
+// ────────────────────────────────────────────────────────────────
+// Constraint Frame 계산 헬퍼 (에디터용)
+// ────────────────────────────────────────────────────────────────
+
+/**
+ * Bone 트랜스폼을 사용하여 Constraint Frame 데이터를 계산합니다.
+ * 에디터에서 Constraint 생성 시 사용 (BodyInstance 없이)
+ */
+static void CalculateConstraintFramesFromBones(
+    FConstraintSetup& OutSetup,
+    const FTransform& ParentBoneTransform,
+    const FTransform& ChildBoneTransform)
+{
+    // 조인트 위치 = 자식 본의 월드 위치 (본의 시작점)
+    FVector JointWorldPos = ChildBoneTransform.Translation;
+
+    // ─────────────────────────────────────────────────────────────
+    // Child Frame: 원점, Identity 회전 (자식 바디 로컬 기준)
+    // ─────────────────────────────────────────────────────────────
+    OutSetup.ChildPosition = FVector::Zero();
+    OutSetup.ChildRotation = FVector::Zero();
+
+    // ─────────────────────────────────────────────────────────────
+    // Parent Frame: 조인트 위치를 부모 로컬로 변환
+    // ─────────────────────────────────────────────────────────────
+    FTransform ParentInverse = ParentBoneTransform.Inverse();
+    FVector JointInParentLocal = ParentInverse.TransformPosition(JointWorldPos);
+
+    OutSetup.ParentPosition = JointInParentLocal;
+
+    // 부모와 자식의 상대 회전 계산
+    FQuat ParentRotInv = ParentBoneTransform.Rotation.Conjugate();
+    FQuat ChildRot = ChildBoneTransform.Rotation;
+    FQuat RelativeRot = ParentRotInv * ChildRot;
+    RelativeRot.Normalize();
+
+    // Quaternion -> Euler 변환
+    FVector EulerAngles = RelativeRot.ToEulerZYXDeg();  // Roll, Pitch, Yaw in degrees
+    OutSetup.ParentRotation = EulerAngles;
+
+    // AngularRotationOffset 초기값은 Zero
+    OutSetup.AngularRotationOffset = FVector::Zero();
+}
 
 // ────────────────────────────────────────────────────────────────
 // Shape 라인 좌표 생성 헬퍼
@@ -171,395 +216,6 @@ static void GenerateCapsuleLineCoordinates(
 		OutEndPoints.Add(Top + Dir2 * Radius);
 		OutStartPoints.Add(Bottom + Dir1 * Radius);
 		OutEndPoints.Add(Bottom + Dir2 * Radius);
-	}
-}
-
-// ────────────────────────────────────────────────────────────────
-// Constraint 시각화 헬퍼 함수들
-// ────────────────────────────────────────────────────────────────
-
-/**
- * 조인트 위치에 작은 구체(Sphere) 와이어프레임 생성
- */
-static void GenerateConstraintSphereLines(
-	const FVector& Center,
-	float Radius,
-	const FVector4& Color,
-	FLinesBatch& OutBatch)
-{
-	// 3개 평면에 원 그리기
-	for (int32 j = 0; j < CircleSegments; ++j)
-	{
-		float Angle1 = (j / static_cast<float>(CircleSegments)) * 2.0f * M_PI;
-		float Angle2 = ((j + 1) / static_cast<float>(CircleSegments)) * 2.0f * M_PI;
-		float Cos1 = cos(Angle1), Sin1 = sin(Angle1);
-		float Cos2 = cos(Angle2), Sin2 = sin(Angle2);
-
-		// XY 평면
-		OutBatch.Add(Center + FVector(Cos1 * Radius, Sin1 * Radius, 0),
-		             Center + FVector(Cos2 * Radius, Sin2 * Radius, 0), Color);
-		// XZ 평면
-		OutBatch.Add(Center + FVector(Cos1 * Radius, 0, Sin1 * Radius),
-		             Center + FVector(Cos2 * Radius, 0, Sin2 * Radius), Color);
-		// YZ 평면
-		OutBatch.Add(Center + FVector(0, Cos1 * Radius, Sin1 * Radius),
-		             Center + FVector(0, Cos2 * Radius, Sin2 * Radius), Color);
-	}
-}
-
-/**
- * Swing Limit 원뿔(Cone) 시각화 생성
- * @param JointPos 조인트 위치
- * @param JointRotation 조인트 회전 (부모→자식 방향)
- * @param Swing1Limit Y축 회전 제한 (degrees)
- * @param Swing2Limit Z축 회전 제한 (degrees)
- * @param ConeLength 원뿔 길이
- */
-static void GenerateSwingConeLimitLines(
-	const FVector& JointPos,
-	const FQuat& JointRotation,
-	float Swing1Limit,
-	float Swing2Limit,
-	float ConeLength,
-	const FVector4& Color,
-	FLinesBatch& OutBatch)
-{
-	// 각도를 라디안으로 변환
-	float Swing1Rad = Swing1Limit * M_PI / 180.0f;
-	float Swing2Rad = Swing2Limit * M_PI / 180.0f;
-
-	// 원뿔 베이스 원의 점들 계산
-	TArray<FVector> ConeBasePoints;
-	ConeBasePoints.Reserve(ConeSegments);
-
-	for (int32 i = 0; i < ConeSegments; ++i)
-	{
-		float Angle = (i / static_cast<float>(ConeSegments)) * 2.0f * M_PI;
-
-		// 타원형 원뿔 (Swing1 = Y축, Swing2 = Z축)
-		float RadiusY = ConeLength * tan(Swing1Rad);
-		float RadiusZ = ConeLength * tan(Swing2Rad);
-
-		// 로컬 좌표에서 원뿔 베이스 점
-		FVector LocalPoint(
-			ConeLength,  // X축 방향이 원뿔 축
-			RadiusY * cos(Angle),
-			RadiusZ * sin(Angle)
-		);
-
-		// 월드 좌표로 변환
-		FVector WorldPoint = JointPos + JointRotation.RotateVector(LocalPoint);
-		ConeBasePoints.Add(WorldPoint);
-	}
-
-	// 원뿔 베이스 원 그리기
-	for (int32 i = 0; i < ConeSegments; ++i)
-	{
-		int32 NextIdx = (i + 1) % ConeSegments;
-		OutBatch.Add(ConeBasePoints[i], ConeBasePoints[NextIdx], Color);
-	}
-
-	// 조인트에서 원뿔 베이스까지 선 그리기 (4개 주요 방향)
-	for (int32 i = 0; i < ConeSegments; i += ConeSegments / 4)
-	{
-		OutBatch.Add(JointPos, ConeBasePoints[i], Color);
-	}
-}
-
-/**
- * Twist Limit 원호(Arc) 시각화 생성
- * @param JointPos 조인트 위치
- * @param JointRotation 조인트 회전
- * @param TwistMin 최소 회전 (degrees)
- * @param TwistMax 최대 회전 (degrees)
- * @param ArcRadius 원호 반지름
- */
-static void GenerateTwistLimitLines(
-	const FVector& JointPos,
-	const FQuat& JointRotation,
-	float TwistMin,
-	float TwistMax,
-	float ArcRadius,
-	const FVector4& Color,
-	FLinesBatch& OutBatch)
-{
-	// 각도를 라디안으로 변환
-	float TwistMinRad = TwistMin * M_PI / 180.0f;
-	float TwistMaxRad = TwistMax * M_PI / 180.0f;
-
-	// Twist 각도 범위
-	float TwistRange = TwistMaxRad - TwistMinRad;
-	int32 NumSegments = FMath::Max(4, static_cast<int32>(TwistRange / (M_PI / 8.0f)));
-
-	// X축 기준으로 YZ 평면에 원호 그리기
-	TArray<FVector> ArcPoints;
-	ArcPoints.Reserve(NumSegments + 1);
-
-	for (int32 i = 0; i <= NumSegments; ++i)
-	{
-		float T = static_cast<float>(i) / static_cast<float>(NumSegments);
-		float Angle = TwistMinRad + T * TwistRange;
-
-		// 로컬 좌표에서 원호 점 (X축이 Twist 축)
-		FVector LocalPoint(
-			0.0f,
-			ArcRadius * cos(Angle),
-			ArcRadius * sin(Angle)
-		);
-
-		// 월드 좌표로 변환
-		FVector WorldPoint = JointPos + JointRotation.RotateVector(LocalPoint);
-		ArcPoints.Add(WorldPoint);
-	}
-
-	// 원호 그리기
-	for (int32 i = 0; i < ArcPoints.Num() - 1; ++i)
-	{
-		OutBatch.Add(ArcPoints[i], ArcPoints[i + 1], Color);
-	}
-
-	// 시작/끝 라인 (조인트 중심에서)
-	if (ArcPoints.Num() >= 2)
-	{
-		OutBatch.Add(JointPos, ArcPoints[0], Color);
-		OutBatch.Add(JointPos, ArcPoints.Last(), Color);
-	}
-}
-
-/**
- * Constraint 전체 시각화 생성 (라인 기반 - 와이어프레임)
- */
-static void GenerateConstraintVisualization(
-	const FConstraintSetup& Constraint,
-	const FVector& ParentPos,
-	const FVector& ChildPos,
-	const FQuat& JointRotation,
-	bool bSelected,
-	FLinesBatch& OutBatch)
-{
-	// 색상 설정
-	FVector4 SphereColor = bSelected ? FVector4(1.0f, 1.0f, 0.0f, 1.0f) : FVector4(1.0f, 0.6f, 0.0f, 1.0f);  // 노란/주황
-	FVector4 SwingColor = bSelected ? FVector4(0.0f, 1.0f, 0.5f, 1.0f) : FVector4(0.0f, 0.8f, 0.4f, 1.0f);   // 초록 (Swing)
-	FVector4 TwistColor = bSelected ? FVector4(0.5f, 0.5f, 1.0f, 1.0f) : FVector4(0.3f, 0.3f, 0.8f, 1.0f);   // 파랑 (Twist)
-	FVector4 LineColor = bSelected ? FVector4(1.0f, 1.0f, 0.0f, 1.0f) : FVector4(1.0f, 0.5f, 0.0f, 1.0f);    // 연결선
-
-	// 조인트 위치 = 자식 본 위치
-	FVector JointPos = ChildPos;
-
-	// 1. 조인트 위치에 구체 그리기
-	float SphereRadius = bSelected ? ConstraintSphereRadius * 1.5f : ConstraintSphereRadius;
-	GenerateConstraintSphereLines(JointPos, SphereRadius, SphereColor, OutBatch);
-
-	// 2. 부모-자식 연결선
-	OutBatch.Add(ParentPos, ChildPos, LineColor);
-
-	// 3. 원뿔 길이 계산 (부모-자식 거리의 30%)
-	float Distance = (ChildPos - ParentPos).Size();
-	float ConeLength = FMath::Max(0.05f, Distance * 0.3f);
-
-	// 4. Swing Limit 원뿔 (각도가 유의미할 때만)
-	if (Constraint.Swing1LimitDegrees > 1.0f || Constraint.Swing2LimitDegrees > 1.0f)
-	{
-		GenerateSwingConeLimitLines(JointPos, JointRotation,
-			Constraint.Swing1LimitDegrees, Constraint.Swing2LimitDegrees, ConeLength, SwingColor, OutBatch);
-	}
-
-	// 5. Twist Limit 원호 (각도가 유의미할 때만, 대칭: ±TwistLimitDegrees)
-	float TwistRange = Constraint.TwistLimitDegrees * 2.0f;
-	if (TwistRange > 1.0f && TwistRange < 359.0f)
-	{
-		float ArcRadius = ConeLength * 0.5f;
-		GenerateTwistLimitLines(JointPos, JointRotation,
-			-Constraint.TwistLimitDegrees, Constraint.TwistLimitDegrees, ArcRadius, TwistColor, OutBatch);
-	}
-}
-
-// ────────────────────────────────────────────────────────────────
-// Constraint 면(삼각형) 기반 시각화 헬퍼 함수들
-// ────────────────────────────────────────────────────────────────
-
-/**
- * Swing Limit 원뿔(Cone) 면 기반 시각화 생성
- */
-static void GenerateSwingConeMesh(
-	const FVector& JointPos,
-	const FQuat& JointRotation,
-	float Swing1Limit,
-	float Swing2Limit,
-	float ConeLength,
-	const FVector4& Color,
-	TArray<FVector>& OutVertices,
-	TArray<uint32>& OutIndices,
-	TArray<FVector4>& OutColors)
-{
-	// 각도를 라디안으로 변환 (89도로 클램프하여 tan 폭발 방지)
-	float Swing1Rad = FMath::Min(Swing1Limit, 89.0f) * M_PI / 180.0f;
-	float Swing2Rad = FMath::Min(Swing2Limit, 89.0f) * M_PI / 180.0f;
-
-	// 원뿔 베이스 원의 점들 계산
-	uint32 BaseVertexIndex = static_cast<uint32>(OutVertices.size());
-
-	// 원뿔 꼭지점 (조인트 위치)
-	OutVertices.push_back(JointPos);
-	OutColors.push_back(Color);
-	uint32 ApexIndex = BaseVertexIndex;
-
-	// 원뿔 베이스 점들
-	for (int32 i = 0; i <= ConeSegments; ++i)
-	{
-		float Angle = (i / static_cast<float>(ConeSegments)) * 2.0f * M_PI;
-
-		// 타원형 원뿔 (Swing1 = Y축, Swing2 = Z축)
-		float RadiusY = ConeLength * tan(Swing1Rad);
-		float RadiusZ = ConeLength * tan(Swing2Rad);
-
-		// 로컬 좌표에서 원뿔 베이스 점
-		FVector LocalPoint(
-			ConeLength,  // X축 방향이 원뿔 축
-			RadiusY * cos(Angle),
-			RadiusZ * sin(Angle)
-		);
-
-		// 월드 좌표로 변환
-		FVector WorldPoint = JointPos + JointRotation.RotateVector(LocalPoint);
-		OutVertices.push_back(WorldPoint);
-		OutColors.push_back(Color);
-	}
-
-	// 원뿔 측면 삼각형 (꼭지점 → 베이스 원 순환)
-	for (int32 i = 0; i < ConeSegments; ++i)
-	{
-		uint32 BaseI = BaseVertexIndex + 1 + i;
-		uint32 BaseNext = BaseVertexIndex + 1 + ((i + 1) % (ConeSegments + 1));
-
-		// 삼각형: Apex → BaseI → BaseNext
-		OutIndices.push_back(ApexIndex);
-		OutIndices.push_back(BaseI);
-		OutIndices.push_back(BaseNext);
-	}
-}
-
-/**
- * Twist Limit 부채꼴(Fan) 면 기반 시각화 생성
- */
-static void GenerateTwistFanMesh(
-	const FVector& JointPos,
-	const FQuat& JointRotation,
-	float TwistMin,
-	float TwistMax,
-	float ArcRadius,
-	const FVector4& Color,
-	TArray<FVector>& OutVertices,
-	TArray<uint32>& OutIndices,
-	TArray<FVector4>& OutColors)
-{
-	// 각도를 라디안으로 변환
-	float TwistMinRad = TwistMin * M_PI / 180.0f;
-	float TwistMaxRad = TwistMax * M_PI / 180.0f;
-
-	// Twist 각도 범위
-	float TwistRange = TwistMaxRad - TwistMinRad;
-	int32 NumSegments = FMath::Max(4, static_cast<int32>(TwistRange / (M_PI / 8.0f)));
-
-	uint32 BaseVertexIndex = static_cast<uint32>(OutVertices.size());
-
-	// 중심점 (조인트 위치)
-	OutVertices.push_back(JointPos);
-	OutColors.push_back(Color);
-	uint32 CenterIndex = BaseVertexIndex;
-
-	// 원호 점들
-	for (int32 i = 0; i <= NumSegments; ++i)
-	{
-		float T = static_cast<float>(i) / static_cast<float>(NumSegments);
-		float Angle = TwistMinRad + T * TwistRange;
-
-		// 로컬 좌표에서 원호 점 (X축이 Twist 축)
-		FVector LocalPoint(
-			0.0f,
-			ArcRadius * cos(Angle),
-			ArcRadius * sin(Angle)
-		);
-
-		// 월드 좌표로 변환
-		FVector WorldPoint = JointPos + JointRotation.RotateVector(LocalPoint);
-		OutVertices.push_back(WorldPoint);
-		OutColors.push_back(Color);
-	}
-
-	// 부채꼴 삼각형들 (중심 → 원호 점들)
-	for (int32 i = 0; i < NumSegments; ++i)
-	{
-		uint32 ArcI = BaseVertexIndex + 1 + i;
-		uint32 ArcNext = BaseVertexIndex + 1 + i + 1;
-
-		// 삼각형: Center → ArcI → ArcNext
-		OutIndices.push_back(CenterIndex);
-		OutIndices.push_back(ArcI);
-		OutIndices.push_back(ArcNext);
-	}
-}
-
-/**
- * Constraint 전체 면 기반 시각화 생성
- */
-static void GenerateConstraintMeshVisualization(
-	const FConstraintSetup& Constraint,
-	const FVector& ParentPos,
-	const FVector& ChildPos,
-	const FQuat& JointRotation,
-	bool bSelected,
-	TArray<FVector>& OutVertices,
-	TArray<uint32>& OutIndices,
-	TArray<FVector4>& OutColors,
-	FLinesBatch& OutLineBatch)
-{
-	// 색상 설정 (반투명) - Unreal Engine 스타일
-	FVector4 SwingColor = bSelected
-		? FVector4(0.0f, 1.0f, 0.0f, 0.5f)   // 선택: 밝은 초록
-		: FVector4(0.0f, 0.8f, 0.0f, 0.3f);  // 기본: 초록 (30% 투명)
-	FVector4 TwistColor = bSelected
-		? FVector4(1.0f, 0.3f, 0.3f, 0.5f)   // 선택: 밝은 빨강
-		: FVector4(1.0f, 0.0f, 0.0f, 0.3f);  // 기본: 빨강 (30% 투명)
-	FVector4 LineColor = bSelected
-		? FVector4(1.0f, 1.0f, 0.0f, 1.0f)   // 선택: 노랑
-		: FVector4(1.0f, 0.5f, 0.0f, 1.0f);  // 기본: 주황
-
-	// 조인트 위치 = 자식 본 위치
-	FVector JointPos = ChildPos;
-
-	// 1. 부모-자식 연결선 (라인으로 유지)
-	OutLineBatch.Add(ParentPos, ChildPos, LineColor);
-
-	// 2. 조인트 위치에 십자 마커 (라인)
-	float MarkerSize = bSelected ? 0.03f : 0.02f;
-	FVector XAxis = JointRotation.RotateVector(FVector(1, 0, 0)) * MarkerSize;
-	FVector YAxis = JointRotation.RotateVector(FVector(0, 1, 0)) * MarkerSize;
-	FVector ZAxis = JointRotation.RotateVector(FVector(0, 0, 1)) * MarkerSize;
-	OutLineBatch.Add(JointPos - XAxis, JointPos + XAxis, FVector4(1, 0, 0, 1));  // X축: 빨강
-	OutLineBatch.Add(JointPos - YAxis, JointPos + YAxis, FVector4(0, 1, 0, 1));  // Y축: 초록
-	OutLineBatch.Add(JointPos - ZAxis, JointPos + ZAxis, FVector4(0, 0, 1, 1));  // Z축: 파랑
-
-	// 3. 원뿔 길이 계산 (부모-자식 거리 기반)
-	float Distance = (ChildPos - ParentPos).Size();
-	float ConeLength = FMath::Max(0.02f, Distance * 0.3f);  // 본 거리의 30%
-
-	// 4. Swing Limit 원뿔 면 (각도가 유의미할 때만)
-	if (Constraint.Swing1LimitDegrees > 1.0f || Constraint.Swing2LimitDegrees > 1.0f)
-	{
-		GenerateSwingConeMesh(JointPos, JointRotation,
-			Constraint.Swing1LimitDegrees, Constraint.Swing2LimitDegrees, ConeLength, SwingColor,
-			OutVertices, OutIndices, OutColors);
-	}
-
-	// 5. Twist Limit 부채꼴 면 (각도가 유의미할 때만, 대칭: ±TwistLimitDegrees)
-	float TwistRange = Constraint.TwistLimitDegrees * 2.0f;
-	if (TwistRange > 1.0f && TwistRange < 359.0f)
-	{
-		float ArcRadius = ConeLength * 0.5f;
-		GenerateTwistFanMesh(JointPos, JointRotation,
-			-Constraint.TwistLimitDegrees, Constraint.TwistLimitDegrees, ArcRadius, TwistColor,
-			OutVertices, OutIndices, OutColors);
 	}
 }
 
@@ -953,17 +609,18 @@ void SPhysicsAssetEditorWindow::OnUpdate(float DeltaSeconds)
 {
 	SViewerWindow::OnUpdate(DeltaSeconds);
 
+	PhysicsAssetEditorState* State = GetActivePhysicsState();
+
 	// 시뮬레이션 중이면 PhysScene 틱
-	PhysicsAssetEditorState* SimState = GetActivePhysicsState();
-	if (SimState && SimState->bSimulating && SimState->SimulationPhysScene)
+	if (State && State->bSimulating && State->SimulationPhysScene)
 	{
 		// PhysScene 시뮬레이션 진행
-		SimState->SimulationPhysScene->TickPhysScene(DeltaSeconds);
-		SimState->SimulationPhysScene->WaitPhysScene();
-		SimState->SimulationPhysScene->ProcessPhysScene();
+		State->SimulationPhysScene->TickPhysScene(DeltaSeconds);
+		State->SimulationPhysScene->WaitPhysScene();
+		State->SimulationPhysScene->ProcessPhysScene();
 
 		// 랙돌 본 동기화
-		USkeletalMeshComponent* MeshComp = SimState->GetPreviewMeshComponent();
+		USkeletalMeshComponent* MeshComp = State->GetPreviewMeshComponent();
 		if (MeshComp && MeshComp->IsSimulatingPhysics())
 		{
 			MeshComp->TickComponent(DeltaSeconds);
@@ -980,7 +637,6 @@ void SPhysicsAssetEditorWindow::OnUpdate(float DeltaSeconds)
 	if (ToolsWidget) ToolsWidget->Update();
 
 	// Delete 키로 선택 항목 삭제
-	PhysicsAssetEditorState* State = GetActivePhysicsState();
 	if (State && ImGui::IsKeyPressed(ImGuiKey_Delete) && !ImGui::GetIO().WantTextInput)
 	{
 		if (State->bBodySelectionMode && State->SelectedBodyIndex >= 0)
@@ -1030,6 +686,40 @@ void SPhysicsAssetEditorWindow::OnUpdate(float DeltaSeconds)
 			{
 				State->HideGizmo();
 			}
+		}
+
+		// ─────────────────────────────────────────────────
+		// 기즈모 연동: 선택된 Constraint의 Frame 편집
+		// ─────────────────────────────────────────────────
+		if (!State->bBodySelectionMode && State->SelectedConstraintIndex >= 0 && State->World)
+		{
+			AGizmoActor* Gizmo = State->World->GetGizmoActor();
+			bool bCurrentlyDragging = Gizmo && Gizmo->GetbIsDragging();
+
+			// 드래그 첫 프레임인지 확인
+			bool bIsFirstDragFrame = bCurrentlyDragging && !State->bWasConstraintGizmoDragging;
+
+			if (bIsFirstDragFrame)
+			{
+				// 첫 드래그 프레임: 앵커 위치를 constraint로 고정 (클릭 시 기즈모가 앵커를 이동시킬 수 있으므로)
+				RepositionAnchorToConstraint();
+			}
+			else if (bCurrentlyDragging)
+			{
+				// 드래그 중: 기즈모에서 constraint frame 업데이트
+				UpdateConstraintFrameFromGizmo();
+			}
+			else
+			{
+				// 드래그 중이 아니면 기즈모 앵커를 constraint 위치로 이동
+				RepositionAnchorToConstraint();
+			}
+
+			State->bWasConstraintGizmoDragging = bCurrentlyDragging;
+		}
+		else
+		{
+			State->bWasConstraintGizmoDragging = false;
 		}
 
 		// 라인 재구성이 필요한 경우 (바디/제약조건 추가/제거)
@@ -1681,10 +1371,10 @@ void SPhysicsAssetEditorWindow::RebuildShapeLines()
 	if (!State || !State->EditingAsset) return;
 
 	ULineComponent* BodyLineComp = State->BodyPreviewLineComponent;
-	ULineComponent* ConstraintLineComp = State->ConstraintPreviewLineComponent;
 
 	// ─────────────────────────────────────────────────
 	// 바디 라인 + 메쉬 재구성
+	// (Constraint 시각화는 SkeletalMeshComponent::RenderDebugVolume에서 처리)
 	// ─────────────────────────────────────────────────
 	State->BodyLinesBatch.Clear();
 	State->BodyLineRanges.Empty();
@@ -1789,106 +1479,20 @@ void SPhysicsAssetEditorWindow::RebuildShapeLines()
 	}
 
 	// ─────────────────────────────────────────────────
-	// 제약 조건 시각화 재구성 (면 기반 + 라인)
+	// 제약 조건 시각화는 SkeletalMeshComponent::RenderDebugVolume에서 처리
+	// 여기서는 PhysicsAsset과 선택 인덱스만 설정
 	// ─────────────────────────────────────────────────
-	State->ConstraintLinesBatch.Clear();
-
-	// 제약조건 메시 컴포넌트 생성/초기화
-	if (!State->ConstraintMeshComponent)
+	if (MeshComp)
 	{
-		State->ConstraintMeshComponent = NewObject<UTriangleMeshComponent>();
-		State->ConstraintMeshComponent->SetMeshVisible(State->bShowConstraints);
-		State->ConstraintMeshComponent->SetAlwaysOnTop(true);  // 편집을 위해 항상 위에 표시
-
-		if (State->PreviewActor)
+		// PhysicsAsset 연결 (RenderDebugVolume에서 시각화)
+		if (MeshComp->GetPhysicsAsset() != State->EditingAsset)
 		{
-			State->PreviewActor->AddOwnedComponent(State->ConstraintMeshComponent);
-			State->ConstraintMeshComponent->RegisterComponent(State->World);
-		}
-	}
-
-	// 제약조건 메시 데이터 (모든 제약조건을 하나의 배치로)
-	FTrianglesBatch ConstraintMeshBatch;
-
-	// 예상 크기 예약
-	int32 NumConstraints = static_cast<int32>(State->EditingAsset->ConstraintSetups.size());
-	State->ConstraintLinesBatch.Reserve(NumConstraints * 10);  // 연결선 + 축 마커
-	ConstraintMeshBatch.Reserve(NumConstraints * 50, NumConstraints * 100);  // 원뿔 + 부채꼴
-
-	for (int32 i = 0; i < NumConstraints; ++i)
-	{
-		const FConstraintSetup& Constraint = State->EditingAsset->ConstraintSetups[i];
-		if (Constraint.ParentBodyIndex < 0 || Constraint.ChildBodyIndex < 0) continue;
-		if (Constraint.ParentBodyIndex >= static_cast<int32>(State->EditingAsset->BodySetups.size())) continue;
-		if (Constraint.ChildBodyIndex >= static_cast<int32>(State->EditingAsset->BodySetups.size())) continue;
-
-		UBodySetup* ParentBody = State->EditingAsset->BodySetups[Constraint.ParentBodyIndex];
-		UBodySetup* ChildBody = State->EditingAsset->BodySetups[Constraint.ChildBodyIndex];
-		if (!ParentBody || !ChildBody) continue;
-
-		FVector ParentPos = FVector::Zero();
-		FVector ChildPos = FVector::Zero();
-		FQuat JointRotation = FQuat::Identity();
-
-		if (MeshComp)
-		{
-			FTransform ParentTransform = MeshComp->GetBoneWorldTransform(ParentBody->BoneIndex);
-			FTransform ChildTransform = MeshComp->GetBoneWorldTransform(ChildBody->BoneIndex);
-
-			ParentPos = ParentTransform.Translation;
-			ChildPos = ChildTransform.Translation;
-
-			// 조인트 회전 계산: 부모→자식 방향을 X축으로
-			FVector Direction = (ChildPos - ParentPos);
-			if (Direction.SizeSquared() > KINDA_SMALL_NUMBER)
-			{
-				Direction = Direction.GetNormalized();
-				// 기본 X축(1,0,0)을 Direction으로 회전하는 쿼터니언 계산
-				FVector From(1.0f, 0.0f, 0.0f);
-				FVector To = Direction;
-				float Dot = FVector::Dot(From, To);
-
-				if (Dot > 0.9999f)
-				{
-					JointRotation = FQuat::Identity();
-				}
-				else if (Dot < -0.9999f)
-				{
-					// 반대 방향: Y축 기준 180도 회전
-					JointRotation = FQuat(0.0f, 1.0f, 0.0f, 0.0f);
-				}
-				else
-				{
-					FVector Cross = FVector::Cross(From, To);
-					JointRotation = FQuat(Cross.X, Cross.Y, Cross.Z, 1.0f + Dot);
-					JointRotation.Normalize();
-				}
-			}
+			MeshComp->SetPhysicsAsset(State->EditingAsset);
 		}
 
-		bool bSelected = (!State->bBodySelectionMode && State->SelectedConstraintIndex == i);
-
-		// 면 기반 시각화 사용
-		GenerateConstraintMeshVisualization(
-			Constraint, ParentPos, ChildPos, JointRotation, bSelected,
-			ConstraintMeshBatch.Vertices,
-			ConstraintMeshBatch.Indices,
-			ConstraintMeshBatch.Colors,
-			State->ConstraintLinesBatch);
-	}
-
-	// 제약조건 메시 컴포넌트에 데이터 설정
-	if (State->ConstraintMeshComponent)
-	{
-		State->ConstraintMeshComponent->SetMesh(ConstraintMeshBatch);
-	}
-
-	// ULineComponent에 라인 배치 데이터 설정 (연결선 + 축 마커만)
-	if (ConstraintLineComp)
-	{
-		ConstraintLineComp->ClearLines();  // 기존 ULine 정리
-		ConstraintLineComp->SetDirectBatch(State->ConstraintLinesBatch);
-		ConstraintLineComp->SetLineVisible(State->bShowConstraints);
+		// 선택된 Constraint 인덱스 설정 (선택 하이라이팅용)
+		int32 SelectedIdx = (!State->bBodySelectionMode) ? State->SelectedConstraintIndex : -1;
+		MeshComp->DebugSelectedConstraintIndex = SelectedIdx;
 	}
 }
 
@@ -1957,11 +1561,8 @@ void SPhysicsAssetEditorWindow::UpdateSelectionColors()
 
 	const FVector4 SelectedColor(0.0f, 1.0f, 0.0f, 1.0f);   // 녹색
 	const FVector4 NormalColor(0.0f, 0.5f, 1.0f, 1.0f);     // 파랑
-	const FVector4 SelectedConstraintColor(1.0f, 1.0f, 0.0f, 1.0f);  // 노랑
-	const FVector4 NormalConstraintColor(1.0f, 0.5f, 0.0f, 1.0f);    // 주황
 
 	bool bBodyBatchDirty = false;
-	bool bConstraintBatchDirty = false;
 
 	// 헬퍼 람다: 특정 바디의 라인 및 메시 색상 업데이트
 	auto UpdateBodyColor = [&](int32 BodyIndex, const FVector4& LineColor, const FVector4& MeshColor)
@@ -1998,16 +1599,6 @@ void SPhysicsAssetEditorWindow::UpdateSelectionColors()
 		}
 	};
 
-	// 헬퍼 람다: 특정 제약조건의 라인 색상 업데이트 (FLinesBatch 기반)
-	auto UpdateConstraintColor = [&](int32 ConstraintIndex, const FVector4& Color)
-	{
-		if (ConstraintIndex >= 0 && ConstraintIndex < State->ConstraintLinesBatch.Num())
-		{
-			State->ConstraintLinesBatch.SetColor(ConstraintIndex, Color);
-			bConstraintBatchDirty = true;
-		}
-	};
-
 	// 바디 선택 변경 처리 (이전 선택 → 비선택, 새 선택 → 선택)
 	if (State->CachedSelectedBodyIndex != State->SelectedBodyIndex)
 	{
@@ -2023,27 +1614,22 @@ void SPhysicsAssetEditorWindow::UpdateSelectionColors()
 		}
 	}
 
-	// 제약조건 선택 변경 처리
+	// 제약조건 선택 변경 처리 (SkeletalMeshComponent의 DebugSelectedConstraintIndex로 처리)
 	if (State->CachedSelectedConstraintIndex != State->SelectedConstraintIndex)
 	{
-		// 이전에 선택된 제약조건을 일반 색상으로
-		UpdateConstraintColor(State->CachedSelectedConstraintIndex, NormalConstraintColor);
-
-		// 새로 선택된 제약조건을 선택 색상으로 (제약조건 선택 모드일 때만)
-		if (!State->bBodySelectionMode)
+		USkeletalMeshComponent* MeshComp = State->GetPreviewMeshComponent();
+		if (MeshComp)
 		{
-			UpdateConstraintColor(State->SelectedConstraintIndex, SelectedConstraintColor);
+			// 제약조건 모드일 때만 선택 인덱스 설정
+			int32 SelectedIdx = (!State->bBodySelectionMode) ? State->SelectedConstraintIndex : -1;
+			MeshComp->DebugSelectedConstraintIndex = SelectedIdx;
 		}
 	}
 
-	// ULineComponent에 갱신된 배치 데이터 재설정
+	// ULineComponent에 갱신된 배치 데이터 재설정 (바디만)
 	if (bBodyBatchDirty && State->BodyPreviewLineComponent)
 	{
 		State->BodyPreviewLineComponent->SetDirectBatch(State->BodyLinesBatch);
-	}
-	if (bConstraintBatchDirty && State->ConstraintPreviewLineComponent)
-	{
-		State->ConstraintPreviewLineComponent->SetDirectBatch(State->ConstraintLinesBatch);
 	}
 }
 
@@ -2159,6 +1745,12 @@ void SPhysicsAssetEditorWindow::LoadPhysicsAsset()
 						State->CurrentMesh = Mesh;
 						State->LoadedMeshPath = LoadedAsset->SkeletalMeshPath;
 						State->RequestLinesRebuild();
+
+						// Physics Debug를 항상 렌더링하도록 플래그 설정 (에디터용)
+						if (USkeletalMeshComponent* MeshComp = State->GetPreviewMeshComponent())
+						{
+							MeshComp->bAlwaysRenderPhysicsDebug = true;
+						}
 					}
 				}
 
@@ -2214,6 +1806,12 @@ void SPhysicsAssetEditorWindow::LoadMeshAndResetPhysics(PhysicsAssetEditorState*
 		State->PreviewActor->SetSkeletalMesh(MeshPath);
 		State->CurrentMesh = Mesh;
 		State->LoadedMeshPath = MeshPath;
+
+		// Physics Debug를 항상 렌더링하도록 플래그 설정 (에디터용)
+		if (USkeletalMeshComponent* MeshComp = State->GetPreviewMeshComponent())
+		{
+			MeshComp->bAlwaysRenderPhysicsDebug = true;
+		}
 
 		// 새 Physics Asset 생성 (기존 캐시된 에셋 수정하지 않음)
 		State->EditingAsset = NewObject<UPhysicsAsset>();
@@ -2272,7 +1870,6 @@ void SPhysicsAssetEditorWindow::AutoGenerateBodies(EAggCollisionShape PrimitiveT
 	Asset->ClearAll();
 	State->BodyLinesBatch.Clear();
 	State->BodyLineRanges.Empty();
-	State->ConstraintLinesBatch.Clear();
 	State->CachedSelectedBodyIndex = -1;
 	State->CachedSelectedConstraintIndex = -1;
 
@@ -2497,7 +2094,19 @@ void SPhysicsAssetEditorWindow::AddBodyToBone(int32 BoneIndex, EAggCollisionShap
 				// 자동으로 제약 조건 생성
 				char JointNameBuf[128];
 				sprintf_s(JointNameBuf, "Joint_%s", BoneName.ToString().c_str());
-				State->EditingAsset->AddConstraint(FName(JointNameBuf), ParentBodyIndex, NewBodyIndex);
+				int32 ConstraintIndex = State->EditingAsset->AddConstraint(FName(JointNameBuf), ParentBodyIndex, NewBodyIndex);
+
+				// Constraint Frame 자동 계산
+				if (ConstraintIndex >= 0)
+				{
+					FTransform ParentBoneTransform = MeshComp->GetBoneWorldTransform(ParentBoneIndex);
+					FTransform ChildBoneTransform = MeshComp->GetBoneWorldTransform(BoneIndex);
+					CalculateConstraintFramesFromBones(
+						State->EditingAsset->ConstraintSetups[ConstraintIndex],
+						ParentBoneTransform,
+						ChildBoneTransform
+					);
+				}
 			}
 		}
 
@@ -2533,6 +2142,27 @@ void SPhysicsAssetEditorWindow::AddConstraintBetweenBodies(int32 ParentBodyIndex
 
 	if (NewIndex >= 0)
 	{
+		// Constraint Frame 자동 계산
+		USkeletalMeshComponent* MeshComp = State->GetPreviewMeshComponent();
+		if (MeshComp &&
+		    ParentBodyIndex >= 0 && ParentBodyIndex < static_cast<int32>(State->EditingAsset->BodySetups.size()) &&
+		    ChildBodyIndex >= 0 && ChildBodyIndex < static_cast<int32>(State->EditingAsset->BodySetups.size()))
+		{
+			UBodySetup* ParentBody = State->EditingAsset->BodySetups[ParentBodyIndex];
+			UBodySetup* ChildBody = State->EditingAsset->BodySetups[ChildBodyIndex];
+
+			if (ParentBody && ChildBody)
+			{
+				FTransform ParentBoneTransform = MeshComp->GetBoneWorldTransform(ParentBody->BoneIndex);
+				FTransform ChildBoneTransform = MeshComp->GetBoneWorldTransform(ChildBody->BoneIndex);
+				CalculateConstraintFramesFromBones(
+					State->EditingAsset->ConstraintSetups[NewIndex],
+					ParentBoneTransform,
+					ChildBoneTransform
+				);
+			}
+		}
+
 		State->SelectConstraint(NewIndex);
 		State->bIsDirty = true;
 		State->RequestLinesRebuild();
@@ -3159,6 +2789,306 @@ void SPhysicsAssetEditorWindow::UpdatePrimitiveTransformFromGizmo()
 	{
 		State->bIsDirty = true;
 		State->RequestSelectedBodyLinesUpdate();  // 라인 좌표 업데이트 (색상/개수 유지)
+	}
+}
+
+void SPhysicsAssetEditorWindow::RepositionAnchorToConstraint()
+{
+	PhysicsAssetEditorState* State = GetActivePhysicsState();
+	if (!State || !State->EditingAsset || !State->PreviewActor || !State->World)
+		return;
+
+	int32 ConstraintIndex = State->SelectedConstraintIndex;
+	if (ConstraintIndex < 0 || ConstraintIndex >= static_cast<int32>(State->EditingAsset->ConstraintSetups.size()))
+		return;
+
+	const FConstraintSetup& Constraint = State->EditingAsset->ConstraintSetups[ConstraintIndex];
+	if (Constraint.ParentBodyIndex < 0 || Constraint.ParentBodyIndex >= static_cast<int32>(State->EditingAsset->BodySetups.size()))
+		return;
+	if (Constraint.ChildBodyIndex < 0 || Constraint.ChildBodyIndex >= static_cast<int32>(State->EditingAsset->BodySetups.size()))
+		return;
+
+	ASkeletalMeshActor* SkelActor = State->GetPreviewSkeletalActor();
+	if (!SkelActor) return;
+
+	SkelActor->EnsureViewerComponents();
+
+	USkeletalMeshComponent* MeshComp = State->GetPreviewMeshComponent();
+	USceneComponent* Anchor = SkelActor->GetBoneGizmoAnchor();
+
+	if (!MeshComp || !Anchor) return;
+
+	UBodySetup* ParentBody = State->EditingAsset->BodySetups[Constraint.ParentBodyIndex];
+	UBodySetup* ChildBody = State->EditingAsset->BodySetups[Constraint.ChildBodyIndex];
+	if (!ParentBody || !ChildBody) return;
+
+	// Modifier 키 확인: Shift+Alt = Child 기준, 그 외 = Parent 기준
+	ImGuiIO& io = ImGui::GetIO();
+	bool bAltPressed = io.KeyAlt;
+	bool bShiftPressed = io.KeyShift;
+	bool bUseChildFrame = (bAltPressed && bShiftPressed);  // Shift+Alt만 Child 기준
+
+	FVector JointWorldPos;
+	FQuat JointWorldRot;
+
+	if (bUseChildFrame)
+	{
+		// Child 기준
+		FTransform ChildBoneTransform = MeshComp->GetBoneWorldTransform(ChildBody->BoneIndex);
+		JointWorldPos = ChildBoneTransform.TransformPosition(Constraint.ChildPosition);
+		FQuat ChildRotQuat = FQuat::MakeFromEulerZYX(Constraint.ChildRotation);
+		JointWorldRot = ChildBoneTransform.Rotation * ChildRotQuat;
+	}
+	else
+	{
+		// Parent 기준 (기본)
+		FTransform ParentBoneTransform = MeshComp->GetBoneWorldTransform(ParentBody->BoneIndex);
+		JointWorldPos = ParentBoneTransform.TransformPosition(Constraint.ParentPosition);
+		FQuat ParentRotQuat = FQuat::MakeFromEulerZYX(Constraint.ParentRotation);
+		JointWorldRot = ParentBoneTransform.Rotation * ParentRotQuat;
+	}
+
+	JointWorldRot.Normalize();
+
+	// NaN 체크 - 잘못된 값이면 본 회전 사용
+	if (std::isnan(JointWorldRot.W) || std::isnan(JointWorldRot.X) ||
+	    std::isnan(JointWorldRot.Y) || std::isnan(JointWorldRot.Z))
+	{
+		FTransform FallbackTransform = MeshComp->GetBoneWorldTransform(ParentBody->BoneIndex);
+		JointWorldRot = FallbackTransform.Rotation;
+	}
+
+	// 앵커를 constraint의 월드 위치로 이동
+	Anchor->SetWorldLocation(JointWorldPos);
+	Anchor->SetWorldRotation(JointWorldRot);
+
+	// 앵커 편집 가능 상태로 설정
+	if (UBoneAnchorComponent* BoneAnchor = Cast<UBoneAnchorComponent>(Anchor))
+	{
+		BoneAnchor->SetSuppressWriteback(true);  // 본 수정 방지
+		BoneAnchor->SetEditability(true);
+		BoneAnchor->SetVisibility(true);
+	}
+
+	// SelectionManager에 앵커 등록 (기즈모가 앵커에 연결됨)
+	USelectionManager* SelectionManager = State->World->GetSelectionManager();
+	if (SelectionManager)
+	{
+		SelectionManager->SelectActor(State->PreviewActor);
+		SelectionManager->SelectComponent(Anchor);
+	}
+}
+
+void SPhysicsAssetEditorWindow::UpdateConstraintFrameFromGizmo()
+{
+	PhysicsAssetEditorState* State = GetActivePhysicsState();
+	if (!State || !State->EditingAsset || !State->PreviewActor || !State->World)
+		return;
+
+	int32 ConstraintIndex = State->SelectedConstraintIndex;
+	if (ConstraintIndex < 0 || ConstraintIndex >= static_cast<int32>(State->EditingAsset->ConstraintSetups.size()))
+		return;
+
+	FConstraintSetup& Constraint = State->EditingAsset->ConstraintSetups[ConstraintIndex];
+	if (Constraint.ParentBodyIndex < 0 || Constraint.ChildBodyIndex < 0)
+		return;
+	if (Constraint.ParentBodyIndex >= static_cast<int32>(State->EditingAsset->BodySetups.size()))
+		return;
+	if (Constraint.ChildBodyIndex >= static_cast<int32>(State->EditingAsset->BodySetups.size()))
+		return;
+
+	ASkeletalMeshActor* SkelActor = State->GetPreviewSkeletalActor();
+	if (!SkelActor) return;
+
+	USkeletalMeshComponent* MeshComp = State->GetPreviewMeshComponent();
+	USceneComponent* Anchor = SkelActor->GetBoneGizmoAnchor();
+	AGizmoActor* Gizmo = State->World->GetGizmoActor();
+
+	if (!MeshComp || !Anchor || !Gizmo) return;
+
+	UBodySetup* ParentBody = State->EditingAsset->BodySetups[Constraint.ParentBodyIndex];
+	UBodySetup* ChildBody = State->EditingAsset->BodySetups[Constraint.ChildBodyIndex];
+	if (!ParentBody || !ChildBody) return;
+
+	// 기즈모 모드 확인
+	EGizmoMode CurrentGizmoMode = Gizmo->GetGizmoMode();
+
+	// 앵커의 현재 월드 트랜스폼 (기즈모로 이동됨)
+	const FTransform& AnchorWorldTransform = Anchor->GetWorldTransform();
+
+	// 본 트랜스폼 가져오기
+	FTransform ParentBoneTransform = MeshComp->GetBoneWorldTransform(ParentBody->BoneIndex);
+	FTransform ChildBoneTransform = MeshComp->GetBoneWorldTransform(ChildBody->BoneIndex);
+
+	// Modifier 키 확인: Alt = Parent, Shift+Alt = Child, 없음 = 둘 다
+	ImGuiIO& io = ImGui::GetIO();
+	bool bAltPressed = io.KeyAlt;
+	bool bShiftPressed = io.KeyShift;
+
+	bool bUpdateParent = !bShiftPressed || !bAltPressed;  // Alt만 눌리면 Parent만, 아니면 둘다
+	bool bUpdateChild = bShiftPressed || !bAltPressed;    // Shift+Alt면 Child만, 아니면 둘다
+
+	// Alt만 누름 -> Parent만
+	// Shift+Alt 누름 -> Child만
+	// 아무것도 안누름 -> 둘 다
+	if (bAltPressed && !bShiftPressed)
+	{
+		bUpdateParent = true;
+		bUpdateChild = false;
+	}
+	else if (bAltPressed && bShiftPressed)
+	{
+		bUpdateParent = false;
+		bUpdateChild = true;
+	}
+	else
+	{
+		bUpdateParent = true;
+		bUpdateChild = true;
+	}
+
+	bool bChanged = false;
+
+	switch (CurrentGizmoMode)
+	{
+	case EGizmoMode::Translate:
+		{
+			// 새 조인트 월드 위치 (앵커는 항상 Parent 기준)
+			FVector NewJointWorldPos = AnchorWorldTransform.Translation;
+
+			// 기존 Parent 월드 위치 계산 (델타 계산용)
+			FVector OldParentWorldPos = ParentBoneTransform.TransformPosition(Constraint.ParentPosition);
+			FVector WorldDelta = NewJointWorldPos - OldParentWorldPos;
+
+			if (bUpdateParent && bUpdateChild)
+			{
+				// 일반 모드: 델타를 양쪽에 적용 (상대 위치 유지)
+				if (WorldDelta.SizeSquared() > 0.0001f)
+				{
+					// Parent 업데이트
+					FTransform ParentInverse = ParentBoneTransform.Inverse();
+					FVector NewParentPos = ParentInverse.TransformPosition(NewJointWorldPos);
+					Constraint.ParentPosition = NewParentPos;
+
+					// Child도 같은 월드 델타만큼 이동
+					FVector OldChildWorldPos = ChildBoneTransform.TransformPosition(Constraint.ChildPosition);
+					FVector NewChildWorldPos = OldChildWorldPos + WorldDelta;
+					FTransform ChildInverse = ChildBoneTransform.Inverse();
+					FVector NewChildPos = ChildInverse.TransformPosition(NewChildWorldPos);
+					Constraint.ChildPosition = NewChildPos;
+
+					bChanged = true;
+				}
+			}
+			else if (bUpdateChild)
+			{
+				// Child만 업데이트 (Shift+Alt)
+				FTransform ChildInverse = ChildBoneTransform.Inverse();
+				FVector NewChildPos = ChildInverse.TransformPosition(NewJointWorldPos);
+				if ((NewChildPos - Constraint.ChildPosition).SizeSquared() > 0.0001f)
+				{
+					Constraint.ChildPosition = NewChildPos;
+					bChanged = true;
+				}
+			}
+			else if (bUpdateParent)
+			{
+				// Parent만 업데이트 (Alt)
+				FTransform ParentInverse = ParentBoneTransform.Inverse();
+				FVector NewParentPos = ParentInverse.TransformPosition(NewJointWorldPos);
+				if ((NewParentPos - Constraint.ParentPosition).SizeSquared() > 0.0001f)
+				{
+					Constraint.ParentPosition = NewParentPos;
+					bChanged = true;
+				}
+			}
+		}
+		break;
+
+	case EGizmoMode::Rotate:
+		{
+			// 새 조인트 월드 회전 (앵커는 항상 Parent 기준)
+			FQuat NewJointWorldRot = AnchorWorldTransform.Rotation;
+
+			// 기존 Parent 월드 회전 계산 (델타 계산용)
+			FQuat OldParentLocalRot = FQuat::MakeFromEulerZYX(Constraint.ParentRotation);
+			FQuat OldParentWorldRot = ParentBoneTransform.Rotation * OldParentLocalRot;
+			OldParentWorldRot.Normalize();
+
+			// 회전 델타: NewWorldRot = Delta * OldWorldRot -> Delta = NewWorldRot * OldWorldRot^-1
+			FQuat WorldRotDelta = NewJointWorldRot * OldParentWorldRot.Conjugate();
+			WorldRotDelta.Normalize();
+
+			if (bUpdateParent && bUpdateChild)
+			{
+				// 일반 모드: 델타를 양쪽에 적용 (상대 회전 유지)
+				// 델타가 의미 있는지 체크 (거의 identity가 아닌 경우)
+				float AngleDiff = 2.0f * std::acos(std::abs(WorldRotDelta.W)) * 57.2958f; // degrees
+				if (AngleDiff > 0.1f)
+				{
+					// Parent 업데이트
+					FQuat ParentBoneRotInv = ParentBoneTransform.Rotation.Conjugate();
+					FQuat NewParentRot = ParentBoneRotInv * NewJointWorldRot;
+					NewParentRot.Normalize();
+					Constraint.ParentRotation = NewParentRot.ToEulerZYXDeg();
+
+					// Child도 같은 월드 델타만큼 회전
+					FQuat OldChildLocalRot = FQuat::MakeFromEulerZYX(Constraint.ChildRotation);
+					FQuat OldChildWorldRot = ChildBoneTransform.Rotation * OldChildLocalRot;
+					FQuat NewChildWorldRot = WorldRotDelta * OldChildWorldRot;
+					NewChildWorldRot.Normalize();
+
+					FQuat ChildBoneRotInv = ChildBoneTransform.Rotation.Conjugate();
+					FQuat NewChildRot = ChildBoneRotInv * NewChildWorldRot;
+					NewChildRot.Normalize();
+					Constraint.ChildRotation = NewChildRot.ToEulerZYXDeg();
+
+					bChanged = true;
+				}
+			}
+			else if (bUpdateChild)
+			{
+				// Child만 업데이트 (Shift+Alt)
+				FQuat ChildBoneRotInv = ChildBoneTransform.Rotation.Conjugate();
+				FQuat NewChildRot = ChildBoneRotInv * NewJointWorldRot;
+				NewChildRot.Normalize();
+				FVector NewChildEuler = NewChildRot.ToEulerZYXDeg();
+
+				if ((NewChildEuler - Constraint.ChildRotation).SizeSquared() > 0.01f)
+				{
+					Constraint.ChildRotation = NewChildEuler;
+					bChanged = true;
+				}
+			}
+			else if (bUpdateParent)
+			{
+				// Parent만 업데이트 (Alt)
+				FQuat ParentBoneRotInv = ParentBoneTransform.Rotation.Conjugate();
+				FQuat NewParentRot = ParentBoneRotInv * NewJointWorldRot;
+				NewParentRot.Normalize();
+				FVector NewParentEuler = NewParentRot.ToEulerZYXDeg();
+
+				if ((NewParentEuler - Constraint.ParentRotation).SizeSquared() > 0.01f)
+				{
+					Constraint.ParentRotation = NewParentEuler;
+					bChanged = true;
+				}
+			}
+		}
+		break;
+
+	case EGizmoMode::Scale:
+		// Scale은 Constraint에서 사용하지 않음
+		break;
+
+	default:
+		return;
+	}
+
+	if (bChanged)
+	{
+		State->bIsDirty = true;
+		State->RequestLinesRebuild();  // Constraint 시각화 재구성
 	}
 }
 

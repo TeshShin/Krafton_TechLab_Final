@@ -69,6 +69,40 @@ public:
      */
     void LogCurrentAngles(const FName& JointName) const;
 
+    /**
+     * 본 위치 기반으로 Frame 데이터를 계산하여 Setup에 저장합니다.
+     * 새 제약 조건 생성 시 호출
+     * @param OutSetup      계산된 Frame 데이터가 저장될 Setup
+     * @param ParentBody    부모 바디 인스턴스
+     * @param ChildBody     자식 바디 인스턴스
+     */
+    static void CalculateFramesFromBones(
+        FConstraintSetup& OutSetup,
+        FBodyInstance* ParentBody,
+        FBodyInstance* ChildBody
+    );
+
+private:
+    /**
+     * Position + Rotation(Euler) → PxTransform 변환
+     * @param Position          위치
+     * @param RotationDegrees   회전 (Roll, Pitch, Yaw in degrees)
+     */
+    static PxTransform ConvertToPxTransform(
+        const FVector& Position,
+        const FVector& RotationDegrees
+    );
+
+    /**
+     * AngularRotationOffset 적용
+     * @param BaseRotation      기본 회전
+     * @param OffsetDegrees     오프셋 (Roll, Pitch, Yaw in degrees)
+     */
+    static PxQuat ApplyAngularOffset(
+        const PxQuat& BaseRotation,
+        const FVector& OffsetDegrees
+    );
+
 private:
     /**
      * PxD6Joint 모션 설정 (BallAndSocket, Hinge 등)

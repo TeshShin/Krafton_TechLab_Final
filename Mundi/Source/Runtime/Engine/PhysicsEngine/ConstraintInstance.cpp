@@ -55,33 +55,14 @@ void FConstraintInstance::InitConstraint(
         return;
     }
 
-    // 로컬 프레임 계산
-    // 핵심: 초기 상태에서 두 프레임이 일치해야 초기 각도가 0이 됨
-    PxTransform ParentLocalFrame = PxTransform(PxIdentity);
-    PxTransform ChildLocalFrame = PxTransform(PxIdentity);
+    // 저장된 Frame 데이터를 사용하여 로컬 프레임 생성
+    PxTransform ChildLocalFrame = ConvertToPxTransform(Setup.ChildPosition, Setup.ChildRotation);
+    PxTransform ParentLocalFrame = ConvertToPxTransform(Setup.ParentPosition, Setup.ParentRotation);
 
-    if (ParentActor && ChildActor)
+    // AngularRotationOffset 적용 (Parent Frame에만)
+    if (!Setup.AngularRotationOffset.IsZero())
     {
-        // 두 바디의 월드 트랜스폼 가져오기
-        PxTransform ParentWorldPose = ParentActor->getGlobalPose();
-        PxTransform ChildWorldPose = ChildActor->getGlobalPose();
-
-        // 조인트 위치 = 자식 바디의 월드 위치 (본의 시작점)
-        PxVec3 JointWorldPos = ChildWorldPose.p;
-
-        // 부모 로컬 프레임: 조인트 위치를 부모 로컬로 변환, 회전은 부모 기준 Identity
-        PxTransform ParentWorldInv = ParentWorldPose.getInverse();
-        PxVec3 JointInParentLocal = ParentWorldInv.transform(JointWorldPos);
-
-        // 부모와 자식의 상대 회전 계산
-        PxQuat RelativeRot = ParentWorldPose.q.getConjugate() * ChildWorldPose.q;
-
-        // 부모 프레임: 위치는 조인트 위치, 회전은 상대 회전
-        ParentLocalFrame = PxTransform(JointInParentLocal, RelativeRot);
-
-        // 자식 프레임: 원점, Identity 회전
-        // 이렇게 하면 초기 상태에서 두 프레임이 월드에서 일치함 -> 초기 각도 = 0
-        ChildLocalFrame = PxTransform(PxIdentity);
+        ParentLocalFrame.q = ApplyAngularOffset(ParentLocalFrame.q, Setup.AngularRotationOffset);
     }
 
     // PxD6Joint 생성
@@ -286,4 +267,139 @@ void FConstraintInstance::LogCurrentAngles(const FName& JointName) const
 
     UE_LOG("[Joint] %s: Twist=%.1f, Swing1=%.1f, Swing2=%.1f (deg)",
         JointName.ToString().c_str(), Twist, Swing1, Swing2);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Static Helper Functions
+// ─────────────────────────────────────────────────────────────────────────────
+
+PxTransform FConstraintInstance::ConvertToPxTransform(
+    const FVector& Position,
+    const FVector& RotationDegrees)
+{
+    // Position 변환
+    PxVec3 PxPos(Position.X, Position.Y, Position.Z);
+
+    // Euler (Roll, Pitch, Yaw) -> Quaternion
+    // FVector의 X=Roll, Y=Pitch, Z=Yaw로 해석
+    float RollRad = DegreesToRadians(RotationDegrees.X);
+    float PitchRad = DegreesToRadians(RotationDegrees.Y);
+    float YawRad = DegreesToRadians(RotationDegrees.Z);
+
+    // ZYX 순서로 회전 적용 (Yaw -> Pitch -> Roll)
+    PxQuat QYaw(YawRad, PxVec3(0, 0, 1));
+    PxQuat QPitch(PitchRad, PxVec3(0, 1, 0));
+    PxQuat QRoll(RollRad, PxVec3(1, 0, 0));
+
+    PxQuat PxRot = QYaw * QPitch * QRoll;
+    PxRot.normalize();
+
+    return PxTransform(PxPos, PxRot);
+}
+
+PxQuat FConstraintInstance::ApplyAngularOffset(
+    const PxQuat& BaseRotation,
+    const FVector& OffsetDegrees)
+{
+    // Offset Euler -> Quaternion
+    float RollRad = DegreesToRadians(OffsetDegrees.X);
+    float PitchRad = DegreesToRadians(OffsetDegrees.Y);
+    float YawRad = DegreesToRadians(OffsetDegrees.Z);
+
+    PxQuat QYaw(YawRad, PxVec3(0, 0, 1));
+    PxQuat QPitch(PitchRad, PxVec3(0, 1, 0));
+    PxQuat QRoll(RollRad, PxVec3(1, 0, 0));
+
+    PxQuat OffsetQuat = QYaw * QPitch * QRoll;
+    OffsetQuat.normalize();
+
+    // Base 회전에 Offset 적용
+    PxQuat Result = BaseRotation * OffsetQuat;
+    Result.normalize();
+
+    return Result;
+}
+
+void FConstraintInstance::CalculateFramesFromBones(
+    FConstraintSetup& OutSetup,
+    FBodyInstance* ParentBody,
+    FBodyInstance* ChildBody)
+{
+    if (!ParentBody || !ChildBody)
+    {
+        UE_LOG("[Constraint] CalculateFramesFromBones: Invalid bodies");
+        return;
+    }
+
+    if (!ParentBody->RigidActor || !ChildBody->RigidActor)
+    {
+        UE_LOG("[Constraint] CalculateFramesFromBones: No valid RigidActors");
+        return;
+    }
+
+    // 월드 트랜스폼 가져오기
+    PxTransform ParentWorldPose = ParentBody->RigidActor->getGlobalPose();
+    PxTransform ChildWorldPose = ChildBody->RigidActor->getGlobalPose();
+
+    // 조인트 위치 = 자식 바디의 월드 위치 (본의 시작점)
+    PxVec3 JointWorldPos = ChildWorldPose.p;
+
+    // ─────────────────────────────────────────────────────────────
+    // Child Frame: 원점, Identity 회전 (자식 바디 로컬 기준)
+    // ─────────────────────────────────────────────────────────────
+    OutSetup.ChildPosition = FVector::Zero();
+    OutSetup.ChildRotation = FVector::Zero();
+
+    // ─────────────────────────────────────────────────────────────
+    // Parent Frame: 조인트 위치를 부모 로컬로 변환
+    // ─────────────────────────────────────────────────────────────
+    PxTransform ParentWorldInv = ParentWorldPose.getInverse();
+    PxVec3 JointInParentLocal = ParentWorldInv.transform(JointWorldPos);
+
+    OutSetup.ParentPosition = FVector(JointInParentLocal.x, JointInParentLocal.y, JointInParentLocal.z);
+
+    // 부모와 자식의 상대 회전 계산
+    PxQuat RelativeRot = ParentWorldPose.q.getConjugate() * ChildWorldPose.q;
+    RelativeRot.normalize();
+
+    // Quaternion -> Euler 변환
+    // PhysX PxQuat에서 Euler 각도 추출
+    float Roll, Pitch, Yaw;
+
+    // toRadiansAndUnitAxis 대신 직접 Euler 변환
+    // 참고: https://en.wikipedia.org/wiki/Conversion_between_quaternions_and_Euler_angles
+    float qw = RelativeRot.w;
+    float qx = RelativeRot.x;
+    float qy = RelativeRot.y;
+    float qz = RelativeRot.z;
+
+    // Roll (X축)
+    float sinr_cosp = 2.0f * (qw * qx + qy * qz);
+    float cosr_cosp = 1.0f - 2.0f * (qx * qx + qy * qy);
+    Roll = atan2f(sinr_cosp, cosr_cosp);
+
+    // Pitch (Y축)
+    float sinp = 2.0f * (qw * qy - qz * qx);
+    if (fabsf(sinp) >= 1.0f)
+        Pitch = copysignf(PxPi / 2.0f, sinp);  // Gimbal lock
+    else
+        Pitch = asinf(sinp);
+
+    // Yaw (Z축)
+    float siny_cosp = 2.0f * (qw * qz + qx * qy);
+    float cosy_cosp = 1.0f - 2.0f * (qy * qy + qz * qz);
+    Yaw = atan2f(siny_cosp, cosy_cosp);
+
+    OutSetup.ParentRotation = FVector(
+        RadiansToDegrees(Roll),
+        RadiansToDegrees(Pitch),
+        RadiansToDegrees(Yaw)
+    );
+
+    // AngularRotationOffset 초기값은 Zero
+    OutSetup.AngularRotationOffset = FVector::Zero();
+
+    UE_LOG("[Constraint] CalculateFramesFromBones: ParentPos=(%.2f, %.2f, %.2f) ParentRot=(%.1f, %.1f, %.1f)",
+        OutSetup.ParentPosition.X, OutSetup.ParentPosition.Y, OutSetup.ParentPosition.Z,
+        OutSetup.ParentRotation.X, OutSetup.ParentRotation.Y, OutSetup.ParentRotation.Z);
 }

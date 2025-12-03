@@ -148,6 +148,9 @@ struct PhysicsAssetEditorState : public ViewerState
 	/** 기즈모 드래그 상태 (첫 프레임 감지용) */
 	bool bWasGizmoDragging = false;
 
+	/** Constraint 기즈모 드래그 상태 (첫 프레임 감지용) */
+	bool bWasConstraintGizmoDragging = false;
+
 	/** 바디별 라인 인덱스 범위 */
 	struct FBodyLineRange
 	{

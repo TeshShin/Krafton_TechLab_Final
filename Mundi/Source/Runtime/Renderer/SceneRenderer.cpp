@@ -20,6 +20,7 @@
 #include "BVHierarchy.h"
 #include "SelectionManager.h"
 #include "StaticMeshComponent.h"
+#include "SkeletalMeshComponent.h"
 #include "DecalStatManager.h"
 #include "SkinningStats.h"
 #include "BillboardComponent.h"
@@ -1520,6 +1521,25 @@ void FSceneRenderer::RenderDebugPass()
 			// 모든 컴포넌트에서 RenderDebugVolume 호출
 			// 각 컴포넌트는 필요한 경우 override하여 디버그 시각화 제공
 			Component->RenderDebugVolume(OwnerRenderer);
+		}
+	}
+
+	// bAlwaysRenderPhysicsDebug 플래그가 설정된 SkeletalMeshComponent 렌더링 (에디터용)
+	for (AActor* Actor : World->GetActors())
+	{
+		if (!Actor || Actor->IsPendingDestroy()) continue;
+		// 이미 선택된 액터는 위에서 처리됨
+		if (World->GetSelectionManager()->IsActorSelected(Actor)) continue;
+
+		for (USceneComponent* Component : Actor->GetSceneComponents())
+		{
+			if (USkeletalMeshComponent* SkelMeshComp = Cast<USkeletalMeshComponent>(Component))
+			{
+				if (SkelMeshComp->bAlwaysRenderPhysicsDebug)
+				{
+					SkelMeshComp->RenderDebugVolume(OwnerRenderer);
+				}
+			}
 		}
 	}
 

@@ -484,7 +484,8 @@ void FPhysicsDebugUtils::GenerateConstraintMeshVisualization(
 	const FConstraintSetup& Constraint,
 	const FVector& ParentPos,
 	const FVector& ChildPos,
-	const FQuat& JointRotation,
+	const FQuat& ParentRotation,
+	const FQuat& ChildRotation,
 	bool bSelected,
 	TArray<FVector>& OutVertices,
 	TArray<uint32>& OutIndices,
@@ -502,39 +503,44 @@ void FPhysicsDebugUtils::GenerateConstraintMeshVisualization(
 		? FVector4(1.0f, 1.0f, 0.0f, 1.0f)   // 선택: 노랑
 		: FVector4(1.0f, 0.5f, 0.0f, 1.0f);  // 기본: 주황
 
-	// 조인트 위치 = 자식 본 위치
-	FVector JointPos = ChildPos;
-
-	// 1. 부모-자식 연결선 (라인으로 유지)
+	// 1. 부모-자식 연결선
 	OutLineBatch.Add(ParentPos, ChildPos, LineColor);
 
-	// 2. 조인트 위치에 십자 마커 (라인)
-	float MarkerSize = bSelected ? 0.03f : 0.02f;
-	FVector XAxis = JointRotation.RotateVector(FVector(1, 0, 0)) * MarkerSize;
-	FVector YAxis = JointRotation.RotateVector(FVector(0, 1, 0)) * MarkerSize;
-	FVector ZAxis = JointRotation.RotateVector(FVector(0, 0, 1)) * MarkerSize;
-	OutLineBatch.Add(JointPos - XAxis, JointPos + XAxis, FVector4(1, 0, 0, 1));  // X축: 빨강
-	OutLineBatch.Add(JointPos - YAxis, JointPos + YAxis, FVector4(0, 1, 0, 1));  // Y축: 초록
-	OutLineBatch.Add(JointPos - ZAxis, JointPos + ZAxis, FVector4(0, 0, 1, 1));  // Z축: 파랑
-
-	// 3. 원뿔 길이 계산 (부모-자식 거리 기반)
+	// 2. 크기 계산 (Parent-Child 거리 기반)
 	float Distance = (ChildPos - ParentPos).Size();
-	float ConeLength = FMath::Max(0.02f, Distance * 0.3f);  // 본 거리의 30%
+	float FrameSize = bSelected ? 0.05f : 0.03f;
+	float ConeLength = FMath::Max(0.02f, Distance * 0.3f);  // 거리의 30%
 
-	// 4. Swing Limit 원뿔 면 (각도가 유의미할 때만)
+	// 3. Parent Frame 좌표축 (ParentPos에서 ParentRotation 기준)
+	FVector ParentXAxis = ParentRotation.RotateVector(FVector(1, 0, 0)) * FrameSize;
+	FVector ParentYAxis = ParentRotation.RotateVector(FVector(0, 1, 0)) * FrameSize;
+	FVector ParentZAxis = ParentRotation.RotateVector(FVector(0, 0, 1)) * FrameSize;
+	OutLineBatch.Add(ParentPos, ParentPos + ParentXAxis, FVector4(1, 0, 0, 1));    // X축: 빨강
+	OutLineBatch.Add(ParentPos, ParentPos + ParentYAxis, FVector4(0, 1, 0, 1));    // Y축: 초록
+	OutLineBatch.Add(ParentPos, ParentPos + ParentZAxis, FVector4(0, 0, 1, 1));    // Z축: 파랑
+
+	// 4. Child Frame 좌표축 (ChildPos에서 ChildRotation 기준, 반투명)
+	FVector ChildXAxis = ChildRotation.RotateVector(FVector(1, 0, 0)) * FrameSize;
+	FVector ChildYAxis = ChildRotation.RotateVector(FVector(0, 1, 0)) * FrameSize;
+	FVector ChildZAxis = ChildRotation.RotateVector(FVector(0, 0, 1)) * FrameSize;
+	OutLineBatch.Add(ChildPos, ChildPos + ChildXAxis, FVector4(1, 0.5f, 0.5f, 0.8f));  // X축: 연빨강
+	OutLineBatch.Add(ChildPos, ChildPos + ChildYAxis, FVector4(0.5f, 1, 0.5f, 0.8f));  // Y축: 연초록
+	OutLineBatch.Add(ChildPos, ChildPos + ChildZAxis, FVector4(0.5f, 0.5f, 1, 0.8f));  // Z축: 연파랑
+
+	// 5. Swing Limit 원뿔 면 (ParentPos, ParentRotation 기준)
 	if (Constraint.Swing1LimitDegrees > 1.0f || Constraint.Swing2LimitDegrees > 1.0f)
 	{
-		GenerateSwingConeMesh(JointPos, JointRotation,
+		GenerateSwingConeMesh(ParentPos, ParentRotation,
 			Constraint.Swing1LimitDegrees, Constraint.Swing2LimitDegrees, ConeLength, SwingColor,
 			OutVertices, OutIndices, OutColors);
 	}
 
-	// 5. Twist Limit 부채꼴 면 (각도가 유의미할 때만, 대칭: ±TwistLimitDegrees)
+	// 6. Twist Limit 부채꼴 면 (ParentPos, ParentRotation 기준)
 	float TwistRange = Constraint.TwistLimitDegrees * 2.0f;
 	if (TwistRange > 1.0f && TwistRange < 359.0f)
 	{
 		float ArcRadius = ConeLength * 0.5f;
-		GenerateTwistFanMesh(JointPos, JointRotation,
+		GenerateTwistFanMesh(ParentPos, ParentRotation,
 			-Constraint.TwistLimitDegrees, Constraint.TwistLimitDegrees, ArcRadius, TwistColor,
 			OutVertices, OutIndices, OutColors);
 	}
@@ -574,37 +580,24 @@ void FPhysicsDebugUtils::GenerateConstraintsDebugMesh(
 		if (ParentBoneIndex < 0 || ParentBoneIndex >= BoneTransforms.Num()) continue;
 		if (ChildBoneIndex < 0 || ChildBoneIndex >= BoneTransforms.Num()) continue;
 
-		FVector ParentPos = BoneTransforms[ParentBoneIndex].Translation;
-		FVector ChildPos = BoneTransforms[ChildBoneIndex].Translation;
+		const FTransform& ParentBoneTransform = BoneTransforms[ParentBoneIndex];
+		const FTransform& ChildBoneTransform = BoneTransforms[ChildBoneIndex];
 
-		// 조인트 회전 계산 (부모 → 자식 방향)
-		FVector BoneDir = (ChildPos - ParentPos).GetNormalized();
-		FQuat JointRotation = FQuat::Identity();
-		if (BoneDir.SizeSquared() > 0.0001f)
-		{
-			// X축(1,0,0)에서 BoneDir로 회전하는 쿼터니언 계산
-			FVector DefaultDir(1, 0, 0);
-			FVector Cross = FVector::Cross(DefaultDir, BoneDir);
-			float Dot = FVector::Dot(DefaultDir, BoneDir);
+		// 저장된 Frame 데이터를 월드 좌표로 변환
+		FVector ParentPos = ParentBoneTransform.TransformPosition(Constraint.ParentPosition);
+		FVector ChildPos = ChildBoneTransform.TransformPosition(Constraint.ChildPosition);
 
-			if (Dot < -0.9999f)
-			{
-				// 거의 반대 방향인 경우: Y축 기준 180도 회전
-				JointRotation = FQuat::FromAxisAngle(FVector(0, 1, 0), M_PI);
-			}
-			else
-			{
-				// 일반적인 경우: 외적을 축으로, 내적으로 각도 계산
-				float S = std::sqrt((1.0f + Dot) * 2.0f);
-				float InvS = 1.0f / S;
-				JointRotation = FQuat(Cross.X * InvS, Cross.Y * InvS, Cross.Z * InvS, S * 0.5f);
-			}
-		}
+		// 저장된 Rotation을 월드 회전으로 변환
+		FQuat ParentLocalRot = FQuat::MakeFromEulerZYX(Constraint.ParentRotation);
+		FQuat ParentWorldRot = ParentBoneTransform.Rotation * ParentLocalRot;
+
+		FQuat ChildLocalRot = FQuat::MakeFromEulerZYX(Constraint.ChildRotation);
+		FQuat ChildWorldRot = ChildBoneTransform.Rotation * ChildLocalRot;
 
 		bool bSelected = (SelectedConstraintIndex == i);
 
 		GenerateConstraintMeshVisualization(
-			Constraint, ParentPos, ChildPos, JointRotation, bSelected,
+			Constraint, ParentPos, ChildPos, ParentWorldRot, ChildWorldRot, bSelected,
 			OutTriangleBatch.Vertices, OutTriangleBatch.Indices, OutTriangleBatch.Colors,
 			OutLineBatch);
 	}

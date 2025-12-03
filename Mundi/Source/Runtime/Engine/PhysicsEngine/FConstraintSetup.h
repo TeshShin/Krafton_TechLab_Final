@@ -80,6 +80,30 @@ public:
 	float Damping = 0.0f;
 
 	// ────────────────────────────────────────────────
+	// Constraint Frame - Child (Body1)
+	// ────────────────────────────────────────────────
+	UPROPERTY(EditAnywhere, Category="Frame", Tooltip="자식 바디 로컬 연결점 위치")
+	FVector ChildPosition = FVector::Zero();
+
+	UPROPERTY(EditAnywhere, Category="Frame", Tooltip="자식 프레임 회전 (Roll, Pitch, Yaw degrees)")
+	FVector ChildRotation = FVector::Zero();
+
+	// ────────────────────────────────────────────────
+	// Constraint Frame - Parent (Body2)
+	// ────────────────────────────────────────────────
+	UPROPERTY(EditAnywhere, Category="Frame", Tooltip="부모 바디 로컬 연결점 위치")
+	FVector ParentPosition = FVector::Zero();
+
+	UPROPERTY(EditAnywhere, Category="Frame", Tooltip="부모 프레임 회전 (Roll, Pitch, Yaw degrees)")
+	FVector ParentRotation = FVector::Zero();
+
+	// ────────────────────────────────────────────────
+	// Angular Rotation Offset (비대칭 Limit용)
+	// ────────────────────────────────────────────────
+	UPROPERTY(EditAnywhere, Category="Angular", Tooltip="각도 제한 중심점 오프셋 (Roll, Pitch, Yaw degrees)")
+	FVector AngularRotationOffset = FVector::Zero();
+
+	// ────────────────────────────────────────────────
 	// 에디터 상태 (직렬화 제외)
 	// ────────────────────────────────────────────────
 	bool bSelected = false;
