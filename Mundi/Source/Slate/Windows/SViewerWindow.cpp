@@ -596,6 +596,11 @@ void SViewerWindow::RenderLeftPanel(float PanelWidth)
     ImGuiStyle& style = ImGui::GetStyle();
     float spacing = style.ItemSpacing.y;
 
+    // [DISABLED] Asset Browser Section - Browse/Load FBX 기능 비활성화
+    // 힙 손상 문제로 인해 임시로 비활성화됨
+    // SkeletalMesh는 Content Browser에서 선택 후 에디터로 여는 방식 사용
+    // TODO: FBXLoader의 힙 손상 버그 수정 후 재활성화
+    #if 0
     // Asset Browser Section
     ImGui::SetCursorPosY(ImGui::GetCursorPosY() + 6);
     ImGui::PushStyleColor(ImGuiCol_Header, ImVec4(0.30f, 0.30f, 0.30f, 0.8f));
@@ -727,6 +732,7 @@ void SViewerWindow::RenderLeftPanel(float PanelWidth)
     ImGui::PopStyleColor();
     ImGui::Dummy(ImVec2(0, 8));
     ImGui::Spacing();
+    #endif // DISABLED - Browse/Load FBX
 
     // Display Options
     ImGui::BeginGroup();
