@@ -19,6 +19,8 @@
 #include "PhysicsConstraintTemplate.h"
 #include "World.h"
 #include "InputManager.h"
+#include "VehicleActor.h"
+#include "VehicleComponent.h"
 
 USkeletalMeshComponent::USkeletalMeshComponent()
 {
@@ -27,8 +29,8 @@ USkeletalMeshComponent::USkeletalMeshComponent()
     SetSkeletalMesh(GDataDir + "/DancingRacer.fbx");
     // TODO - 애니메이션 나중에 써먹으세요    
     
-	//UAnimationAsset* AnimationAsset = UResourceManager::GetInstance().Get<UAnimSequence>("Data/DancingRacer_mixamo.com");
-    //PlayAnimation(AnimationAsset, true, 1.f);
+	UAnimationAsset* AnimationAsset = UResourceManager::GetInstance().Get<UAnimSequence>("Data/DancingRacer_mixamo.com");
+    PlayAnimation(AnimationAsset, true, 1.f);
     
 }
 
@@ -40,7 +42,7 @@ USkeletalMeshComponent::~USkeletalMeshComponent()
 void USkeletalMeshComponent::BeginPlay()
 {
     Super::BeginPlay();
-
+    
     if (AnimInstance)
     {
         AnimInstance->NativeUpdateAnimation(0.0f);
@@ -54,6 +56,8 @@ void USkeletalMeshComponent::BeginPlay()
     // 이제 정확한 포즈 상태에서 물리 초기화
     InitPhysics();
     ResetToRefPose();
+    GetOwner()->OnComponentHit.AddDynamic(this, &USkeletalMeshComponent::OnHit);
+    PhysicsBlendState = EPhysicsBlendState::Disabled;
 }
 
 void USkeletalMeshComponent::EndPlay()
@@ -71,26 +75,26 @@ void USkeletalMeshComponent::TickComponent(float DeltaTime)
     UInputManager& Input = UInputManager::GetInstance();
 
     // R키: 래그돌 토글    
-    if (Input.IsKeyPressed('R'))
-    {
-        if (PhysicsBlendState == EPhysicsBlendState::Disabled)
-        {
-            UE_LOG("[Physics] Starting Ragdoll");
-            SetSimulatePhysics(true); // true = 래그돌 켜기
-        }
-        else
-        {
-            UE_LOG("[Physics] Stopping Ragdoll");
-            SetSimulatePhysics(false); // false = 래그돌 끄기
-        }
-    }
-
-    // Space키: 위쪽 임펄스 (래그돌 상태일 때만)
-    if (Input.IsKeyPressed(VK_SPACE) && IsSimulatingPhysics())
-    {
-        // 루트 바디(골반)에 힘을 가함
-        AddImpulse(FVector(0, 0, 50.0f)); 
-    }
+    // if (Input.IsKeyPressed('R'))
+    // {
+    //     if (PhysicsBlendState == EPhysicsBlendState::Disabled)
+    //     {
+    //         UE_LOG("[Physics] Starting Ragdoll");
+    //         SetSimulatePhysics(true); // true = 래그돌 켜기
+    //     }
+    //     else
+    //     {
+    //         UE_LOG("[Physics] Stopping Ragdoll");
+    //         SetSimulatePhysics(false); // false = 래그돌 끄기
+    //     }
+    // }
+    //
+    // // Space키: 위쪽 임펄스 (래그돌 상태일 때만)
+    // if (Input.IsKeyPressed(VK_SPACE) && IsSimulatingPhysics())
+    // {
+    //     // 루트 바디(골반)에 힘을 가함
+    //     AddImpulse(FVector(0, 0, 50.0f)); 
+    // }
 
     // Ragdoll이 활성화된 경우 물리 시뮬레이션 처리
     if (PhysicsBlendState != EPhysicsBlendState::Disabled)
@@ -192,6 +196,27 @@ void USkeletalMeshComponent::DuplicateSubObjects()
     PhysicsBlendPoseSaved.Empty();
     PhysicsResultPose.Empty();
     bUseAnimation = true;
+    bIsHit = false;
+    PhysicsBlendState = EPhysicsBlendState::Disabled;
+}
+
+void USkeletalMeshComponent::OnHit(UPrimitiveComponent* MyComp, UPrimitiveComponent* OtherComp, FHitResult HitResult)
+{
+    if (bIsHit) { return; }
+    if (OtherComp->GetOwner() == GetOwner()) { return; }
+    if (AVehicleActor* Car = Cast<AVehicleActor>(OtherComp->GetOwner()))
+    {
+        UCapsuleComponent* Capsule = Cast<UCapsuleComponent>(MyComp->GetOwner()->GetComponent(UCapsuleComponent::StaticClass()));
+        if (Capsule)
+        {
+            Capsule->BodyInstance.SetCollisionEnabled(false);
+        }
+        
+        bIsHit = true;
+        float Speed = Car->GetVehicleComponent()->GetPhysXVehicle()->mDriveDynData.mEnginespeed;
+        SetSimulatePhysics(true);
+        AddImpulse(HitResult.ImpactNormal * Speed * 2);
+    }
 }
 
 void USkeletalMeshComponent::OnPropertyChanged(const FProperty& Property)

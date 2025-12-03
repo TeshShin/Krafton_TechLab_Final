@@ -3,6 +3,7 @@
 #include "SkeletalMeshComponent.h"
 #include "AudioComponent.h"
 #include "FAudioDevice.h"
+#include "VehicleActor.h"
 
 ADancingCharacter::ADancingCharacter()
 {
@@ -23,9 +24,8 @@ ADancingCharacter::~ADancingCharacter()
 void ADancingCharacter::BeginPlay()
 {
 	Super::BeginPlay();
-
 	UAnimSequence* AnimToPlay = UResourceManager::GetInstance().Get<UAnimSequence>(GDataDir + "/SillyDancing_mixamo.com");
-
+	
 	if (AnimToPlay && GetMesh())
 	{
 		MeshComponent->PlayAnimation(AnimToPlay, true);

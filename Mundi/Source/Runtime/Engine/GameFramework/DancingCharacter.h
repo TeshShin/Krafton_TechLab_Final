@@ -18,6 +18,8 @@ protected:
     virtual void BeginPlay() override;
     virtual void HandleAnimNotify(const FAnimNotifyEvent& NotifyEvent) override;
 
+    void OnHit(UPrimitiveComponent* MyComp, UPrimitiveComponent* OtherComp, FHitResult HitResult);
+
 private:
     USound* SorrySound;
     USound* HitSound;

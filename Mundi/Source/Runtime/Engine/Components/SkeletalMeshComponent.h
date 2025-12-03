@@ -43,6 +43,9 @@ public:
     void SetSkeletalMesh(const FString& PathFileName) override;
     void DuplicateSubObjects() override;
 
+    void OnHit(UPrimitiveComponent* MyComp, UPrimitiveComponent* OtherComp, FHitResult HitResult);
+    bool bIsHit = false;
+
     // Animation Integration
 public:
     void SetAnimInstance(class UAnimInstance* InInstance);
