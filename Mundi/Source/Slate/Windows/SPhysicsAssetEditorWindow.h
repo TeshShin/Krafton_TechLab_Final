@@ -62,6 +62,7 @@ private:
 	// 시뮬레이션 제어
 	void StartSimulation();
 	void StopSimulation();
+	void TickSimulation(float DeltaTime);
 	void ResetPose();
 
 	// 바디/조인트 생성

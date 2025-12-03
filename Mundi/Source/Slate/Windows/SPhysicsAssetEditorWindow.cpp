@@ -8,22 +8,26 @@
 #include "PhysicsAssetUtils.h"
 #include "SkeletalBodySetup.h"
 #include "PhysicsConstraintTemplate.h"
+#include "PhysicsScene.h"
+#include "PhysicsSystem.h"
+#include "BodyInstance.h"
+#include "ConstraintInstance.h"
 #include "FViewport.h"
 #include "FViewportClient.h"
-#include "Source/Runtime/Engine/Components/LineComponent.h"
-#include "Source/Runtime/Engine/Components/SkeletalMeshComponent.h"
-#include "Source/Runtime/Engine/GameFramework/SkeletalMeshActor.h"
-#include "Source/Runtime/Physics/PrimitiveDrawInterface.h"
-#include "Source/Runtime/Physics/SphereElem.h"
-#include "Source/Runtime/Physics/BoxElem.h"
-#include "Source/Runtime/Physics/SphylElem.h"
+#include "LineComponent.h"
+#include "SkeletalMeshComponent.h"
+#include "SkeletalMeshActor.h"
+#include "PrimitiveDrawInterface.h"
+#include "SphereElem.h"
+#include "BoxElem.h"
+#include "SphylElem.h"
 #include "SkeletalMesh.h"
 #include "ResourceManager.h"
 #include "Texture.h"
 #include "Widgets/PropertyRenderer.h"
-#include <functional>
-#include <algorithm>
-#include <cctype>
+
+#include <PxPhysicsAPI.h>
+using namespace physx;
 
 // 파일 경로에서 파일명 추출 헬퍼 함수
 static FString ExtractFileNameFromPath(const FString& FilePath)
@@ -200,7 +204,7 @@ void SPhysicsAssetEditorWindow::OnUpdate(float DeltaSeconds)
 	// 시뮬레이션 업데이트
 	if (State->bIsSimulating)
 	{
-		// TODO: Phase 10에서 구현
+		TickSimulation(DeltaSeconds);
 	}
 }
 
@@ -1609,19 +1613,196 @@ void SPhysicsAssetEditorWindow::RenderToolPanel()
 void SPhysicsAssetEditorWindow::StartSimulation()
 {
 	PhysicsAssetEditorState* State = GetActivePhysicsState();
-	if (!State) return;
+	if (!State || State->bIsSimulating) return;
 
-	// TODO: Phase 10에서 구현
+	UPhysicsAsset* PhysAsset = State->EditingPhysicsAsset;
+	if (!PhysAsset || PhysAsset->GetBodySetupCount() == 0) return;
+
+	// 스켈레탈 메시 컴포넌트 가져오기
+	USkeletalMeshComponent* MeshComp = nullptr;
+	USkeletalMesh* Mesh = nullptr;
+	if (State->PreviewActor)
+	{
+		MeshComp = State->PreviewActor->GetSkeletalMeshComponent();
+		if (MeshComp) Mesh = MeshComp->GetSkeletalMesh();
+	}
+	if (!MeshComp || !Mesh) return;
+
+	const FSkeleton* Skeleton = Mesh->GetSkeleton();
+	if (!Skeleton) return;
+
+	// === 1. 원본 본 트랜스폼 저장 (리셋용) ===
+	State->OriginalBoneTransforms.Empty();
+	State->OriginalBoneTransforms.SetNum(Skeleton->Bones.Num());
+	for (int32 i = 0; i < (int32)Skeleton->Bones.Num(); ++i)
+	{
+		State->OriginalBoneTransforms[i] = MeshComp->GetBoneWorldTransform(i);
+	}
+
+	// === 2. PhysicsScene 생성 ===
+	FPhysicsSystem* PhysSystem = GEngine.GetPhysicsSystem();
+	if (!PhysSystem) return;
+
+	State->SimulationScene = new FPhysicsScene();
+	State->SimulationScene->Initialize(PhysSystem);
+
+	// === 2-1. 바닥 평면 생성 (Y-Up, 원점에 위치) ===
+	PxPhysics* Physics = PhysSystem->GetPhysics();
+	if (Physics && State->SimulationScene->GetPxScene())
+	{
+		// Y-Up 평면 (PhysX 기본 좌표계)
+		PxPlane groundPlane(0.0f, 1.0f, 0.0f, 0.1f);  // normal=(0,1,0), distance=0
+		PxMaterial* DefaultMaterial = Physics->createMaterial(0.5f, 0.5f, 0.1f);  // 정적마찰, 동적마찰, 반발계수
+
+		State->GroundPlane = PxCreatePlane(*Physics, groundPlane, *DefaultMaterial);
+		if (State->GroundPlane)
+		{
+			State->SimulationScene->GetPxScene()->addActor(*State->GroundPlane);
+		}
+	}
+
+	// === 3. 각 BodySetup에 대해 FBodyInstance 생성 ===
+	State->SimulatedBodies.Empty();
+	int32 BodyCount = PhysAsset->GetBodySetupCount();
+
+	for (int32 BodyIdx = 0; BodyIdx < BodyCount; ++BodyIdx)
+	{
+		USkeletalBodySetup* BodySetup = PhysAsset->GetBodySetup(BodyIdx);
+		if (!BodySetup) continue;
+
+		// 본 인덱스 찾기
+		auto it = Skeleton->BoneNameToIndex.find(BodySetup->BoneName.ToString());
+		if (it == Skeleton->BoneNameToIndex.end()) continue;
+		int32 BoneIndex = it->second;
+
+		// 본 월드 트랜스폼 가져오기
+		FTransform BoneTM = MeshComp->GetBoneWorldTransform(BoneIndex);
+
+		// FBodyInstance 생성 및 초기화
+		FBodyInstance* Body = new FBodyInstance();
+		Body->BoneName = BodySetup->BoneName;
+		Body->BoneIndex = BoneIndex;
+		Body->InitBody(BodySetup, BoneTM, nullptr, State->SimulationScene);
+		Body->SetSimulatePhysics(true);
+		Body->SetEnableGravity(true);
+
+		State->SimulatedBodies.Add(Body);
+	}
+
+	// === 4. 각 Constraint에 대해 Joint 생성 ===
+	State->SimulatedJoints.Empty();
+	int32 ConstraintCount = PhysAsset->GetConstraintCount();
+
+	for (int32 ConstraintIdx = 0; ConstraintIdx < ConstraintCount; ++ConstraintIdx)
+	{
+		UPhysicsConstraintTemplate* ConstraintTemplate = PhysAsset->ConstraintSetup[ConstraintIdx];
+		if (!ConstraintTemplate) continue;
+
+		FConstraintInstance& Instance = ConstraintTemplate->DefaultInstance;
+
+		// Bone1, Bone2에 해당하는 FBodyInstance 찾기
+		FBodyInstance* Body1 = nullptr;
+		FBodyInstance* Body2 = nullptr;
+
+		for (FBodyInstance* Body : State->SimulatedBodies)
+		{
+			if (Body->BoneName == Instance.ConstraintBone1) Body1 = Body;
+			if (Body->BoneName == Instance.ConstraintBone2) Body2 = Body;
+		}
+
+		if (!Body1 || !Body2) continue;
+
+		// Joint 생성
+		FConstraintInstance* RuntimeConstraint = new FConstraintInstance(Instance);
+		RuntimeConstraint->InitConstraint(Body1, Body2, nullptr);
+
+		if (RuntimeConstraint->PxJoint)
+		{
+			State->SimulatedJoints.Add(RuntimeConstraint->PxJoint);
+		}
+		delete RuntimeConstraint;  // PxJoint는 PhysX가 소유
+	}
+
+	// === 5. 시뮬레이션 시작 ===
 	State->bIsSimulating = true;
+	State->SimulationLeftoverTime = 0.0f;
+
+	// === 6. 디버그 라인 비활성화 (시뮬레이션 중에는 표시 안 함) ===
+	State->bShowBodies = false;
+	State->bShowConstraints = false;
+	State->bShowBones = false;
+
+	// LineComponent 가시성 끄기
+	if (State->BodyShapeLineComponent) State->BodyShapeLineComponent->SetLineVisible(false);
+	if (State->SelectedBodyLineComponent) State->SelectedBodyLineComponent->SetLineVisible(false);
+	if (State->ConstraintLineComponent) State->ConstraintLineComponent->SetLineVisible(false);
+	if (State->PreviewActor)
+	{
+		if (ULineComponent* BoneLineComp = State->PreviewActor->GetBoneLineComponent())
+			BoneLineComp->SetLineVisible(false);
+	}
+
+	UE_LOG("[PhysicsAssetEditor] 시뮬레이션 시작: %d 바디, %d 조인트",
+		State->SimulatedBodies.Num(), State->SimulatedJoints.Num());
 }
 
 void SPhysicsAssetEditorWindow::StopSimulation()
 {
 	PhysicsAssetEditorState* State = GetActivePhysicsState();
-	if (!State) return;
+	if (!State || !State->bIsSimulating) return;
 
-	// TODO: Phase 10에서 구현
+	// === 1. Joint 정리 (PhysX가 소유하므로 release만 호출) ===
+	for (PxJoint* Joint : State->SimulatedJoints)
+	{
+		if (Joint) Joint->release();
+	}
+	State->SimulatedJoints.Empty();
+
+	// === 2. Body 정리 ===
+	for (FBodyInstance* Body : State->SimulatedBodies)
+	{
+		if (Body)
+		{
+			Body->TermBody();
+			delete Body;
+		}
+	}
+	State->SimulatedBodies.Empty();
+
+	// === 2-1. 바닥 평면 정리 ===
+	if (State->GroundPlane)
+	{
+		State->GroundPlane->release();
+		State->GroundPlane = nullptr;
+	}
+
+	// === 3. PhysicsScene 정리 ===
+	if (State->SimulationScene)
+	{
+		State->SimulationScene->Shutdown();
+		delete State->SimulationScene;
+		State->SimulationScene = nullptr;
+	}
+
 	State->bIsSimulating = false;
+
+	// 디버그 라인 재활성화 (바디, 컨스트레인트만 - 본은 제외)
+	State->bShowBodies = true;
+	State->bShowConstraints = true;
+	// State->bShowBones는 false 유지
+
+	// LineComponent 가시성 켜기 (바디, 컨스트레인트만)
+	if (State->BodyShapeLineComponent) State->BodyShapeLineComponent->SetLineVisible(true);
+	if (State->SelectedBodyLineComponent) State->SelectedBodyLineComponent->SetLineVisible(true);
+	if (State->ConstraintLineComponent) State->ConstraintLineComponent->SetLineVisible(true);
+
+	// 즉시 라인 재구성 (다음 프레임 지연 방지)
+	RebuildBoneTMCache();
+	RebuildUnselectedBodyLines();
+	RebuildSelectedBodyLines();
+	RebuildConstraintLines();
+
+	UE_LOG("[PhysicsAssetEditor] 시뮬레이션 중지");
 }
 
 void SPhysicsAssetEditorWindow::ResetPose()
@@ -1629,7 +1810,102 @@ void SPhysicsAssetEditorWindow::ResetPose()
 	PhysicsAssetEditorState* State = GetActivePhysicsState();
 	if (!State) return;
 
-	// TODO: Phase 10에서 구현
+	// 시뮬레이션 중이면 먼저 중지
+	if (State->bIsSimulating)
+	{
+		StopSimulation();
+	}
+
+	// 스켈레탈 메시 컴포넌트 가져오기
+	USkeletalMeshComponent* MeshComp = nullptr;
+	if (State->PreviewActor)
+	{
+		MeshComp = State->PreviewActor->GetSkeletalMeshComponent();
+	}
+	if (!MeshComp) return;
+
+	// 원본 포즈가 저장되어 있으면 복원
+	if (State->OriginalBoneTransforms.Num() > 0)
+	{
+		for (int32 i = 0; i < State->OriginalBoneTransforms.Num(); ++i)
+		{
+			MeshComp->SetBoneWorldTransform(i, State->OriginalBoneTransforms[i]);
+		}
+		State->OriginalBoneTransforms.Empty();  // 사용 후 정리
+	}
+
+	// 디버그 라인 모두 재활성화 (본 포함)
+	State->bShowBodies = true;
+	State->bShowConstraints = true;
+	State->bShowBones = true;
+
+	// LineComponent 가시성 모두 켜기
+	if (State->BodyShapeLineComponent) State->BodyShapeLineComponent->SetLineVisible(true);
+	if (State->SelectedBodyLineComponent) State->SelectedBodyLineComponent->SetLineVisible(true);
+	if (State->ConstraintLineComponent) State->ConstraintLineComponent->SetLineVisible(true);
+	if (State->PreviewActor)
+	{
+		if (ULineComponent* BoneLineComp = State->PreviewActor->GetBoneLineComponent())
+			BoneLineComp->SetLineVisible(true);
+	}
+
+	// 즉시 라인 재구성 (다음 프레임 지연 방지)
+	RebuildBoneTMCache();
+	RebuildUnselectedBodyLines();
+	RebuildSelectedBodyLines();
+	RebuildConstraintLines();
+	if (State->PreviewActor)
+	{
+		State->PreviewActor->RebuildBoneLines(State->SelectedBoneIndex);
+	}
+
+	UE_LOG("[PhysicsAssetEditor] 포즈 리셋");
+}
+
+void SPhysicsAssetEditorWindow::TickSimulation(float DeltaTime)
+{
+	PhysicsAssetEditorState* State = GetActivePhysicsState();
+	if (!State || !State->bIsSimulating) return;
+	if (!State->SimulationScene) return;
+
+	// 스켈레탈 메시 컴포넌트 가져오기
+	USkeletalMeshComponent* MeshComp = nullptr;
+	if (State->PreviewActor)
+	{
+		MeshComp = State->PreviewActor->GetSkeletalMeshComponent();
+	}
+	if (!MeshComp) return;
+
+	// === 1. 명령 큐 처리 ===
+	State->SimulationScene->ProcessCommandQueue();
+
+	// === 2. 물리 시뮬레이션 스텝 (내부적으로 고정 시간 스텝 처리) ===
+	State->SimulationScene->Simulation(DeltaTime);
+
+	// === 3. 결과 동기화 (fetchResults 호출) ===
+	State->SimulationScene->FetchAndSync();
+
+	// === 4. 바디 트랜스폼을 본에 동기화 ===
+	for (FBodyInstance* Body : State->SimulatedBodies)
+	{
+		if (!Body) continue;
+
+		// 물리 바디의 월드 트랜스폼 가져오기
+		FTransform BodyTM = Body->GetWorldTransform();
+
+		// 해당 본에 트랜스폼 적용
+		int32 BoneIndex = Body->BoneIndex;
+		if (BoneIndex >= 0)
+		{
+			MeshComp->SetBoneWorldTransform(BoneIndex, BodyTM);
+		}
+	}
+
+	// === 5. 시각화 업데이트 플래그 설정 ===
+	State->bBoneTMCacheDirty = true;
+	State->bAllBodyLinesDirty = true;
+	State->bConstraintLinesDirty = true;
+	State->bBoneLinesDirty = true;
 }
 
 void SPhysicsAssetEditorWindow::CreateAllBodies(int32 ShapeType)

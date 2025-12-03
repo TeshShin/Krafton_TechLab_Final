@@ -3,6 +3,13 @@
 class UWorld; class FViewport; class FViewportClient; class ASkeletalMeshActor; class USkeletalMesh; class UAnimSequence;
 class UParticleSystem; class UParticleSystemComponent; class AActor; class UParticleModule;
 class UPhysicsAsset;
+class FPhysicsScene;
+struct FBodyInstance;
+namespace physx 
+{
+    class PxJoint; 
+    class PxRigidStatic;
+}
 
 struct FAnimNotifyEvent
 {
@@ -172,8 +179,14 @@ struct PhysicsAssetEditorState : public ViewerState
     int32 SelectedBodyIndex = -1;
     int32 SelectedConstraintIndex = -1;
 
-    // 시뮬레이션 상태
+    // === 시뮬레이션 상태 ===
     bool bIsSimulating = false;
+    FPhysicsScene* SimulationScene = nullptr;
+    TArray<FBodyInstance*> SimulatedBodies;
+    TArray<physx::PxJoint*> SimulatedJoints;
+    physx::PxRigidStatic* GroundPlane = nullptr;  // 바닥 충돌용 평면
+    TArray<FTransform> OriginalBoneTransforms;  // 리셋용 원본 포즈
+    float SimulationLeftoverTime = 0.0f;        // 고정 시간 스텝용
 
     // 표시 옵션
     bool bShowBodies = true;

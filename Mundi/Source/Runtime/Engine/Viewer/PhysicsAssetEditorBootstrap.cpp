@@ -15,7 +15,10 @@
 #include "Source/Runtime/Engine/Components/LineComponent.h"
 #include "Source/Runtime/Engine/Components/SkeletalMeshComponent.h"
 #include "Source/Runtime/Physics/PrimitiveDrawInterface.h"
+#include "Source/Runtime/Physics/BodyInstance.h"
+#include "Source/Runtime/Physics/PhysicsScene.h"
 #include "ResourceManager.h"
+#include <PxPhysicsAPI.h>
 
 ViewerState* PhysicsAssetEditorBootstrap::CreateViewerState(const char* Name, UWorld* InWorld,
 	ID3D11Device* InDevice, UEditorAssetPreviewContext* Context)
@@ -184,6 +187,43 @@ void PhysicsAssetEditorBootstrap::DestroyViewerState(ViewerState*& State)
 	if (!State) return;
 
 	PhysicsAssetEditorState* PhysState = static_cast<PhysicsAssetEditorState*>(State);
+
+	// === 시뮬레이션 리소스 정리 (시뮬레이션 중 종료 시) ===
+	// Joint 정리
+	for (physx::PxJoint* Joint : PhysState->SimulatedJoints)
+	{
+		if (Joint)
+		{
+			Joint->release();
+		}
+	}
+	PhysState->SimulatedJoints.Empty();
+
+	// Body 정리
+	for (FBodyInstance* Body : PhysState->SimulatedBodies)
+	{
+		if (Body)
+		{
+			Body->TermBody();
+			delete Body;
+		}
+	}
+	PhysState->SimulatedBodies.Empty();
+
+	// 바닥 평면 정리
+	if (PhysState->GroundPlane)
+	{
+		PhysState->GroundPlane->release();
+		PhysState->GroundPlane = nullptr;
+	}
+
+	// PhysicsScene 정리
+	if (PhysState->SimulationScene)
+	{
+		PhysState->SimulationScene->Shutdown();
+		delete PhysState->SimulationScene;
+		PhysState->SimulationScene = nullptr;
+	}
 
 	// PDI 정리
 	if (PhysState->PDI)
