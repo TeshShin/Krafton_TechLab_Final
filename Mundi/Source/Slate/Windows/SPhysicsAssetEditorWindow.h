@@ -60,6 +60,14 @@ private:
 	void AddBodyToBone(int32 BoneIndex, int32 ShapeType);
 	void RemoveBody(int32 BodyIndex);
 
+	// Delete 키 삭제 기능
+	void DeleteSelectedBody();       // 선택된 바디 삭제 (연결된 Constraint도 함께)
+	void DeleteSelectedConstraint(); // 선택된 Constraint 삭제
+	void RemoveConstraintsForBody(const FName& BoneName);  // 특정 본과 연결된 모든 Constraint 삭제
+
+	// 컨스트레인트 수동 연결 기능
+	void CreateConstraintBetweenBodies(int32 BodyIndex1, int32 BodyIndex2);  // 두 바디 사이에 컨스트레인트 생성
+
 	// 뷰포트
 	void RenderViewportArea(float width, float height);
 

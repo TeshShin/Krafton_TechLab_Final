@@ -560,10 +560,10 @@ void SPhysicsAssetEditorWindow::OnUpdate(float DeltaSeconds)
 		}
 	}
 
-	// 선택 바디 변경 감지 (증분 업데이트)
+	// 선택 바디 변경 감지 (전체 재생성 - 색상 변경 필요)
 	if (State->SelectedBodyIndex != State->LastSelectedBodyIndex)
 	{
-		UpdateBodyLinesIncremental();
+		State->bAllBodyLinesDirty = true;  // 전체 재생성으로 색상 갱신
 		State->LastSelectedBodyIndex = State->SelectedBodyIndex;
 	}
 
@@ -631,6 +631,21 @@ void SPhysicsAssetEditorWindow::OnUpdate(float DeltaSeconds)
 	if (State->bIsSimulating)
 	{
 		TickSimulation(DeltaSeconds);
+	}
+
+	// Delete 키로 선택된 바디/컨스트레인트 삭제
+	// 조건: 윈도우 포커스, ImGui 입력 필드에 포커스 없음, 시뮬레이션 중 아님
+	if (bIsOpen && !ImGui::GetIO().WantTextInput && ImGui::IsKeyPressed(ImGuiKey_Delete))
+	{
+		// 우선순위: Constraint > Body (Constraint가 선택되어 있으면 Constraint 삭제)
+		if (State->SelectedConstraintIndex >= 0)
+		{
+			DeleteSelectedConstraint();
+		}
+		else if (State->SelectedBodyIndex >= 0 || State->GraphRootBodyIndex >= 0)
+		{
+			DeleteSelectedBody();
+		}
 	}
 }
 
@@ -1131,6 +1146,26 @@ void SPhysicsAssetEditorWindow::RenderHierarchyPanel()
 
 	UPhysicsAsset* PhysAsset = State->EditingPhysicsAsset;
 
+	// === 컨스트레인트 연결 모드 안내 ===
+	if (State->bConstraintConnectMode)
+	{
+		ImGui::PushStyleColor(ImGuiCol_ChildBg, ImVec4(0.2f, 0.4f, 0.6f, 0.8f));
+		ImGui::BeginChild("ConnectModeInfo", ImVec2(0, 50), true);
+		ImGui::TextWrapped("컨스트레인트 연결 모드: '%s'와 연결할 바디를 선택하세요.",
+			State->ConstraintSourceBoneName.ToString().c_str());
+		ImGui::TextDisabled("ESC를 눌러 취소");
+		ImGui::EndChild();
+		ImGui::PopStyleColor();
+
+		// ESC로 취소
+		if (ImGui::IsKeyPressed(ImGuiKey_Escape))
+		{
+			State->bConstraintConnectMode = false;
+			State->ConstraintSourceBodyIndex = -1;
+			State->ConstraintSourceBoneName = FName();
+		}
+	}
+
 	// === 검색 바 ===
 	ImGui::SetNextItemWidth(-1);
 	ImGui::InputTextWithHint("##BoneSearch", "본 이름 검색...", BoneSearchBuffer, sizeof(BoneSearchBuffer));
@@ -1310,12 +1345,57 @@ void SPhysicsAssetEditorWindow::RenderHierarchyPanel()
 				}
 
 				// 바디 클릭 처리 (스켈레톤 트리에서 선택 시 그래프 루트도 변경)
-				if (ImGui::IsItemClicked())
+				if (ImGui::IsItemClicked(ImGuiMouseButton_Left))
 				{
-					State->GraphRootBodyIndex = BodyIndex;  // 그래프 중심 변경
-					State->SelectedBodyIndex = BodyIndex;   // 하이라이트도 동일하게
-					State->SelectedBoneIndex = -1;
-					State->SelectedConstraintIndex = -1;
+					// 컨스트레인트 연결 모드 중일 때 좌클릭하면 연결 완료
+					if (State->bConstraintConnectMode && State->ConstraintSourceBodyIndex >= 0)
+					{
+						// 자기 자신이 아닌 다른 바디를 클릭했을 때만 연결
+						if (BodyIndex != State->ConstraintSourceBodyIndex)
+						{
+							CreateConstraintBetweenBodies(State->ConstraintSourceBodyIndex, BodyIndex);
+						}
+						// 연결 모드 종료
+						State->bConstraintConnectMode = false;
+						State->ConstraintSourceBodyIndex = -1;
+						State->ConstraintSourceBoneName = FName();
+					}
+					else
+					{
+						State->GraphRootBodyIndex = BodyIndex;  // 그래프 중심 변경
+						State->SelectedBodyIndex = BodyIndex;   // 하이라이트도 동일하게
+						State->SelectedBoneIndex = -1;
+						State->SelectedConstraintIndex = -1;
+					}
+				}
+
+				// 우클릭 컨텍스트 메뉴
+				if (ImGui::IsItemClicked(ImGuiMouseButton_Right))
+				{
+					State->SelectedBodyIndex = BodyIndex;
+					State->GraphRootBodyIndex = BodyIndex;
+					ImGui::OpenPopup("BodyContextMenu");
+				}
+
+				// 컨텍스트 메뉴 렌더링
+				if (ImGui::BeginPopup("BodyContextMenu"))
+				{
+					if (ImGui::MenuItem("컨스트레인트 연결", nullptr, false, !State->bIsSimulating))
+					{
+						// 연결 모드 시작
+						State->bConstraintConnectMode = true;
+						State->ConstraintSourceBodyIndex = BodyIndex;
+						if (USkeletalBodySetup* SourceBody = PhysAsset->GetBodySetup(BodyIndex))
+						{
+							State->ConstraintSourceBoneName = SourceBody->BoneName;
+						}
+					}
+					ImGui::Separator();
+					if (ImGui::MenuItem("바디 삭제", "Delete", false, !State->bIsSimulating))
+					{
+						DeleteSelectedBody();
+					}
+					ImGui::EndPopup();
 				}
 
 				ImGui::PopID();
@@ -2425,6 +2505,226 @@ void SPhysicsAssetEditorWindow::RemoveBody(int32 BodyIndex)
 	State->bSelectedBodyLineDirty = true;
 }
 
+void SPhysicsAssetEditorWindow::RemoveConstraintsForBody(const FName& BoneName)
+{
+	PhysicsAssetEditorState* State = GetActivePhysicsState();
+	if (!State) return;
+
+	UPhysicsAsset* PhysAsset = State->EditingPhysicsAsset;
+	if (!PhysAsset) return;
+
+	// 역순으로 순회하면서 해당 본과 연결된 Constraint 삭제
+	for (int32 i = PhysAsset->GetConstraintCount() - 1; i >= 0; --i)
+	{
+		UPhysicsConstraintTemplate* Constraint = PhysAsset->ConstraintSetup[i];
+		if (!Constraint) continue;
+
+		FName Bone1 = Constraint->GetBone1Name();
+		FName Bone2 = Constraint->GetBone2Name();
+
+		// 해당 본과 연결된 Constraint인지 확인
+		if (Bone1 == BoneName || Bone2 == BoneName)
+		{
+			PhysAsset->RemoveConstraint(i);
+		}
+	}
+}
+
+void SPhysicsAssetEditorWindow::DeleteSelectedBody()
+{
+	PhysicsAssetEditorState* State = GetActivePhysicsState();
+	if (!State) return;
+
+	// 시뮬레이션 중에는 삭제 불가
+	if (State->bIsSimulating)
+	{
+		State->PendingWarningMessage = "시뮬레이션 중에는 바디를 삭제할 수 없습니다.";
+		return;
+	}
+
+	UPhysicsAsset* PhysAsset = State->EditingPhysicsAsset;
+	if (!PhysAsset) return;
+
+	// 삭제할 바디 인덱스 결정 (우선순위: SelectedBodyIndex > GraphRootBodyIndex)
+	int32 BodyIndexToDelete = -1;
+	if (State->SelectedBodyIndex >= 0 && State->SelectedBodyIndex < PhysAsset->GetBodySetupCount())
+	{
+		BodyIndexToDelete = State->SelectedBodyIndex;
+	}
+	else if (State->GraphRootBodyIndex >= 0 && State->GraphRootBodyIndex < PhysAsset->GetBodySetupCount())
+	{
+		BodyIndexToDelete = State->GraphRootBodyIndex;
+	}
+
+	if (BodyIndexToDelete < 0) return;
+
+	// 삭제할 바디의 본 이름 가져오기
+	USkeletalBodySetup* Body = PhysAsset->GetBodySetup(BodyIndexToDelete);
+	if (!Body) return;
+
+	FName BoneNameToDelete = Body->BoneName;
+
+	// 1. 먼저 해당 바디와 연결된 모든 Constraint 삭제
+	RemoveConstraintsForBody(BoneNameToDelete);
+
+	// 2. 바디 삭제
+	PhysAsset->RemoveBodySetup(BodyIndexToDelete);
+
+	// 3. 선택 상태 초기화
+	State->GraphRootBodyIndex = -1;
+	State->SelectedBodyIndex = -1;
+	State->SelectedConstraintIndex = -1;
+	State->SelectedShapeIndex = -1;
+	State->SelectedShapeType = -1;
+	State->bIsDirty = true;
+
+	// 4. 라인 재생성 플래그
+	State->bBoneTMCacheDirty = true;
+	State->bAllBodyLinesDirty = true;
+	State->bSelectedBodyLineDirty = true;
+	State->bAllConstraintLinesDirty = true;
+	State->bSelectedConstraintLineDirty = true;
+
+	// 5. 기즈모 숨기기
+	if (State->World)
+	{
+		AGizmoActor* Gizmo = State->World->GetGizmoActor();
+		if (Gizmo)
+		{
+			Gizmo->SetbRender(false);
+		}
+	}
+}
+
+void SPhysicsAssetEditorWindow::DeleteSelectedConstraint()
+{
+	PhysicsAssetEditorState* State = GetActivePhysicsState();
+	if (!State) return;
+
+	// 시뮬레이션 중에는 삭제 불가
+	if (State->bIsSimulating)
+	{
+		State->PendingWarningMessage = "시뮬레이션 중에는 컨스트레인트를 삭제할 수 없습니다.";
+		return;
+	}
+
+	UPhysicsAsset* PhysAsset = State->EditingPhysicsAsset;
+	if (!PhysAsset) return;
+
+	// 삭제할 Constraint 인덱스 확인
+	if (State->SelectedConstraintIndex < 0 ||
+		State->SelectedConstraintIndex >= PhysAsset->GetConstraintCount())
+	{
+		return;
+	}
+
+	// Constraint 삭제
+	PhysAsset->RemoveConstraint(State->SelectedConstraintIndex);
+
+	// 선택 상태 초기화 (바디 선택은 유지)
+	State->SelectedConstraintIndex = -1;
+	State->bIsDirty = true;
+
+	// 라인 재생성 플래그
+	State->bAllConstraintLinesDirty = true;
+	State->bSelectedConstraintLineDirty = true;
+}
+
+void SPhysicsAssetEditorWindow::CreateConstraintBetweenBodies(int32 BodyIndex1, int32 BodyIndex2)
+{
+	PhysicsAssetEditorState* State = GetActivePhysicsState();
+	if (!State) return;
+
+	// 시뮬레이션 중에는 생성 불가
+	if (State->bIsSimulating)
+	{
+		State->PendingWarningMessage = "시뮬레이션 중에는 컨스트레인트를 생성할 수 없습니다.";
+		return;
+	}
+
+	UPhysicsAsset* PhysAsset = State->EditingPhysicsAsset;
+	if (!PhysAsset) return;
+
+	// 유효한 바디 인덱스 확인
+	if (BodyIndex1 < 0 || BodyIndex1 >= PhysAsset->GetBodySetupCount() ||
+		BodyIndex2 < 0 || BodyIndex2 >= PhysAsset->GetBodySetupCount())
+	{
+		return;
+	}
+
+	// 같은 바디끼리는 연결 불가
+	if (BodyIndex1 == BodyIndex2)
+	{
+		State->PendingWarningMessage = "같은 바디끼리는 컨스트레인트를 생성할 수 없습니다.";
+		return;
+	}
+
+	USkeletalBodySetup* Body1 = PhysAsset->GetBodySetup(BodyIndex1);
+	USkeletalBodySetup* Body2 = PhysAsset->GetBodySetup(BodyIndex2);
+	if (!Body1 || !Body2) return;
+
+	FName BoneName1 = Body1->BoneName;
+	FName BoneName2 = Body2->BoneName;
+
+	// 이미 연결된 컨스트레인트가 있는지 확인
+	int32 ExistingConstraint = PhysAsset->FindConstraintIndex(BoneName1, BoneName2);
+	if (ExistingConstraint >= 0)
+	{
+		State->PendingWarningMessage = "이미 두 바디 사이에 컨스트레인트가 존재합니다.";
+		return;
+	}
+
+	// 새 컨스트레인트 생성
+	UPhysicsConstraintTemplate* NewConstraint = new UPhysicsConstraintTemplate();
+	if (!NewConstraint) return;
+
+	// 본 이름 설정 및 Joint 이름 생성
+	FConstraintInstance& Instance = NewConstraint->DefaultInstance;
+	FString JointNameStr = BoneName1.ToString() + "_" + BoneName2.ToString();
+	Instance.JointName = FName(JointNameStr);
+	Instance.ConstraintBone1 = BoneName1;
+	Instance.ConstraintBone2 = BoneName2;
+
+	// Tool 패널의 설정값 적용
+	switch (State->ToolAngularMode)
+	{
+	case 0:  // Free
+		Instance.AngularSwing1Motion = EAngularConstraintMotion::Free;
+		Instance.AngularSwing2Motion = EAngularConstraintMotion::Free;
+		Instance.AngularTwistMotion = EAngularConstraintMotion::Free;
+		break;
+	case 1:  // Limited (기본값)
+		Instance.AngularSwing1Motion = EAngularConstraintMotion::Limited;
+		Instance.AngularSwing2Motion = EAngularConstraintMotion::Limited;
+		Instance.AngularTwistMotion = EAngularConstraintMotion::Limited;
+		Instance.Swing1LimitAngle = State->ToolSwingLimit;
+		Instance.Swing2LimitAngle = State->ToolSwingLimit;
+		Instance.TwistLimitAngle = State->ToolTwistLimit;
+		break;
+	case 2:  // Locked
+		Instance.AngularSwing1Motion = EAngularConstraintMotion::Locked;
+		Instance.AngularSwing2Motion = EAngularConstraintMotion::Locked;
+		Instance.AngularTwistMotion = EAngularConstraintMotion::Locked;
+		break;
+	}
+
+	// 선형 모션은 잠금
+	Instance.LinearXMotion = ELinearConstraintMotion::Locked;
+	Instance.LinearYMotion = ELinearConstraintMotion::Locked;
+	Instance.LinearZMotion = ELinearConstraintMotion::Locked;
+
+	// PhysicsAsset에 추가
+	int32 NewConstraintIndex = PhysAsset->AddConstraint(NewConstraint);
+
+	// 선택 상태 업데이트
+	State->SelectedConstraintIndex = NewConstraintIndex;
+	State->bIsDirty = true;
+
+	// 라인 재생성 플래그
+	State->bAllConstraintLinesDirty = true;
+	State->bSelectedConstraintLineDirty = true;
+}
+
 void SPhysicsAssetEditorWindow::RenderToolPanel()
 {
 	PhysicsAssetEditorState* State = GetActivePhysicsState();
@@ -3099,7 +3399,7 @@ void SPhysicsAssetEditorWindow::RebuildUnselectedBodyLines()
 	PhysicsAssetEditorState* State = GetActivePhysicsState();
 	if (!State || !State->PDI) return;
 
-	// 비선택 바디 라인 클리어
+	// 바디 라인 클리어
 	State->PDI->Clear();
 
 	UPhysicsAsset* PhysAsset = State->EditingPhysicsAsset;
@@ -3107,6 +3407,7 @@ void SPhysicsAssetEditorWindow::RebuildUnselectedBodyLines()
 
 	const FLinearColor UnselectedColor(0.0f, 1.0f, 0.0f, 1.0f);    // 초록색 (비연결)
 	const FLinearColor ConnectedColor(0.3f, 0.5f, 1.0f, 1.0f);     // 파란색 (연결됨)
+	const FLinearColor SelectedColor(1.0f, 0.8f, 0.0f, 1.0f);      // 노란색 (선택됨)
 	const float CmToM = 0.01f;
 	const float Default = 1.0f;
 
@@ -3152,7 +3453,7 @@ void SPhysicsAssetEditorWindow::RebuildUnselectedBodyLines()
 		}
 	}
 
-	// 모든 바디 렌더링 (선택된 바디도 포함 - 선택 라인이 위에 덧그려짐)
+	// 모든 바디 렌더링 (선택된 바디는 다른 색상)
 	int32 BodyCount = PhysAsset->GetBodySetupCount();
 	for (int32 BodyIdx = 0; BodyIdx < BodyCount; ++BodyIdx)
 	{
@@ -3166,8 +3467,20 @@ void SPhysicsAssetEditorWindow::RebuildUnselectedBodyLines()
 			BoneTM = *CachedTM;
 		}
 
-		// 연결된 바디인지에 따라 색상 선택
-		const FLinearColor& DrawColor = ConnectedBodyIndices.Contains(BodyIdx) ? ConnectedColor : UnselectedColor;
+		// 색상 결정: 선택됨 > 연결됨 > 비연결
+		FLinearColor DrawColor;
+		if (BodyIdx == State->SelectedBodyIndex)
+		{
+			DrawColor = SelectedColor;
+		}
+		else if (ConnectedBodyIndices.Contains(BodyIdx))
+		{
+			DrawColor = ConnectedColor;
+		}
+		else
+		{
+			DrawColor = UnselectedColor;
+		}
 
 		// Sphere Elements
 		for (const FKSphereElem& Elem : Body->AggGeom.SphereElems)
@@ -3196,55 +3509,9 @@ void SPhysicsAssetEditorWindow::RebuildSelectedBodyLines()
 	PhysicsAssetEditorState* State = GetActivePhysicsState();
 	if (!State || !State->SelectedPDI) return;
 
-	// 선택 바디 라인 클리어
+	// 선택 바디 라인 클리어만 수행 (더 이상 오버레이 렌더링하지 않음)
+	// 선택된 바디는 RebuildUnselectedBodyLines()에서 다른 색상으로 렌더링됨
 	State->SelectedPDI->Clear();
-
-	// 선택된 바디가 없으면 종료
-	if (State->SelectedBodyIndex < 0)
-	{
-		State->bSelectedBodyLineDirty = false;
-		return;
-	}
-
-	UPhysicsAsset* PhysAsset = State->EditingPhysicsAsset;
-	if (!PhysAsset) return;
-
-	USkeletalBodySetup* Body = PhysAsset->GetBodySetup(State->SelectedBodyIndex);
-	if (!Body)
-	{
-		State->bSelectedBodyLineDirty = false;
-		return;
-	}
-
-	const FLinearColor SelectedColor(1.0f, 0.8f, 0.0f, 1.0f);  // 노란색
-	const float CmToM = 0.01f;
-	const float Default = 1.0f;
-
-	// 캐싱된 BoneTM 사용
-	FTransform BoneTM;
-	if (FTransform* CachedTM = State->CachedBoneTM.Find(State->SelectedBodyIndex))
-	{
-		BoneTM = *CachedTM;
-	}
-
-	// Sphere Elements
-	for (const FKSphereElem& Elem : Body->AggGeom.SphereElems)
-	{
-		Elem.DrawElemWire(State->SelectedPDI, BoneTM, CmToM, SelectedColor);
-	}
-
-	// Box Elements
-	for (const FKBoxElem& Elem : Body->AggGeom.BoxElems)
-	{
-		Elem.DrawElemWire(State->SelectedPDI, BoneTM, Default, SelectedColor);
-	}
-
-	// Capsule (Sphyl) Elements
-	for (const FKSphylElem& Elem : Body->AggGeom.SphylElems)
-	{
-		Elem.DrawElemWire(State->SelectedPDI, BoneTM, CmToM, SelectedColor);
-	}
-
 	State->bSelectedBodyLineDirty = false;
 }
 
@@ -3510,8 +3777,9 @@ void SPhysicsAssetEditorWindow::UpdateBodyLinesIncremental()
 	const FSkeleton* Skeleton = Mesh ? Mesh->GetSkeleton() : nullptr;
 	if (!Skeleton || !MeshComp) return;
 
-	const FLinearColor UnselectedColor(0.0f, 1.0f, 0.0f, 1.0f);
-	const FLinearColor SelectedColor(1.0f, 0.8f, 0.0f, 1.0f);
+	const FLinearColor UnselectedColor(0.0f, 1.0f, 0.0f, 1.0f);    // 초록색 (비연결)
+	const FLinearColor ConnectedColor(0.3f, 0.5f, 1.0f, 1.0f);     // 파란색 (연결됨)
+	const FLinearColor SelectedColor(1.0f, 0.8f, 0.0f, 1.0f);      // 노란색 (선택됨)
 	const float CmToM = 0.01f;
 	const float Default = 1.0f;
 
@@ -3536,7 +3804,47 @@ void SPhysicsAssetEditorWindow::UpdateBodyLinesIncremental()
 		}
 	}
 
-	// 비선택 바디 라인 증분 업데이트
+	// 선택된 바디와 Constraint로 연결된 바디 인덱스 수집
+	TSet<int32> ConnectedBodyIndices;
+	if (State->SelectedBodyIndex >= 0)
+	{
+		USkeletalBodySetup* SelectedBody = PhysAsset->GetBodySetup(State->SelectedBodyIndex);
+		if (SelectedBody)
+		{
+			FName SelectedBoneName = SelectedBody->BoneName;
+
+			// 모든 Constraint를 순회하여 연결된 바디 찾기
+			int32 ConstraintCount = PhysAsset->GetConstraintCount();
+			for (int32 ConstraintIdx = 0; ConstraintIdx < ConstraintCount; ++ConstraintIdx)
+			{
+				UPhysicsConstraintTemplate* Constraint = PhysAsset->ConstraintSetup[ConstraintIdx];
+				if (!Constraint) continue;
+
+				FName Bone1 = Constraint->GetBone1Name();
+				FName Bone2 = Constraint->GetBone2Name();
+
+				// 선택된 바디의 본과 연결된 Constraint인지 확인
+				if (Bone1 == SelectedBoneName)
+				{
+					int32 ConnectedIdx = PhysAsset->FindBodySetupIndex(Bone2);
+					if (ConnectedIdx >= 0)
+					{
+						ConnectedBodyIndices.Add(ConnectedIdx);
+					}
+				}
+				else if (Bone2 == SelectedBoneName)
+				{
+					int32 ConnectedIdx = PhysAsset->FindBodySetupIndex(Bone1);
+					if (ConnectedIdx >= 0)
+					{
+						ConnectedBodyIndices.Add(ConnectedIdx);
+					}
+				}
+			}
+		}
+	}
+
+	// 모든 바디 라인 증분 업데이트 (선택됨 > 연결됨 > 비연결 순으로 색상 결정)
 	if (State->PDI)
 	{
 		State->PDI->BeginIncrementalUpdate();
@@ -3552,52 +3860,36 @@ void SPhysicsAssetEditorWindow::UpdateBodyLinesIncremental()
 				BoneTM = *CachedTM;
 			}
 
+			// 색상 결정: 선택됨 > 연결됨 > 비연결
+			FLinearColor DrawColor;
+			if (BodyIdx == State->SelectedBodyIndex)
+			{
+				DrawColor = SelectedColor;
+			}
+			else if (ConnectedBodyIndices.Contains(BodyIdx))
+			{
+				DrawColor = ConnectedColor;
+			}
+			else
+			{
+				DrawColor = UnselectedColor;
+			}
+
 			for (const FKSphereElem& Elem : Body->AggGeom.SphereElems)
 			{
-				Elem.DrawElemWire(State->PDI, BoneTM, CmToM, UnselectedColor);
+				Elem.DrawElemWire(State->PDI, BoneTM, CmToM, DrawColor);
 			}
 			for (const FKBoxElem& Elem : Body->AggGeom.BoxElems)
 			{
-				Elem.DrawElemWire(State->PDI, BoneTM, Default, UnselectedColor);
+				Elem.DrawElemWire(State->PDI, BoneTM, Default, DrawColor);
 			}
 			for (const FKSphylElem& Elem : Body->AggGeom.SphylElems)
 			{
-				Elem.DrawElemWire(State->PDI, BoneTM, CmToM, UnselectedColor);
+				Elem.DrawElemWire(State->PDI, BoneTM, CmToM, DrawColor);
 			}
 		}
 
 		State->PDI->EndIncrementalUpdate();
-	}
-
-	// 선택 바디 라인 증분 업데이트
-	if (State->SelectedPDI && State->SelectedBodyIndex >= 0)
-	{
-		State->SelectedPDI->BeginIncrementalUpdate();
-
-		USkeletalBodySetup* Body = PhysAsset->GetBodySetup(State->SelectedBodyIndex);
-		if (Body)
-		{
-			FTransform BoneTM;
-			if (FTransform* CachedTM = State->CachedBoneTM.Find(State->SelectedBodyIndex))
-			{
-				BoneTM = *CachedTM;
-			}
-
-			for (const FKSphereElem& Elem : Body->AggGeom.SphereElems)
-			{
-				Elem.DrawElemWire(State->SelectedPDI, BoneTM, CmToM, SelectedColor);
-			}
-			for (const FKBoxElem& Elem : Body->AggGeom.BoxElems)
-			{
-				Elem.DrawElemWire(State->SelectedPDI, BoneTM, Default, SelectedColor);
-			}
-			for (const FKSphylElem& Elem : Body->AggGeom.SphylElems)
-			{
-				Elem.DrawElemWire(State->SelectedPDI, BoneTM, CmToM, SelectedColor);
-			}
-		}
-
-		State->SelectedPDI->EndIncrementalUpdate();
 	}
 }
 

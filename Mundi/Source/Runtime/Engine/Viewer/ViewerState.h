@@ -249,4 +249,9 @@ struct PhysicsAssetEditorState : public ViewerState
     int32 ToolAngularMode = 1;              // 0: Free, 1: Limited (기본값), 2: Locked
     float ToolSwingLimit = 45.0f;           // Swing 제한 각도 (도)
     float ToolTwistLimit = 45.0f;           // Twist 제한 각도 (도)
+
+    // === 컨스트레인트 연결 모드 ===
+    bool bConstraintConnectMode = false;    // 컨스트레인트 연결 모드 활성화
+    int32 ConstraintSourceBodyIndex = -1;   // 연결 소스 바디 인덱스
+    FName ConstraintSourceBoneName;         // 연결 소스 본 이름
 };
