@@ -1225,6 +1225,9 @@
     <ClCompile Include="Source\Runtime\Engine\PhysicsEngine\PhysXSimEventCallback.cpp" />
     <ClCompile Include="Source\Runtime\Engine\PhysicsEngine\Vehicle\VehicleEngineData.cpp" />
     <ClCompile Include="Source\Runtime\Engine\PhysicsEngine\Vehicle\VehicleWheel.cpp" />
+    <ClCompile Include="Generated\FKConvexElem.generated.cpp">
+      <Filter>Generated</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="Generated\UParticleModuleSizeScaleBySpeed.generated.h">
@@ -2598,6 +2601,7 @@
       <Filter>Generated</Filter>
     </ClInclude>
     <ClInclude Include="Generated\ASphereActor.generated.h">
+    <ClInclude Include="Generated\FKConvexElem.generated.h">
       <Filter>Generated</Filter>
     </ClInclude>
   </ItemGroup>

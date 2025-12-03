@@ -3224,7 +3224,7 @@ void SPhysicsAssetEditorWindow::StartSimulation()
 		MeshComp->InitRagdoll(PhysScene);
 
 		// 시뮬레이션 시작
-		MeshComp->SetSimulatePhysics(true);
+		MeshComp->SetPhysicsMode(EPhysicsMode::Ragdoll);
 
 		UE_LOG("[PhysicsAssetEditor] 랙돌 시뮬레이션 시작");
 	}

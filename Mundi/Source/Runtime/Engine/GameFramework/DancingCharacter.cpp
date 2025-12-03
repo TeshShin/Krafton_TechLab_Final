@@ -8,7 +8,7 @@ ADancingCharacter::ADancingCharacter()
 {
 	if (MeshComponent)
 	{
-		MeshComponent->SetSkeletalMesh(GDataDir + "/SillyDancing.fbx");
+		MeshComponent->SetSkeletalMesh(GDataDir + "/X Bot.fbx");
 	}
 
 	SorrySound = UResourceManager::GetInstance().Load<USound>(GDataDir + "/Audio/Die.wav");
@@ -23,7 +23,7 @@ void ADancingCharacter::BeginPlay()
 {
 	Super::BeginPlay();
 
-	UAnimSequence* AnimToPlay = UResourceManager::GetInstance().Get<UAnimSequence>(GDataDir + "/SillyDancing_mixamo.com");
+	UAnimSequence* AnimToPlay = UResourceManager::GetInstance().Get<UAnimSequence>(GDataDir + "/Animation/BSH_Walk Forward_mixamo.com");
 
 	if (AnimToPlay && GetMesh())
 	{
