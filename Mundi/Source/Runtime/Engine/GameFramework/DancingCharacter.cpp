@@ -23,7 +23,7 @@ void ADancingCharacter::BeginPlay()
 {
 	Super::BeginPlay();
 
-	UAnimSequence* AnimToPlay = UResourceManager::GetInstance().Get<UAnimSequence>(GDataDir + "/SillyDancing_mixamo.com");
+	/*UAnimSequence* AnimToPlay = UResourceManager::GetInstance().Get<UAnimSequence>(GDataDir + "/SillyDancing_mixamo.com");
 
 	if (AnimToPlay && GetMesh())
 	{
@@ -33,7 +33,7 @@ void ADancingCharacter::BeginPlay()
 	else
 	{
 		UE_LOG("ADancingCharacter: Failedd to find animation to play");
-	}
+	}*/
 }
 
 void ADancingCharacter::HandleAnimNotify(const FAnimNotifyEvent& NotifyEvent)

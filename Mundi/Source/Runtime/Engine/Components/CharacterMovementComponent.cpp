@@ -36,7 +36,7 @@ UCharacterMovementComponent::UCharacterMovementComponent()
 	, bCanJump(true)
 	// 바닥 감지 설정
 	, WalkableFloorAngle(44.0f)
-	, FloorSnapDistance(0.02f)
+	, FloorSnapDistance(0.08f)
 	, MaxStepHeight(45.0f)
 	// 경사면 미끄러짐 설정
 	, bEnableSlopeSliding(true)
@@ -272,11 +272,37 @@ void UCharacterMovementComponent::MoveUpdatedComponent(float DeltaTime)
 	// 1. 먼저 침투 해제
 	ResolvePenetration();
 
-	// 2. 수평 이동 (XY)
+	// 2. 수평 이동 (XY) - 가파른 경사면 올라가기 방지
 	FVector HorizontalDelta = FVector(Delta.X, Delta.Y, 0.0f);
 	if (HorizontalDelta.SizeSquared() > KINDA_SMALL_NUMBER)
 	{
+		FVector BeforeLocation = UpdatedComponent->GetWorldLocation();
 		SlideAlongSurface(HorizontalDelta);
+		FVector AfterLocation = UpdatedComponent->GetWorldLocation();
+
+		float ZDiff = AfterLocation.Z - BeforeLocation.Z;
+
+		// 수평 이동인데 Z가 올라갔으면 경사면 체크
+		if (ZDiff > KINDA_SMALL_NUMBER)
+		{
+			// 발 밑 바닥 체크해서 걸을 수 있는 경사인지 확인
+			FFindFloorResult FloorCheck;
+			if (FindFloor(FloorCheck, 0.5f))
+			{
+				// 걸을 수 없는 가파른 경사면이면 Z 되돌림
+				if (!FloorCheck.bWalkableFloor)
+				{
+					AfterLocation.Z = BeforeLocation.Z;
+					UpdatedComponent->SetWorldLocation(AfterLocation);
+				}
+			}
+			else
+			{
+				// 바닥이 없으면 Z 되돌림
+				AfterLocation.Z = BeforeLocation.Z;
+				UpdatedComponent->SetWorldLocation(AfterLocation);
+			}
+		}
 	}
 
 	// 3. 수직 이동 (Z)
@@ -324,7 +350,7 @@ bool UCharacterMovementComponent::SafeMoveUpdatedComponent(const FVector& Delta,
 	FPhysScene* PhysScene = World->GetPhysicsScene();
 
 	// 스킨 두께 - 충돌 감지용 여유 공간
-	const float SkinWidth = 0.015f;
+	const float SkinWidth = 0.1f;
 
 	float CapsuleRadius = Capsule->GetScaledCapsuleRadius();
 	float CapsuleHalfHeight = Capsule->GetScaledCapsuleHalfHeight();
@@ -339,25 +365,19 @@ bool UCharacterMovementComponent::SafeMoveUpdatedComponent(const FVector& Delta,
 	// 캡슐 스윕으로 충돌 감지
 	if (PhysScene->SweepSingleCapsule(Start, End, SweepRadius, SweepHalfHeight, OutHit, CharacterOwner))
 	{
-		// 시작 위치에서 이미 침투 상태
+		// 시작 위치에서 이미 침투 상태 → 이동하지 않음 (ResolvePenetration에서 처리)
 		if (OutHit.Distance <= KINDA_SMALL_NUMBER)
 		{
-			// 침투 해제: 노멀 방향으로 밀어냄
-			if (OutHit.ImpactNormal.SizeSquared() > KINDA_SMALL_NUMBER)
-			{
-				FVector Depenetration = OutHit.ImpactNormal * SkinWidth;
-				FVector NewLocation = Start + Depenetration;
-				UpdatedComponent->SetWorldLocation(NewLocation);
-			}
 			OutHit.bBlockingHit = true;
 			return true;
 		}
 
-		// 충돌 발생 - 충돌 지점에서 스킨 두께만큼 떨어진 곳에 위치
+		// 충돌 발생 - 충돌 지점까지만 이동
 		float SafeDistance = OutHit.Distance;
 		FVector SafeDelta = Delta.GetNormalized() * SafeDistance;
 		FVector NewLocation = Start + SafeDelta;
 		UpdatedComponent->SetWorldLocation(NewLocation);
+		OutHit.bBlockingHit = true;
 		return true;
 	}
 	else
@@ -421,10 +441,22 @@ void UCharacterMovementComponent::SlideAlongSurface(const FVector& Delta, int32 
 			Velocity.Z = 0.0f;
 		}
 
+		// 90도 이상 (법선 Z가 0 이하 = 벽/천장/둔각)이면 슬라이드 중단
+		if (Hit.ImpactNormal.Z <= 0.0f)
+		{
+			// 위로 가던 속도 제거
+			if (Velocity.Z > 0.0f)
+			{
+				Velocity.Z = 0.0f;
+				bIsJumping = false;
+			}
+			break;
+		}
+
 		// 슬라이드 벡터 계산
 		RemainingDelta = ComputeSlideVector(LeftoverDelta, Hit.ImpactNormal, Hit);
 
-		// 가파른 경사면(걸을 수 없는 표면)에서 위로 올라가는 것 방지
+		// 가파른 경사면(45도 초과 ~ 90도 미만)에서 위로 올라가는 것 방지
 		if (!IsWalkable(Hit.ImpactNormal))
 		{
 			// 슬라이드 결과가 위로 향하면 제거
@@ -434,9 +466,10 @@ void UCharacterMovementComponent::SlideAlongSurface(const FVector& Delta, int32 
 			}
 
 			// 속도에서도 위로 향하는 성분 제거
-			if (Velocity.Z > 0.0f && !bIsJumping)
+			if (Velocity.Z > 0.0f)
 			{
 				Velocity.Z = 0.0f;
+				bIsJumping = false;
 			}
 		}
 
@@ -600,9 +633,34 @@ bool UCharacterMovementComponent::ResolvePenetration()
 	                                          MTD, PenetrationDepth, CharacterOwner))
 	{
 		// 침투가 감지됨 - MTD 방향으로 밀어냄
-		// 약간의 여유를 두고 밀어냄 (0.125 cm)
-		const float PushOutDistance = PenetrationDepth + 0.00125f;
+		const float PushOutDistance = PenetrationDepth + 0.0125f;
 		FVector Adjustment = MTD * PushOutDistance;
+
+		// 걸을 수 없는 표면 (벽, 가파른 경사, 천장/둔각 등)
+		if (!IsWalkable(MTD))
+		{
+			// 수평 방향으로만 밀어내기
+			FVector HorizontalMTD = FVector(MTD.X, MTD.Y, 0.0f);
+			if (HorizontalMTD.SizeSquared() > KINDA_SMALL_NUMBER)
+			{
+				Adjustment = HorizontalMTD.GetNormalized() * PushOutDistance;
+			}
+
+			// 속도를 튕겨내기 (벽으로 들어가는 속도 성분 제거 + 반사)
+			FVector PushDir = FVector(MTD.X, MTD.Y, 0.0f).GetNormalized();
+			float IncomingSpeed = -FVector::Dot(Velocity, PushDir);
+			if (IncomingSpeed > 0.0f)
+			{
+				Velocity += PushDir * (IncomingSpeed * 1.2f);
+			}
+
+			// 위로 가던 속도 제거
+			if (Velocity.Z > 0.0f)
+			{
+				Velocity.Z = 0.0f;
+				bIsJumping = false;
+			}
+		}
 
 		FVector NewLocation = CurrentLocation + Adjustment;
 		UpdatedComponent->SetWorldLocation(NewLocation);

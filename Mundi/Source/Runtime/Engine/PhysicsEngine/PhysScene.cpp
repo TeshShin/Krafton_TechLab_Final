@@ -576,7 +576,7 @@ bool FPhysScene::ComputePenetrationCapsule(const FVector& Position,
     PxOverlapBuffer OverlapBuffer(OverlapHits, MaxOverlaps);
 
     PxQueryFilterData FilterData;
-    FilterData.flags = PxQueryFlag::eSTATIC | PxQueryFlag::eDYNAMIC;
+    FilterData.flags = PxQueryFlag::eSTATIC;  // 다이나믹 객체는 무시 (PhysX 시뮬레이션에서 처리)
 
     bool bHasOverlap = PhysXScene->overlap(CapsuleGeom, CapsulePose, OverlapBuffer, FilterData);
 
