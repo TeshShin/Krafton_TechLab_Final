@@ -5,6 +5,7 @@
 AVehicle::AVehicle()
     : CurrentForwardInput(0.0f)
     , CurrentSteeringInput(0.0f)
+    , bIsBoosting(false)
 {
     ChassisMesh = CreateDefaultSubobject<UStaticMeshComponent>("ChassisMesh");
     FString ChassisFileName = GDataDir + "/Model/Buggy/Buggy_Chassis.obj";
@@ -37,10 +38,11 @@ AVehicle::AVehicle()
     SpringArm = CreateDefaultSubobject<USpringArmComponent>("SpringArm");
     SpringArm->SetupAttachment(ChassisMesh);
     SpringArm->TargetArmLength = 10.0f;
-    SpringArm->SocketOffset = FVector(-10.0f, 0.0f, 10.0f);
+    SpringArm->SocketOffset = FVector(-4.6f, 0.0f, 4.6f);
 
     Camera = CreateDefaultSubobject<UCameraComponent>("Camera");
     Camera->SetupAttachment(SpringArm);
+    Camera->SetFarClipPlane(1000.f);
 }
 
 AVehicle::~AVehicle()
@@ -94,6 +96,12 @@ void AVehicle::Tick(float DeltaSeconds)
     CurrentForwardInput = 0.0f;
     CurrentSteeringInput = 0.0f;
 
+    // 부스터 적용
+    if (bIsBoosting && VehicleMovement)
+    {
+        VehicleMovement->ApplyBoostForce(BoostStrength);
+    }
+
     SyncWheelVisuals();
 }
 
@@ -118,6 +126,10 @@ void AVehicle::SetupPlayerInputComponent(UInputComponent* InInputComponent)
     // [액션 바인딩] Space로 핸드브레이크
     // VK_SPACE는 0x20
     InInputComponent->BindAction<AVehicle>("Handbrake", VK_SPACE, this, &AVehicle::HandbrakePressed, &AVehicle::HandbrakeReleased);
+
+    // [액션 바인딩] Shift로 부스터
+    // VK_SHIFT는 0x10
+    InInputComponent->BindAction<AVehicle>("Boost", VK_SHIFT, this, &AVehicle::BoostPressed, &AVehicle::BoostReleased);
 }
 
 void AVehicle::MoveForward(float Val)
@@ -144,6 +156,16 @@ void AVehicle::HandbrakeReleased()
     {
         VehicleMovement->SetHandbrakeInput(false);
     }
+}
+
+void AVehicle::BoostPressed()
+{
+    bIsBoosting = true;
+}
+
+void AVehicle::BoostReleased()
+{
+    bIsBoosting = false;
 }
 
 void AVehicle::SyncWheelVisuals()

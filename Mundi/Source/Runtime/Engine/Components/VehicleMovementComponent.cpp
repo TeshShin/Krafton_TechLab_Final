@@ -582,6 +582,46 @@ float UVehicleMovementComponent::GetForwardSpeed() const
     return 0.0f;
 }
 
+float UVehicleMovementComponent::GetEngineRPM() const
+{
+    if (PVehicleDrive)
+    {
+        // Rad/s -> RPM 변환 (60 / 2π ≈ 9.55)
+        return PVehicleDrive->mDriveDynData.getEngineRotationSpeed() * 9.55f;
+    }
+    return 0.0f;
+}
+
+int32 UVehicleMovementComponent::GetCurrentGear() const
+{
+    if (PVehicleDrive)
+    {
+        int32 Gear = PVehicleDrive->mDriveDynData.getCurrentGear();
+        // PhysX: 0=Reverse, 1=Neutral, 2+=Forward gears
+        // 사용자 친화적 변환: -1=R, 0=N, 1+=전진기어
+        if (Gear == 0) return -1;      // Reverse
+        if (Gear == 1) return 0;       // Neutral
+        return Gear - 1;               // Forward gears (1, 2, 3...)
+    }
+    return 0;
+}
+
+void UVehicleMovementComponent::ApplyBoostForce(float BoostStrength)
+{
+    if (!PVehicleDrive) return;
+
+    PxRigidDynamic* Actor = PVehicleDrive->getRigidDynamicActor();
+    if (!Actor) return;
+
+    // 차량의 전진 방향 (로컬 X축)
+    PxTransform Pose = Actor->getGlobalPose();
+    PxVec3 ForwardDir = Pose.q.rotate(PxVec3(1.0f, 0.0f, 0.0f));
+
+    // 부스터 힘 적용
+    PxVec3 BoostForce = ForwardDir * BoostStrength;
+    Actor->addForce(BoostForce, PxForceMode::eACCELERATION);
+}
+
 void UVehicleMovementComponent::SetGearToDrive()
 {
     if (PVehicleDrive)

@@ -57,6 +57,9 @@ protected:
     // SpaceBar 처리
     void HandbrakePressed();
     void HandbrakeReleased();
+    // Shift 처리 (부스터)
+    void BoostPressed();
+    void BoostReleased();
     
     // ====================================================================
     // 내부 로직
@@ -66,4 +69,8 @@ protected:
 
     float CurrentForwardInput;
     float CurrentSteeringInput;
+    bool bIsBoosting;
+
+    /** 부스터 힘 (가속도 단위) */
+    float BoostStrength = 30.0f;
 };

@@ -33,6 +33,7 @@ public:
 	// ────────────────────────────────────────────────
 
 	void BeginPlay() override;
+	void Tick(float DeltaSeconds) override;
 
 	// ────────────────────────────────────────────────
 	// 게임 라이프사이클

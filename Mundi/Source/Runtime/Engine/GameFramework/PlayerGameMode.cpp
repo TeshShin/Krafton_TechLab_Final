@@ -6,6 +6,11 @@
 #include "PlayerGameMode.h"
 #include "DancingCharacter.h"
 #include "Vehicle.h"
+#include "Character.h"
+#include "SkeletalMeshComponent.h"
+#include "EPhysicsMode.h"
+#include "InputManager.h"
+#include "PlayerController.h"
 
 #include "GameUI/SGameHUD.h"
 #include "GameUI/SButton.h"
@@ -85,5 +90,38 @@ void APlayerGameMode::UpdateScoreUI(int32 Score)
 	if (ScoreText)
 	{
 		ScoreText->SetText(L"점수: " + std::to_wstring(Score));
+	}
+}
+
+void APlayerGameMode::Tick(float DeltaSeconds)
+{
+	Super::Tick(DeltaSeconds);
+
+	// R키로 래그돌/키네마틱 토글
+	if (UInputManager::GetInstance().IsKeyPressed('R'))
+	{
+		if (APlayerController* PC = GetPlayerController())
+		{
+			if (APawn* PlayerPawn = PC->GetPawn())
+			{
+				if (ACharacter* Character = Cast<ACharacter>(PlayerPawn))
+				{
+					if (USkeletalMeshComponent* Mesh = Character->GetMesh())
+					{
+						EPhysicsMode CurrentMode = Mesh->GetPhysicsMode();
+						if (CurrentMode == EPhysicsMode::Ragdoll)
+						{
+							Mesh->SetPhysicsMode(EPhysicsMode::Kinematic);
+							UE_LOG("Physics Mode: Kinematic");
+						}
+						else
+						{
+							Mesh->SetPhysicsMode(EPhysicsMode::Ragdoll);
+							UE_LOG("Physics Mode: Ragdoll");
+						}
+					}
+				}
+			}
+		}
 	}
 }

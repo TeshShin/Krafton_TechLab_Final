@@ -69,6 +69,15 @@ public:
     /** 현재 전진 속도 (m/s) */
     float GetForwardSpeed() const;
 
+    /** 현재 엔진 RPM */
+    float GetEngineRPM() const;
+
+    /** 현재 기어 (-1: 후진, 0: 중립, 1~: 전진) */
+    int32 GetCurrentGear() const;
+
+    /** 부스터 힘 적용 (전진 방향으로) */
+    void ApplyBoostForce(float BoostStrength);
+
     /** 기어를 전진(Drive/Auto) 모드로 변경 */
     void SetGearToDrive();
 
