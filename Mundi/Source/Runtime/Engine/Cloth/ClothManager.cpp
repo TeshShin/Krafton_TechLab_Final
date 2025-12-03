@@ -54,7 +54,7 @@ void UClothManager::InitClothManager(ID3D11Device* InDevice, ID3D11DeviceContext
             FVertexDynamic Vert;
             Vert.Position = FVector(x / 3.0f, 0, -z / 3.0f);
             Vert.Normal = FVector(0, 1, 0);
-            Vert.UV = FVector2D(x / 30.0f, z/ 30.0f);
+            Vert.UV = FVector2D(z / 30.0f, -x/ 30.0f);
             TestCloth->OriginVertices.push_back(Vert);
             float InvMass = (x == 0 || x == 15 || x == 30) && z == 0 ? 0 : 1.0f;
             
