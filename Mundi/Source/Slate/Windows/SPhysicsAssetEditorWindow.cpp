@@ -3243,6 +3243,9 @@ void SPhysicsAssetEditorWindow::StartSimulation()
 
 				// 바닥을 시뮬레이션 PhysScene에 등록
 				BoxComp->GetBodyInstance()->InitBody(BoxComp->GetBodySetup(), BoxComp->GetWorldTransform(), BoxComp, PhysScene);
+
+				// Deferred Add 시스템 사용으로 인해 즉시 flush 필요
+				PhysScene->FlushDeferredAdds();
 			}
 
 			// 위치: 캐릭터 아래
@@ -3265,6 +3268,9 @@ void SPhysicsAssetEditorWindow::StartSimulation()
 
 		// 랙돌 초기화 (에디터 전용 PhysScene 사용)
 		MeshComp->InitRagdoll(PhysScene);
+
+		// Deferred Add 시스템 사용으로 인해 즉시 flush 필요
+		PhysScene->FlushDeferredAdds();
 
 		// 시뮬레이션 시작
 		MeshComp->SetPhysicsMode(EPhysicsMode::Ragdoll);
