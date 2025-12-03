@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8"?>
+<?xml version='1.0' encoding='utf-8'?>
 <Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003" DefaultTargets="Build">
   <ItemGroup Label="ProjectConfigurations">
     <ProjectConfiguration Include="Debug_StandAlone|x64">
@@ -322,6 +322,7 @@ xcopy /y /d "$(ProjectDir)ThirdParty\lib\Cloth\$(Configuration)\*.dll" "$(OutDir
     <ClCompile Include="Source\Runtime\Engine\GameFramework\HudExampleGameMode.cpp" />
     <ClCompile Include="Source\Runtime\Engine\GameFramework\Pawn.cpp" />
     <ClCompile Include="Source\Runtime\Engine\GameFramework\PlayerController.cpp" />
+    <ClCompile Include="Source\Runtime\Engine\GameFramework\PlayerGameMode.cpp" />
     <ClCompile Include="Source\Runtime\Engine\GameFramework\RibbonActor.cpp" />
     <ClCompile Include="Source\Runtime\Engine\GameFramework\SkeletalMeshActor.cpp" />
     <ClCompile Include="Source\Runtime\Engine\Components\BoneAnchorComponent.cpp" />
@@ -782,6 +783,7 @@ xcopy /y /d "$(ProjectDir)ThirdParty\lib\Cloth\$(Configuration)\*.dll" "$(OutDir
     <ClCompile Include="Generated\AVehicle.generated.cpp" />
     <ClCompile Include="Generated\UVehicleWheel.generated.cpp" />
     <ClCompile Include="Generated\FKConvexElem.generated.cpp" />
+    <ClCompile Include="Generated\APlayerGameMode.generated.cpp" />
     <ClCompile Include="Generated\UClothComponent.generated.cpp" />
   </ItemGroup>
   <ItemGroup>
@@ -1024,6 +1026,7 @@ xcopy /y /d "$(ProjectDir)ThirdParty\lib\Cloth\$(Configuration)\*.dll" "$(OutDir
     <ClInclude Include="Source\Runtime\Engine\GameFramework\HeightFogActor.h" />
     <ClInclude Include="Source\Runtime\Engine\GameFramework\Info.h" />
     <ClInclude Include="Source\Runtime\Engine\GameFramework\PlayerController.h" />
+    <ClInclude Include="Source\Runtime\Engine\GameFramework\PlayerGameMode.h" />
     <ClInclude Include="Source\Runtime\Engine\GameFramework\PointLightActor.h" />
     <ClInclude Include="Source\Runtime\Engine\GameFramework\RibbonActor.h" />
     <ClInclude Include="Source\Runtime\Engine\GameFramework\SkeletalMeshActor.h" />
@@ -1406,6 +1409,7 @@ xcopy /y /d "$(ProjectDir)ThirdParty\lib\Cloth\$(Configuration)\*.dll" "$(OutDir
     <ClInclude Include="Generated\AVehicle.generated.h" />
     <ClInclude Include="Generated\UVehicleWheel.generated.h" />
     <ClInclude Include="Generated\FKConvexElem.generated.h" />
+    <ClInclude Include="Generated\APlayerGameMode.generated.h" />
     <ClInclude Include="Generated\UClothComponent.generated.h" />
   </ItemGroup>
   <ItemGroup>

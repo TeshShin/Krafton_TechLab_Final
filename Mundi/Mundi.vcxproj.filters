@@ -674,6 +674,9 @@
     <ClCompile Include="Generated\FKConvexElem.generated.cpp">
       <Filter>Generated</Filter>
     </ClCompile>
+    <ClCompile Include="Generated\APlayerGameMode.generated.cpp">
+      <Filter>Generated</Filter>
+    </ClCompile>
     <ClCompile Include="Source\Runtime\Core\Memory\WeakObjectPtr.cpp" />
     <ClCompile Include="Source\Runtime\Engine\Cloth\ClothManager.cpp" />
     <ClCompile Include="Source\Runtime\Engine\Cloth\DxContextManagerCallbackImpl.cpp" />
