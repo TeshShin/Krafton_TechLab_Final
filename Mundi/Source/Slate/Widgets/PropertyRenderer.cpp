@@ -304,31 +304,11 @@ bool UPropertyRenderer::RenderProperty(const FProperty& Property, void* ObjectIn
 		ImGui::SetTooltip("%s", Property.Tooltip);
 	}
 
-	// SceneComponent/LightComponent는 특정 프로퍼티가 변경되면 Setter를 통해 동기화
 	// OwnerKind가 Class인 경우에만 UObject로 캐스팅 가능 (Struct인 경우 크래시 발생)
+	// Transform 프로퍼티는 OnPropertyChanged에서 처리됨 (SceneComponent::OnPropertyChanged)
 	if (bChanged && ObjectInstance && Property.OwnerKind == EOwnerKind::Class)
 	{
 		UObject* Obj = static_cast<UObject*>(ObjectInstance);
-
-		// SceneComponent Transform 프로퍼티 처리
-		if (USceneComponent* SceneComponent = Cast<USceneComponent>(Obj))
-		{
-			if (strcmp(Property.Name, "RelativeRotationEuler") == 0)
-			{
-				FVector* EulerValue = Property.GetValuePtr<FVector>(ObjectInstance);
-				SceneComponent->SetRelativeRotationEuler(*EulerValue);
-			}
-			else if (strcmp(Property.Name, "RelativeLocation") == 0)
-			{
-				FVector* LocationValue = Property.GetValuePtr<FVector>(ObjectInstance);
-				SceneComponent->SetRelativeLocation(*LocationValue);
-			}
-			else if (strcmp(Property.Name, "RelativeScale") == 0)
-			{
-				FVector* ScaleValue = Property.GetValuePtr<FVector>(ObjectInstance);
-				SceneComponent->SetRelativeScale(*ScaleValue);
-			}
-		}
 
 		// LightComponent Light 프로퍼티가 변경되면 UpdateLightData 호출
 		if (ULightComponentBase* LightComponent = Cast<ULightComponentBase>(Obj))

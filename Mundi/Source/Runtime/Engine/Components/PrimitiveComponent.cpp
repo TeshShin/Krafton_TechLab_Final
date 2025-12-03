@@ -21,6 +21,8 @@ void UPrimitiveComponent::OnPropertyChanged(const FProperty& Prop)
 {
     USceneComponent::OnPropertyChanged(Prop);
 
+    // 물리 관련 프로퍼티 변경 시 물리 재생성
+    // (Scale 변경은 OnUpdateTransform에서 처리됨 - 자식 컴포넌트 전파 포함)
     if (Prop.Name == "bSimulatePhysics" || Prop.Name == "PhysicalMaterial" || Prop.Name == "CollisionEnabled" || Prop.Name == "BodySetup")
     {
         OnDestroyPhysicsState();
@@ -75,8 +77,18 @@ void UPrimitiveComponent::OnUpdateTransform(EUpdateTransformFlags UpdateTransfor
     if (BodyInstance.IsValidBodyInstance() &&
         !((int32)UpdateTransformFlags & (int32)EUpdateTransformFlags::SkipPhysicsUpdate))
     {
-        bool bIsTeleport = Teleport != ETeleportType::None;
-        BodyInstance.SetBodyTransform(GetWorldTransform(), bIsTeleport);
+        // World Scale이 변경되었으면 물리 재생성 필요 (Shape geometry에 Scale이 베이크되어 있음)
+        FVector CurrentWorldScale = GetWorldScale();
+        if ((CurrentWorldScale - BodyInstance.Scale3D).SizeSquared() > KINDA_SMALL_NUMBER)
+        {
+            OnDestroyPhysicsState();
+            OnCreatePhysicsState();
+        }
+        else
+        {
+            bool bIsTeleport = Teleport != ETeleportType::None;
+            BodyInstance.SetBodyTransform(GetWorldTransform(), bIsTeleport);
+        }
     }
 }
 
