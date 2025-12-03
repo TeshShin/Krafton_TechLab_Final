@@ -32,7 +32,6 @@ CreateConstantBuffer(&TYPE##Buffer, sizeof(TYPE));
 
 
 struct FLinearColor;
-class UClothManager;
 
 enum class EComparisonFunc
 {
@@ -107,6 +106,21 @@ public:
 	CONSTANT_BUFFER_LIST(DECLARE_SET_CONSTANT_BUFFER_FUNC)
 	CONSTANT_BUFFER_LIST(DECLARE_SET_UPDATE_CONSTANT_BUFFER_FUNC)
 	
+
+	template<typename T>
+	static void VertexBufferUpdate(ID3D11DeviceContext* Context, ID3D11Buffer* VertexBuffer, const TArray<T>& Data)
+	{
+		// 데이터가 없으면 맵/언맵을 시도하지 않습니다.
+		if (Data.empty()) { return; }
+
+		D3D11_MAPPED_SUBRESOURCE MSR;
+		Context->Map(VertexBuffer, 0, D3D11_MAP_WRITE_DISCARD, 0, &MSR);
+
+		const size_t DataSizeInBytes = Data.size() * sizeof(T);
+		memcpy(MSR.pData, Data.data(), DataSizeInBytes);
+
+		Context->Unmap(VertexBuffer, 0);
+	}
 	template <typename TVertex>
 	void VertexBufferUpdate(ID3D11Buffer* VertexBuffer, const std::vector<TVertex>& Data)
 	{
@@ -248,8 +262,6 @@ private:
 	void SwapRenderTargets();
 
 private:
-	UClothManager* ClothManager;
-
 	//24
 	D3D11_VIEWPORT ViewportInfo{};
 

@@ -2,7 +2,6 @@
 #include "StatsOverlayD2D.h"
 #include "GameUI/SGameHUD.h"
 #include "Color.h"
-#include "Source/Runtime/Engine/Cloth/ClothManager.h"
 
 void D3D11RHI::Initialize(HWND hWindow)
 {
@@ -23,8 +22,6 @@ void D3D11RHI::Initialize(HWND hWindow)
 
     // Initialize Game HUD
     SGameHUD::Get().Initialize(Device, DeviceContext, SwapChain);
-    ClothManager = new UClothManager();
-    ClothManager->InitClothManager(GetDevice(), GetDeviceContext());
 }
 
 void D3D11RHI::Release()
@@ -32,8 +29,6 @@ void D3D11RHI::Release()
     // Prevent double Release() calls
     if (bReleased) return;
     bReleased = true;
-    delete ClothManager;
-    ClothManager = nullptr;
     // Game HUD 정리
     SGameHUD::Get().Shutdown();
 

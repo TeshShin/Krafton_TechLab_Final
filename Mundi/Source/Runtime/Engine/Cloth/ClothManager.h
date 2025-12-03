@@ -29,14 +29,17 @@ public:
     Solver* GetSolver() { return Solver; }
 
     //임시
-    ID3D11Device* GetDevice() { return GraphicsContextManager->getDevice(); }
-    ID3D11DeviceContext* GetContext() { return GraphicsContextManager->getContext(); }
+    ID3D11Device* GetDevice() { return Device; }
+    ID3D11DeviceContext* GetContext() { return Context; }
 
 
 private:
     DxContextManagerCallback* GraphicsContextManager = nullptr;
     Factory* Factory = nullptr;
     Solver* Solver = nullptr;
+
+    ID3D11Device* Device;
+    ID3D11DeviceContext* Context;
 
     // NvCloth 초기화에 필요한 콜백들
     NvClothAllocator* Allocator = nullptr;

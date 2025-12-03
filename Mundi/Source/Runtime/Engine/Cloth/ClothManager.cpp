@@ -14,6 +14,8 @@ UClothManager::~UClothManager()
 
 void UClothManager::InitClothManager(ID3D11Device* InDevice, ID3D11DeviceContext* InContext)
 {
+    Device = InDevice;
+    Context = InContext;
     //GraphicsContextManager = new DxContextManagerCallbackImpl(InDevice, InContext);
     // 1. 콜백 객체 생성
     if (!Allocator)

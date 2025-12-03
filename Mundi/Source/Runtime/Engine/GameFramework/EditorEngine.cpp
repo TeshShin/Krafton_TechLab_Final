@@ -10,6 +10,7 @@
 
 #include "PhysicalMaterialLoader.h"
 #include "Source/Runtime/Engine/PhysicsEngine/PhysXSupport.h"
+#include "Source/Runtime/Engine/Cloth/ClothManager.h"
 
 float UEditorEngine::ClientWidth = 1024.0f;
 float UEditorEngine::ClientHeight = 1024.0f;
@@ -184,8 +185,7 @@ bool UEditorEngine::Startup(HINSTANCE hInstance)
 
     if (!CreateMainWindow(hInstance))
         return false;
-    // PhysX 초기화 (StaticMesh Convex 생성에 필요하므로 Preload 전에 초기화)
-    InitGamePhys();
+    
 
     //디바이스 리소스 및 렌더러 생성
     RHIDevice.Initialize(HWnd);
@@ -198,6 +198,11 @@ bool UEditorEngine::Startup(HINSTANCE hInstance)
     UI.Initialize(HWnd, RHIDevice.GetDevice(), RHIDevice.GetDeviceContext());
     INPUT.Initialize(HWnd);
 
+    // PhysX 초기화 (StaticMesh Convex 생성에 필요하므로 Preload 전에 초기화)
+    InitGamePhys();
+
+    ClothManager = new UClothManager();
+    ClothManager->InitClothManager(RHIDevice.GetDevice(), RHIDevice.GetDeviceContext());
 
     FObjManager::Preload();
     UFbxLoader::PreLoad();
@@ -336,6 +341,7 @@ void UEditorEngine::MainLoop()
         }
         // 크래시 모드가 활성화되면 매 프레임마다 랜덤 객체 삭제
         FPlatformCrashHandler::TickCrashMode();
+        ClothManager->Tick(DeltaSeconds);
         Tick(DeltaSeconds);
         Render();
         
@@ -347,6 +353,9 @@ void UEditorEngine::MainLoop()
 
 void UEditorEngine::Shutdown()
 {
+    delete ClothManager;
+    ClothManager = nullptr;
+
     // 월드부터 삭제해야 DeleteAll 때 문제가 없음
     for (FWorldContext WorldContext : WorldContexts)
     {
