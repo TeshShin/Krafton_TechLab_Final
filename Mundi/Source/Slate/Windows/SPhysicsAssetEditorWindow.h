@@ -19,6 +19,9 @@ public:
 
 	virtual void OnRender() override;
 	virtual void OnUpdate(float DeltaSeconds) override;
+	virtual void OnMouseMove(FVector2D MousePos) override;
+	virtual void OnMouseDown(FVector2D MousePos, uint32 Button) override;
+	virtual void OnMouseUp(FVector2D MousePos, uint32 Button) override;
 
 	// 파일 경로 기반 탭 검색 오버라이드
 	void OpenOrFocusTab(UEditorAssetPreviewContext* Context) override;

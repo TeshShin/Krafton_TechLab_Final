@@ -3,6 +3,7 @@
 #include "PrimitiveDrawInterface.h"
 #include "FKSphereElem.generated.h"
 
+
 /** 충돌용 Sphere Shape */
 USTRUCT(DisplayName="Sphere Element", Description="충돌용 구체 Shape")
 struct FKSphereElem : public FKShapeElem
@@ -148,6 +149,34 @@ public:
         OutClosestPosition = WorldCenter + OutNormal * Radius;
 
         return FMath::Max(0.0f, Distance - Radius);
+    }
+
+    // 레이캐스트 (피킹용)
+    bool RayIntersect(const FRay& Ray, const FTransform& ElemTM, float Scale, float& OutDistance) const
+    {
+        FVector WorldCenter = ElemTM.TransformPosition(Center);
+        float ScaledRadius = Radius * Scale;
+
+        // Ray-Sphere 교차 테스트
+        FVector OriginToCenter = WorldCenter - Ray.Origin;
+        float Tca = FVector::Dot(OriginToCenter, Ray.Direction);
+
+        // 레이가 구 뒤를 향하면 교차 없음
+        float D2 = FVector::Dot(OriginToCenter, OriginToCenter) - Tca * Tca;
+        float Radius2 = ScaledRadius * ScaledRadius;
+
+        if (D2 > Radius2)
+            return false;
+
+        float Thc = FMath::Sqrt(Radius2 - D2);
+        float T0 = Tca - Thc;
+        float T1 = Tca + Thc;
+
+        if (T0 < 0.0f) T0 = T1;
+        if (T0 < 0.0f) return false;
+
+        OutDistance = T0;
+        return true;
     }
 
     // 디버그 렌더링

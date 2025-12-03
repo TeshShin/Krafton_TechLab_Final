@@ -25,6 +25,12 @@
 #include "ResourceManager.h"
 #include "Texture.h"
 #include "Widgets/PropertyRenderer.h"
+#include "Picking.h"
+#include "CameraActor.h"
+#include "Gizmo/GizmoActor.h"
+#include "SelectionManager.h"
+#include "BoneAnchorComponent.h"
+#include "InputManager.h"
 
 #include <PxPhysicsAPI.h>
 using namespace physx;
@@ -143,6 +149,318 @@ void SPhysicsAssetEditorWindow::OpenOrFocusTab(UEditorAssetPreviewContext* Conte
 	PendingSelectTabIndex = ActiveTabIndex;
 }
 
+void SPhysicsAssetEditorWindow::OnMouseMove(FVector2D MousePos)
+{
+	PhysicsAssetEditorState* State = GetActivePhysicsState();
+	if (!State || !State->Viewport) return;
+
+	// 드래그 중이 아니면 현재 뷰포트가 호버되어 있어야 입력 처리 (Z-order 고려)
+	if (!bLeftMousePressed && !bRightMousePressed && !State->Viewport->IsViewportHovered()) return;
+
+	// 드래그 중이면 뷰포트 밖으로 나가도 입력 계속 전달 (기즈모/카메라 조작 유지)
+	if (bLeftMousePressed || bRightMousePressed || CenterRect.Contains(MousePos))
+	{
+		FVector2D LocalPos = MousePos - FVector2D(CenterRect.Left, CenterRect.Top);
+		State->Viewport->ProcessMouseMove((int32)LocalPos.X, (int32)LocalPos.Y);
+	}
+}
+
+void SPhysicsAssetEditorWindow::OnMouseDown(FVector2D MousePos, uint32 Button)
+{
+	PhysicsAssetEditorState* State = GetActivePhysicsState();
+	if (!State || !State->Viewport) return;
+
+	// 현재 뷰포트가 호버되어 있어야 마우스 다운 처리 (Z-order 고려)
+	if (!State->Viewport->IsViewportHovered()) return;
+
+	if (CenterRect.Contains(MousePos))
+	{
+		FVector2D LocalPos = MousePos - FVector2D(CenterRect.Left, CenterRect.Top);
+
+		// 1. 먼저 기즈모 피킹 시도 (레이캐스팅 기반)
+		if (Button == 0 && State->Client && State->World)
+		{
+			ACameraActor* Camera = State->Client->GetCamera();
+			AGizmoActor* Gizmo = State->World->GetGizmoActor();
+
+			if (Camera && Gizmo)
+			{
+				// ProcessGizmoInteraction이 호버링과 드래깅을 모두 처리
+				Gizmo->ProcessGizmoInteraction(Camera, State->Viewport,
+					static_cast<float>(LocalPos.X), static_cast<float>(LocalPos.Y));
+
+				// 기즈모가 호버링 중이면 기즈모 상호작용 중이므로 추가 피킹 불필요
+				if (Gizmo->GetbIsHovering())
+				{
+					bLeftMousePressed = true;
+					return;
+				}
+			}
+		}
+
+		// 2. 기즈모가 피킹되지 않았으면 바디/컨스트레인트/본 피킹 시도
+		if (Button == 0 && State->PreviewActor && State->Client)
+		{
+			ACameraActor* Camera = State->Client->GetCamera();
+			if (Camera)
+			{
+				FVector CameraPos = Camera->GetActorLocation();
+				FVector CameraRight = Camera->GetRight();
+				FVector CameraUp = Camera->GetUp();
+				FVector CameraForward = Camera->GetForward();
+
+				FVector2D ViewportMousePos(MousePos.X - CenterRect.Left, MousePos.Y - CenterRect.Top);
+				FVector2D ViewportSize(CenterRect.GetWidth(), CenterRect.GetHeight());
+
+				// 레이 생성
+				FRay Ray = MakeRayFromViewport(
+					Camera->GetViewMatrix(),
+					Camera->GetProjectionMatrix(CenterRect.GetWidth() / CenterRect.GetHeight(), State->Viewport),
+					CameraPos, CameraRight, CameraUp, CameraForward,
+					ViewportMousePos, ViewportSize
+				);
+
+				// 바디/Shape 피킹 (Physics Asset이 있을 때)
+				bool bPickedShape = false;
+				if (State->EditingPhysicsAsset && State->bShowBodies)
+				{
+					UPhysicsAsset* PhysAsset = State->EditingPhysicsAsset;
+					USkeletalMeshComponent* MeshComp = State->PreviewActor->GetSkeletalMeshComponent();
+					USkeletalMesh* Mesh = MeshComp ? MeshComp->GetSkeletalMesh() : nullptr;
+					const FSkeleton* Skeleton = Mesh ? Mesh->GetSkeleton() : nullptr;
+
+					if (Skeleton)
+					{
+						float BestDistance = FLT_MAX;
+						int32 BestBodyIndex = -1;
+						int32 BestShapeIndex = -1;
+						int32 BestShapeType = -1;
+
+						const float CmToM = 0.01f;
+						const float Default = 1.0f;
+
+						int32 BodyCount = PhysAsset->GetBodySetupCount();
+						for (int32 BodyIdx = 0; BodyIdx < BodyCount; ++BodyIdx)
+						{
+							USkeletalBodySetup* Body = PhysAsset->GetBodySetup(BodyIdx);
+							if (!Body) continue;
+
+							// 본 트랜스폼 가져오기
+							FTransform BoneTM;
+							if (FTransform* CachedTM = State->CachedBoneTM.Find(BodyIdx))
+							{
+								BoneTM = *CachedTM;
+							}
+							else
+							{
+								auto it = Skeleton->BoneNameToIndex.find(Body->BoneName.ToString());
+								if (it != Skeleton->BoneNameToIndex.end())
+								{
+									int32 BoneIndex = it->second;
+									BoneTM = MeshComp->GetBoneWorldTransform(BoneIndex);
+								}
+							}
+
+							// Sphere 피킹
+							for (int32 i = 0; i < (int32)Body->AggGeom.SphereElems.size(); ++i)
+							{
+								float Dist;
+								if (Body->AggGeom.SphereElems[i].RayIntersect(Ray, BoneTM, CmToM, Dist))
+								{
+									if (Dist < BestDistance)
+									{
+										BestDistance = Dist;
+										BestBodyIndex = BodyIdx;
+										BestShapeIndex = i;
+										BestShapeType = 0;
+									}
+								}
+							}
+
+							// Box 피킹
+							for (int32 i = 0; i < (int32)Body->AggGeom.BoxElems.size(); ++i)
+							{
+								float Dist;
+								if (Body->AggGeom.BoxElems[i].RayIntersect(Ray, BoneTM, Default, Dist))
+								{
+									if (Dist < BestDistance)
+									{
+										BestDistance = Dist;
+										BestBodyIndex = BodyIdx;
+										BestShapeIndex = i;
+										BestShapeType = 1;
+									}
+								}
+							}
+
+							// Capsule 피킹
+							for (int32 i = 0; i < (int32)Body->AggGeom.SphylElems.size(); ++i)
+							{
+								float Dist;
+								if (Body->AggGeom.SphylElems[i].RayIntersect(Ray, BoneTM, CmToM, Dist))
+								{
+									if (Dist < BestDistance)
+									{
+										BestDistance = Dist;
+										BestBodyIndex = BodyIdx;
+										BestShapeIndex = i;
+										BestShapeType = 2;
+									}
+								}
+							}
+						}
+
+						if (BestBodyIndex >= 0)
+						{
+							bPickedShape = true;
+							State->GraphRootBodyIndex = BestBodyIndex;  // 그래프 중심으로 설정
+							State->SelectedBodyIndex = BestBodyIndex;
+							State->SelectedShapeIndex = BestShapeIndex;
+							State->SelectedShapeType = BestShapeType;
+							State->SelectedConstraintIndex = -1;
+							State->SelectedBoneIndex = -1;
+
+							// 증분 업데이트로 라인 갱신
+							UpdateBodyLinesIncremental();
+
+							// 선택된 Shape의 월드 위치에 기즈모 배치
+							USkeletalBodySetup* SelectedBody = PhysAsset->GetBodySetup(BestBodyIndex);
+							if (SelectedBody)
+							{
+								FTransform BoneTM;
+								if (FTransform* CachedTM = State->CachedBoneTM.Find(BestBodyIndex))
+								{
+									BoneTM = *CachedTM;
+								}
+
+								FVector ShapeWorldPos;
+								FQuat ShapeWorldRot = BoneTM.Rotation;  // 기본값: 본의 회전
+								if (BestShapeType == 0 && BestShapeIndex < (int32)SelectedBody->AggGeom.SphereElems.size())
+								{
+									ShapeWorldPos = BoneTM.TransformPosition(SelectedBody->AggGeom.SphereElems[BestShapeIndex].Center);
+									// Sphere는 회전 없음
+								}
+								else if (BestShapeType == 1 && BestShapeIndex < (int32)SelectedBody->AggGeom.BoxElems.size())
+								{
+									const FKBoxElem& Box = SelectedBody->AggGeom.BoxElems[BestShapeIndex];
+									ShapeWorldPos = BoneTM.TransformPosition(Box.Center);
+									ShapeWorldRot = BoneTM.Rotation * Box.Rotation;
+								}
+								else if (BestShapeType == 2 && BestShapeIndex < (int32)SelectedBody->AggGeom.SphylElems.size())
+								{
+									const FKSphylElem& Capsule = SelectedBody->AggGeom.SphylElems[BestShapeIndex];
+									ShapeWorldPos = BoneTM.TransformPosition(Capsule.Center);
+									ShapeWorldRot = BoneTM.Rotation * Capsule.Rotation;
+								}
+
+								// 기즈모를 Shape 위치/회전으로 설정
+								if (UBoneAnchorComponent* Anchor = State->PreviewActor->GetBoneGizmoAnchor())
+								{
+									Anchor->SetWorldLocation(ShapeWorldPos);
+									Anchor->SetWorldRotation(ShapeWorldRot);
+									Anchor->SetVisibility(true);
+									Anchor->SetEditability(true);
+									State->World->GetSelectionManager()->SelectActor(State->PreviewActor);
+									State->World->GetSelectionManager()->SelectComponent(Anchor);
+								}
+							}
+						}
+					}
+				}
+
+				// 바디가 피킹되지 않았으면 본 피킹 시도
+				if (!bPickedShape)
+				{
+					float HitDistance;
+					int32 PickedBoneIndex = State->PreviewActor->PickBone(Ray, HitDistance);
+
+					if (PickedBoneIndex >= 0)
+					{
+						State->SelectedBoneIndex = PickedBoneIndex;
+						State->SelectedBodyIndex = -1;
+						State->SelectedShapeIndex = -1;
+						State->SelectedShapeType = -1;
+						State->SelectedConstraintIndex = -1;
+						State->bBoneLinesDirty = true;
+						State->bRequestScrollToBone = true;
+
+						ExpandToSelectedBone(State, PickedBoneIndex);
+
+						State->PreviewActor->RepositionAnchorToBone(PickedBoneIndex);
+						if (USceneComponent* Anchor = State->PreviewActor->GetBoneGizmoAnchor())
+						{
+							State->World->GetSelectionManager()->SelectActor(State->PreviewActor);
+							State->World->GetSelectionManager()->SelectComponent(Anchor);
+						}
+					}
+					else
+					{
+						// 아무것도 피킹되지 않음 - 선택 해제
+						State->SelectedBoneIndex = -1;
+						State->SelectedBodyIndex = -1;
+						State->SelectedShapeIndex = -1;
+						State->SelectedShapeType = -1;
+						State->SelectedConstraintIndex = -1;
+
+						// 증분 업데이트로 라인 갱신
+						UpdateBodyLinesIncremental();
+
+						if (UBoneAnchorComponent* Anchor = State->PreviewActor->GetBoneGizmoAnchor())
+						{
+							Anchor->SetVisibility(false);
+							Anchor->SetEditability(false);
+						}
+						State->World->GetSelectionManager()->ClearSelection();
+					}
+				}
+			}
+		}
+
+		// 좌클릭: 드래그 시작
+		if (Button == 0)
+		{
+			bLeftMousePressed = true;
+		}
+
+		// 우클릭: 카메라 조작 시작
+		if (Button == 1)
+		{
+			// FViewportClient에 우클릭 이벤트 전달 (bIsMouseRightButtonDown 설정)
+			State->Viewport->ProcessMouseButtonDown((int32)LocalPos.X, (int32)LocalPos.Y, Button);
+			INPUT.SetCursorVisible(false);
+			INPUT.LockCursor();
+			bRightMousePressed = true;
+		}
+	}
+}
+
+void SPhysicsAssetEditorWindow::OnMouseUp(FVector2D MousePos, uint32 Button)
+{
+	PhysicsAssetEditorState* State = GetActivePhysicsState();
+	if (!State || !State->Viewport) return;
+
+	// 드래그 중이었으면 뷰포트 밖에서 마우스를 놓아도 처리 (기즈모 해제 위해)
+	if (bLeftMousePressed || bRightMousePressed || CenterRect.Contains(MousePos))
+	{
+		FVector2D LocalPos = MousePos - FVector2D(CenterRect.Left, CenterRect.Top);
+		State->Viewport->ProcessMouseButtonUp((int32)LocalPos.X, (int32)LocalPos.Y, (int32)Button);
+
+		// 좌클릭 해제: 드래그 종료
+		if (Button == 0 && bLeftMousePressed)
+		{
+			bLeftMousePressed = false;
+		}
+
+		// 우클릭 해제: 커서 복원 및 잠금 해제
+		if (Button == 1 && bRightMousePressed)
+		{
+			INPUT.SetCursorVisible(true);
+			INPUT.ReleaseCursor();
+			bRightMousePressed = false;
+		}
+	}
+}
+
 void SPhysicsAssetEditorWindow::OnUpdate(float DeltaSeconds)
 {
 	SViewerWindow::OnUpdate(DeltaSeconds);
@@ -150,17 +468,109 @@ void SPhysicsAssetEditorWindow::OnUpdate(float DeltaSeconds)
 	PhysicsAssetEditorState* State = GetActivePhysicsState();
 	if (!State) return;
 
-	// 선택 바디 변경 감지 (선택 라인만 업데이트, 비선택 라인은 모든 항목 포함하므로 재생성 불필요)
+	// 기즈모 드래그로 Shape 위치/회전 업데이트
+	if (State->World && State->PreviewActor && State->EditingPhysicsAsset)
+	{
+		AGizmoActor* Gizmo = State->World->GetGizmoActor();
+		UBoneAnchorComponent* Anchor = State->PreviewActor->GetBoneGizmoAnchor();
+
+		if (Gizmo && Anchor)
+		{
+			bool bCurrentlyDragging = Gizmo->GetbIsDragging();
+			bool bIsFirstDragFrame = bCurrentlyDragging && !State->bWasGizmoDragging;
+
+			// Shape가 선택되어 있고 기즈모 드래그 중일 때 (첫 프레임 제외)
+			if (bCurrentlyDragging && !bIsFirstDragFrame &&
+				State->SelectedBodyIndex >= 0 && State->SelectedShapeIndex >= 0)
+			{
+				USkeletalBodySetup* Body = State->EditingPhysicsAsset->GetBodySetup(State->SelectedBodyIndex);
+				if (Body)
+				{
+					// 앵커의 월드 트랜스폼을 본 로컬 좌표로 변환
+					const FTransform& AnchorWorldTM = Anchor->GetWorldTransform();
+					FTransform BoneTM;
+					if (FTransform* CachedTM = State->CachedBoneTM.Find(State->SelectedBodyIndex))
+					{
+						BoneTM = *CachedTM;
+					}
+					FTransform InvBoneTM = BoneTM.Inverse();
+					FVector LocalPos = InvBoneTM.TransformPosition(AnchorWorldTM.Translation);
+					FQuat LocalRot = InvBoneTM.Rotation * AnchorWorldTM.Rotation;
+
+					// 선택된 Shape 타입에 따라 Center와 Rotation 업데이트
+					if (State->SelectedShapeType == 0 && State->SelectedShapeIndex < (int32)Body->AggGeom.SphereElems.size())
+					{
+						// Sphere는 회전 없음
+						Body->AggGeom.SphereElems[State->SelectedShapeIndex].Center = LocalPos;
+					}
+					else if (State->SelectedShapeType == 1 && State->SelectedShapeIndex < (int32)Body->AggGeom.BoxElems.size())
+					{
+						Body->AggGeom.BoxElems[State->SelectedShapeIndex].Center = LocalPos;
+						Body->AggGeom.BoxElems[State->SelectedShapeIndex].Rotation = LocalRot;
+					}
+					else if (State->SelectedShapeType == 2 && State->SelectedShapeIndex < (int32)Body->AggGeom.SphylElems.size())
+					{
+						Body->AggGeom.SphylElems[State->SelectedShapeIndex].Center = LocalPos;
+						Body->AggGeom.SphylElems[State->SelectedShapeIndex].Rotation = LocalRot;
+					}
+
+					// Incremental 업데이트로 라인 갱신 (재생성 대신 기존 라인 위치만 업데이트)
+					UpdateBodyLinesIncremental();
+					State->bIsDirty = true;
+				}
+			}
+			else if (!bCurrentlyDragging && State->SelectedBodyIndex >= 0 && State->SelectedShapeIndex >= 0)
+			{
+				// 드래그 중이 아닐 때: 앵커를 Shape 위치로 재설정 (World→Local→World 변환 오차 방지)
+				USkeletalBodySetup* Body = State->EditingPhysicsAsset->GetBodySetup(State->SelectedBodyIndex);
+				if (Body)
+				{
+					FTransform BoneTM;
+					if (FTransform* CachedTM = State->CachedBoneTM.Find(State->SelectedBodyIndex))
+					{
+						BoneTM = *CachedTM;
+					}
+
+					FVector ShapeWorldPos;
+					FQuat ShapeWorldRot = BoneTM.Rotation;
+					if (State->SelectedShapeType == 0 && State->SelectedShapeIndex < (int32)Body->AggGeom.SphereElems.size())
+					{
+						ShapeWorldPos = BoneTM.TransformPosition(Body->AggGeom.SphereElems[State->SelectedShapeIndex].Center);
+					}
+					else if (State->SelectedShapeType == 1 && State->SelectedShapeIndex < (int32)Body->AggGeom.BoxElems.size())
+					{
+						const FKBoxElem& Box = Body->AggGeom.BoxElems[State->SelectedShapeIndex];
+						ShapeWorldPos = BoneTM.TransformPosition(Box.Center);
+						ShapeWorldRot = BoneTM.Rotation * Box.Rotation;
+					}
+					else if (State->SelectedShapeType == 2 && State->SelectedShapeIndex < (int32)Body->AggGeom.SphylElems.size())
+					{
+						const FKSphylElem& Capsule = Body->AggGeom.SphylElems[State->SelectedShapeIndex];
+						ShapeWorldPos = BoneTM.TransformPosition(Capsule.Center);
+						ShapeWorldRot = BoneTM.Rotation * Capsule.Rotation;
+					}
+
+					Anchor->SetWorldLocation(ShapeWorldPos);
+					Anchor->SetWorldRotation(ShapeWorldRot);
+				}
+			}
+			// 첫 프레임에서는 아무것도 하지 않음 (앵커가 아직 움직이지 않았으므로)
+
+			State->bWasGizmoDragging = bCurrentlyDragging;
+		}
+	}
+
+	// 선택 바디 변경 감지 (증분 업데이트)
 	if (State->SelectedBodyIndex != State->LastSelectedBodyIndex)
 	{
-		State->bSelectedBodyLineDirty = true;  // 선택 바디 하이라이트만 업데이트
+		UpdateBodyLinesIncremental();
 		State->LastSelectedBodyIndex = State->SelectedBodyIndex;
 	}
 
-	// 선택 컨스트레인트 변경 감지 (선택 라인만 업데이트)
+	// 선택 컨스트레인트 변경 감지 (증분 업데이트)
 	if (State->SelectedConstraintIndex != State->LastSelectedConstraintIndex)
 	{
-		State->bSelectedConstraintLineDirty = true;  // 선택 컨스트레인트 하이라이트만 업데이트
+		UpdateConstraintLinesIncremental();
 		State->LastSelectedConstraintIndex = State->SelectedConstraintIndex;
 	}
 
@@ -1916,7 +2326,7 @@ bool SPhysicsAssetEditorWindow::RenderShapeDetails(USkeletalBodySetup* Body)
 	if (bChanged)
 	{
 		State->bIsDirty = true;
-		State->bSelectedBodyLineDirty = true;  // 선택 바디 라인만 재생성
+		UpdateBodyLinesIncremental();  // 증분 업데이트
 	}
 
 	return bChanged;

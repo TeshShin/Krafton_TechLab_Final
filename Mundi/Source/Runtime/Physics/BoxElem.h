@@ -3,6 +3,7 @@
 #include "PrimitiveDrawInterface.h"
 #include "FKBoxElem.generated.h"
 
+
 /** 충돌용 Box Shape */
 USTRUCT(DisplayName="Box Element", Description="충돌용 박스 Shape")
 struct FKBoxElem : public FKShapeElem
@@ -239,6 +240,53 @@ public:
         OutNormal = BoxWorldTM.TransformVector(LocalNormal).GetNormalized();
 
         return Distance;
+    }
+
+    // 레이캐스트 (피킹용)
+    bool RayIntersect(const FRay& Ray, const FTransform& ElemTM, float Scale, float& OutDistance) const
+    {
+        // Box의 World Transform
+        FTransform WorldTM;
+        WorldTM.Translation = ElemTM.TransformPosition(Center);
+        WorldTM.Rotation = ElemTM.Rotation * Rotation;
+        WorldTM.Scale3D = FVector::One();
+
+        // 레이를 박스 로컬 공간으로 변환
+        FTransform InvWorldTM = WorldTM.Inverse();
+        FVector LocalOrigin = InvWorldTM.TransformPosition(Ray.Origin);
+        FVector LocalDir = InvWorldTM.TransformVector(Ray.Direction).GetNormalized();
+
+        // Slab method for Ray-AABB intersection
+        FVector HalfExtent(X * Scale, Y * Scale, Z * Scale);
+        float TMin = -FLT_MAX;
+        float TMax = FLT_MAX;
+
+        for (int i = 0; i < 3; ++i)
+        {
+            float Origin = (i == 0) ? LocalOrigin.X : ((i == 1) ? LocalOrigin.Y : LocalOrigin.Z);
+            float Dir = (i == 0) ? LocalDir.X : ((i == 1) ? LocalDir.Y : LocalDir.Z);
+            float Extent = (i == 0) ? HalfExtent.X : ((i == 1) ? HalfExtent.Y : HalfExtent.Z);
+
+            if (FMath::Abs(Dir) < KINDA_SMALL_NUMBER)
+            {
+                if (Origin < -Extent || Origin > Extent)
+                    return false;
+            }
+            else
+            {
+                float T1 = (-Extent - Origin) / Dir;
+                float T2 = (Extent - Origin) / Dir;
+                if (T1 > T2) { float Tmp = T1; T1 = T2; T2 = Tmp; }
+                TMin = FMath::Max(TMin, T1);
+                TMax = FMath::Min(TMax, T2);
+                if (TMin > TMax)
+                    return false;
+            }
+        }
+
+        if (TMax < 0.0f) return false;
+        OutDistance = TMin >= 0.0f ? TMin : TMax;
+        return true;
     }
 
     // 디버그 렌더링

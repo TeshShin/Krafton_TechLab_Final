@@ -3,6 +3,7 @@
 #include "PrimitiveDrawInterface.h"
 #include "FKSphylElem.generated.h"
 
+
 /** 충돌용 Capsule Shape (Z축이 캡슐 축) */
 USTRUCT(DisplayName="Sphyl Element", Description="충돌용 캡슐 Shape")
 struct FKSphylElem : public FKShapeElem
@@ -236,6 +237,103 @@ public:
         OutNormal = CapsuleWorldTM.TransformVector(LocalNormal).GetNormalized();
 
         return Distance;
+    }
+
+    // 레이캐스트 (피킹용) - 캡슐은 원통 + 양 끝 반구로 근사
+    bool RayIntersect(const FRay& Ray, const FTransform& ElemTM, float Scale, float& OutDistance) const
+    {
+        // 캡슐의 World Transform
+        FVector WorldCenter = ElemTM.TransformPosition(Center);
+        FQuat WorldRotation = ElemTM.Rotation * Rotation;
+
+        float ScaledRadius = Radius * Scale;
+        float ScaledHalfLength = GetHalfLength() * Scale;
+
+        // 캡슐 로컬 공간으로 레이 변환
+        FTransform CapsuleTM(WorldCenter, WorldRotation, FVector::One());
+        FTransform InvCapsuleTM = CapsuleTM.Inverse();
+        FVector LocalOrigin = InvCapsuleTM.TransformPosition(Ray.Origin);
+        FVector LocalDir = InvCapsuleTM.TransformVector(Ray.Direction).GetNormalized();
+
+        // 캡슐 = 무한 원통과 교차 후 Z 범위 체크 + 반구 체크
+        // 원통 축은 로컬 Z축
+        float A = LocalDir.X * LocalDir.X + LocalDir.Y * LocalDir.Y;
+        float B = 2.0f * (LocalOrigin.X * LocalDir.X + LocalOrigin.Y * LocalDir.Y);
+        float C = LocalOrigin.X * LocalOrigin.X + LocalOrigin.Y * LocalOrigin.Y - ScaledRadius * ScaledRadius;
+
+        float BestT = FLT_MAX;
+        bool bHit = false;
+
+        // 원통 측면 교차
+        if (A > KINDA_SMALL_NUMBER)
+        {
+            float Discriminant = B * B - 4.0f * A * C;
+            if (Discriminant >= 0.0f)
+            {
+                float SqrtD = FMath::Sqrt(Discriminant);
+                float T1 = (-B - SqrtD) / (2.0f * A);
+                float T2 = (-B + SqrtD) / (2.0f * A);
+
+                for (float T : {T1, T2})
+                {
+                    if (T > 0.0f)
+                    {
+                        float Z = LocalOrigin.Z + T * LocalDir.Z;
+                        if (Z >= -ScaledHalfLength && Z <= ScaledHalfLength)
+                        {
+                            if (T < BestT) { BestT = T; bHit = true; }
+                        }
+                    }
+                }
+            }
+        }
+
+        // 상단 반구 (Z = +ScaledHalfLength에 중심)
+        {
+            FVector SphereCenter(0.0f, 0.0f, ScaledHalfLength);
+            FVector ToSphere = LocalOrigin - SphereCenter;
+            float SA = FVector::Dot(LocalDir, LocalDir);
+            float SB = 2.0f * FVector::Dot(ToSphere, LocalDir);
+            float SC = FVector::Dot(ToSphere, ToSphere) - ScaledRadius * ScaledRadius;
+            float SD = SB * SB - 4.0f * SA * SC;
+            if (SD >= 0.0f)
+            {
+                float SqrtSD = FMath::Sqrt(SD);
+                float ST = (-SB - SqrtSD) / (2.0f * SA);
+                if (ST > 0.0f)
+                {
+                    FVector HitPoint = LocalOrigin + LocalDir * ST;
+                    if (HitPoint.Z >= ScaledHalfLength && ST < BestT) { BestT = ST; bHit = true; }
+                }
+            }
+        }
+
+        // 하단 반구 (Z = -ScaledHalfLength에 중심)
+        {
+            FVector SphereCenter(0.0f, 0.0f, -ScaledHalfLength);
+            FVector ToSphere = LocalOrigin - SphereCenter;
+            float SA = FVector::Dot(LocalDir, LocalDir);
+            float SB = 2.0f * FVector::Dot(ToSphere, LocalDir);
+            float SC = FVector::Dot(ToSphere, ToSphere) - ScaledRadius * ScaledRadius;
+            float SD = SB * SB - 4.0f * SA * SC;
+            if (SD >= 0.0f)
+            {
+                float SqrtSD = FMath::Sqrt(SD);
+                float ST = (-SB - SqrtSD) / (2.0f * SA);
+                if (ST > 0.0f)
+                {
+                    FVector HitPoint = LocalOrigin + LocalDir * ST;
+                    if (HitPoint.Z <= -ScaledHalfLength && ST < BestT) { BestT = ST; bHit = true; }
+                }
+            }
+        }
+
+        if (bHit)
+        {
+            OutDistance = BestT;
+            return true;
+        }
+        return false;
     }
 
     // 디버그 렌더링

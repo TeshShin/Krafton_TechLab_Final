@@ -178,6 +178,8 @@ struct PhysicsAssetEditorState : public ViewerState
     // 선택 상태
     int32 SelectedBodyIndex = -1;        // 그래프 내 하이라이트된 바디
     int32 SelectedConstraintIndex = -1;  // 그래프 내 하이라이트된 컨스트레인트
+    int32 SelectedShapeIndex = -1;       // 선택된 Shape (바디 내 Shape 인덱스)
+    int32 SelectedShapeType = -1;        // 선택된 Shape 타입 (0: Sphere, 1: Box, 2: Capsule)
     int32 GraphRootBodyIndex = -1;       // 그래프의 중심 바디 (스켈레톤 트리에서만 변경)
 
     // === 시뮬레이션 상태 ===
