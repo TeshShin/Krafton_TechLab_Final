@@ -1044,6 +1044,52 @@ void SPhysicsAssetEditorWindow::RenderToolbar()
 			ResetPose();
 	}
 
+	// ========== 표시 옵션 토글 버튼들 ==========
+	ImGui::SameLine();
+	ImGui::SeparatorEx(ImGuiSeparatorFlags_Vertical);
+	ImGui::SameLine();
+
+	if (State)
+	{
+		// Bodies 토글
+		bool bShowBodies = State->bShowBodies;
+		if (ImGui::Checkbox("Bodies", &bShowBodies))
+		{
+			State->bShowBodies = bShowBodies;
+			if (bShowBodies)
+			{
+				State->bAllBodyLinesDirty = true;
+				State->bSelectedBodyLineDirty = true;
+			}
+			else
+			{
+				// 꺼질 때 라인 클리어
+				if (State->PDI) State->PDI->Clear();
+				if (State->SelectedPDI) State->SelectedPDI->Clear();
+			}
+		}
+		ImGui::SameLine();
+
+		// Constraints 토글
+		bool bShowConstraints = State->bShowConstraints;
+		if (ImGui::Checkbox("Constraints", &bShowConstraints))
+		{
+			State->bShowConstraints = bShowConstraints;
+			if (bShowConstraints)
+			{
+				State->bAllConstraintLinesDirty = true;
+				State->bSelectedConstraintLineDirty = true;
+			}
+			else
+			{
+				// 꺼질 때 라인 클리어
+				if (State->ConstraintPDI) State->ConstraintPDI->Clear();
+				if (State->SelectedConstraintPDI) State->SelectedConstraintPDI->Clear();
+			}
+		}
+		ImGui::SameLine();
+	}
+
 	ImGui::Separator();
 }
 
@@ -3193,12 +3239,18 @@ void SPhysicsAssetEditorWindow::StopSimulation()
 
 	State->bIsSimulating = false;
 
-	// 즉시 라인 재구성 (다음 프레임 지연 방지)
+	// 즉시 라인 재구성 (플래그 체크)
 	RebuildBoneTMCache();
-	RebuildUnselectedBodyLines();
-	RebuildSelectedBodyLines();
-	RebuildUnselectedConstraintLines();
-	RebuildSelectedConstraintLines();
+	if (State->bShowBodies)
+	{
+		RebuildUnselectedBodyLines();
+		RebuildSelectedBodyLines();
+	}
+	if (State->bShowConstraints)
+	{
+		RebuildUnselectedConstraintLines();
+		RebuildSelectedConstraintLines();
+	}
 
 	UE_LOG("[PhysicsAssetEditor] 시뮬레이션 중지");
 }
@@ -3238,45 +3290,28 @@ void SPhysicsAssetEditorWindow::ResetPose()
 		State->OriginalBoneTransforms.Empty();  // 사용 후 정리
 	}
 
-	// 디버그 라인 모두 재활성화 (본 포함)
-	State->bShowBodies = true;
-	State->bShowConstraints = true;
+	// 본 라인은 리셋 시 항상 다시 그림 + bShowBones 플래그도 켜기
 	State->bShowBones = true;
-
-	// LineComponent 가시성 모두 켜기
-	if (State->BodyShapeLineComponent)
-	{
-		State->BodyShapeLineComponent->SetLineVisible(true);
-	}
-	if (State->SelectedBodyLineComponent)
-	{
-		State->SelectedBodyLineComponent->SetLineVisible(true);
-	}
-	if (State->ConstraintLineComponent)
-	{
-		State->ConstraintLineComponent->SetLineVisible(true);
-	}
-	if (State->SelectedConstraintLineComponent)
-	{
-		State->SelectedConstraintLineComponent->SetLineVisible(true);
-	}
 	if (State->PreviewActor)
 	{
 		if (ULineComponent* BoneLineComp = State->PreviewActor->GetBoneLineComponent())
 		{
 			BoneLineComp->SetLineVisible(true);
 		}
+		State->PreviewActor->RebuildBoneLines(State->SelectedBoneIndex);
 	}
 
-	// 즉시 라인 재구성 (다음 프레임 지연 방지)
+	// 바디/컨스트레인트는 플래그 체크
 	RebuildBoneTMCache();
-	RebuildUnselectedBodyLines();
-	RebuildSelectedBodyLines();
-	RebuildUnselectedConstraintLines();
-	RebuildSelectedConstraintLines();
-	if (State->PreviewActor)
+	if (State->bShowBodies)
 	{
-		State->PreviewActor->RebuildBoneLines(State->SelectedBoneIndex);
+		RebuildUnselectedBodyLines();
+		RebuildSelectedBodyLines();
+	}
+	if (State->bShowConstraints)
+	{
+		RebuildUnselectedConstraintLines();
+		RebuildSelectedConstraintLines();
 	}
 
 	UE_LOG("[PhysicsAssetEditor] 포즈 리셋");
