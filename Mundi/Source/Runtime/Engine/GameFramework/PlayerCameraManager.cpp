@@ -10,6 +10,8 @@
 #include "CameraActor.h"
 #include "CameraComponent.h"
 #include "Character.h"
+#include "Pawn.h"
+#include "PlayerController.h"
 #include "World.h"
 #include "FViewport.h"
 #include "RenderSettings.h"
@@ -42,13 +44,8 @@ APlayerCameraManager::APlayerCameraManager()
 {
 	ObjectName = "Player Camera Manager";
 
-	// 카메라 컴포넌트 생성
-	UCameraComponent* CameraComp = CreateDefaultSubobject<UCameraComponent>("CameraComponent");
-	if (CameraComp)
-	{
-		SetRootComponent(CameraComp);
-		CurrentViewCamera = CameraComp;
-	}
+	// PlayerCameraManager는 카메라를 "관리"하는 액터이지, 카메라를 "소유"하는 액터가 아님
+	// 실제 카메라는 Pawn/Character/Vehicle 등에 붙어있고, 그 카메라를 CurrentViewCamera로 참조함
 }
 
 APlayerCameraManager::~APlayerCameraManager()
@@ -72,63 +69,102 @@ void APlayerCameraManager::BeginPlay()
 {
 	Super::BeginPlay();
 
-	// 먼저 Character의 CameraComponent를 찾아서 설정
-	UWorld* World = GetWorld();
-	if (World)
+	// 이미 다른 카메라가 RegisterView로 등록되었으면 유지
+	if (CurrentViewCamera)
 	{
-		TArray<ACharacter*> Characters = World->FindActors<ACharacter>();
-		for (ACharacter* Character : Characters)
+		return;
+	}
+
+	UWorld* World = GetWorld();
+	if (!World)
+	{
+		return;
+	}
+
+	// 1. PlayerController가 빙의한 Pawn의 카메라 찾기 (Vehicle, Character 등)
+	TArray<APlayerController*> PlayerControllers = World->FindActors<APlayerController>();
+	for (APlayerController* PC : PlayerControllers)
+	{
+		if (PC && PC->GetPawn())
 		{
-			if (Character)
+			UCameraComponent* PawnCamera = Cast<UCameraComponent>(PC->GetPawn()->GetComponent(UCameraComponent::StaticClass()));
+			if (PawnCamera)
 			{
-				UCameraComponent* CharacterCamera = Character->GetCamera();
-				if (CharacterCamera)
-				{
-					CurrentViewCamera = CharacterCamera;
-					UE_LOG("[PlayerCameraManager] Using Character's CameraComponent");
-					return;
-				}
+				CurrentViewCamera = PawnCamera;
+				UE_LOG("[PlayerCameraManager] Using PlayerController's Pawn CameraComponent");
+				return;
 			}
 		}
 	}
 
-	// Character 카메라가 없으면 아무 카메라나 찾음
-	CurrentViewCamera = GetWorld()->FindComponent<UCameraComponent>();
+	// 2. Character의 카메라 찾기
+	TArray<ACharacter*> Characters = World->FindActors<ACharacter>();
+	for (ACharacter* Character : Characters)
+	{
+		if (Character)
+		{
+			UCameraComponent* CharacterCamera = Character->GetCamera();
+			if (CharacterCamera)
+			{
+				CurrentViewCamera = CharacterCamera;
+				UE_LOG("[PlayerCameraManager] Using Character's CameraComponent");
+				return;
+			}
+		}
+	}
+
+	// 3. 아무 Pawn의 카메라 찾기
+	TArray<APawn*> Pawns = World->FindActors<APawn>();
+	for (APawn* Pawn : Pawns)
+	{
+		if (Pawn)
+		{
+			UCameraComponent* PawnCamera = Cast<UCameraComponent>(Pawn->GetComponent(UCameraComponent::StaticClass()));
+			if (PawnCamera)
+			{
+				CurrentViewCamera = PawnCamera;
+				UE_LOG("[PlayerCameraManager] Using Pawn's CameraComponent");
+				return;
+			}
+		}
+	}
+
+	// 4. 그래도 없으면 아무 카메라나 찾음 (Fallback으로 자기 자신 카메라 포함)
+	CurrentViewCamera = World->FindComponent<UCameraComponent>();
 	if (!CurrentViewCamera)
 	{
 		UE_LOG("[warning] 현재 월드에 카메라가 없습니다. (Editor에서만 Editor 전용 카메라로 Fallback 처리됨)");
 	}
 }
 
-// 월드에 또 다른 APlayerCameraManager 가 있을 때만 삭제 가능
 void APlayerCameraManager::Destroy()
 {
-	// 교체할 수 있으면 해당 매니저로 교체 후 삭제 허용
-	TArray<APlayerCameraManager*> PlayerCameraManagers = GetWorld()->FindActors<APlayerCameraManager>();
-	if (1 < PlayerCameraManagers.Num())
+	// World의 PlayerCameraManager 참조 해제
+	if (GetWorld() && GetWorld()->GetPlayerCameraManager() == this)
 	{
-		for (APlayerCameraManager* PlayerCameraManager : PlayerCameraManagers)
+		// 다른 PCM이 있으면 그것으로 교체
+		TArray<APlayerCameraManager*> PlayerCameraManagers = GetWorld()->FindActors<APlayerCameraManager>();
+		APlayerCameraManager* Replacement = nullptr;
+		for (APlayerCameraManager* PCM : PlayerCameraManagers)
 		{
-			if (this != PlayerCameraManager)
+			if (PCM != this)
 			{
-				GetWorld()->SetPlayerCameraManager(PlayerCameraManager);
-				Super::Destroy();
-				return;
+				Replacement = PCM;
+				break;
 			}
 		}
+		GetWorld()->SetPlayerCameraManager(Replacement);
 	}
 
-	UE_LOG("[warning] PlayerCameraManager는 삭제할 수 없습니다. (새로운 매니저를 만들고 삭제하면 가능)");
+	Super::Destroy();
 }
 
 void APlayerCameraManager::Serialize(const bool bInIsLoading, JSON& InOutHandle)
 {
 	Super::Serialize(bInIsLoading, InOutHandle);
 
-	if (bInIsLoading)
-	{
-		CurrentViewCamera = Cast<UCameraComponent>(RootComponent);
-	}
+	// 로드 시 CurrentViewCamera는 null로 유지
+	// BeginPlay에서 Pawn의 카메라를 찾아서 설정함
 }
 
 // 만약 현재 월드에 카메라가 없었으면 이 카메라가 View로 등록됨

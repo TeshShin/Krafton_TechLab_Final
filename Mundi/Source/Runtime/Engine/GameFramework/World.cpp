@@ -125,6 +125,7 @@ void UWorld::BeginPlay()
 {
 	// GameMode 생성 (World Settings에 설정된 클래스 사용)
 	// GameMode 클래스 자체에 DefaultPawnClass, PlayerControllerClass 등이 정의되어 있음
+	// GameMode가 먼저 생성되어야 Pawn의 카메라가 PlayerCameraManager에 등록될 수 있음
 	AGameModeBase* GameMode = nullptr;
 	if (GameModeClass)
 	{
@@ -143,11 +144,22 @@ void UWorld::BeginPlay()
 		UE_LOG("[info] GameMode created: %s", GameMode->GetClass()->Name);
 	}
 
-	// 모든 액터에 대해 BeginPlay 호출
+	// PlayerCameraManager가 없으면 생성 (GameMode의 Pawn 스폰 이후)
+	// Pawn의 카메라가 이미 존재하므로 RegisterView로 자동 등록됨
+	if (!PlayerCameraManager)
+	{
+		PlayerCameraManager = SpawnActor<APlayerCameraManager>();
+		UE_LOG("[info] PlayerCameraManager created for gameplay");
+	}
+
+	// 모든 액터에 대해 BeginPlay 호출 (아직 호출되지 않은 액터만)
 	TArray<AActor*> LevelActors = GetLevel()->GetActors();
 	for (AActor* Actor : LevelActors)
 	{
-		Actor->BeginPlay();
+		if (Actor && !Actor->HasBegunPlay())
+		{
+			Actor->BeginPlay();
+		}
 	}
 
 	// BeginPlay 중에 삭제된 액터 처리
@@ -589,26 +601,28 @@ void UWorld::SetLevel(std::unique_ptr<ULevel> InLevel)
 		{
 			Partition->BulkRegister(Level->GetActors());
 		}
+
+		// 먼저 World 설정만 수행
         for (AActor* Actor : Level->GetActors())
         {
 			if (Actor)
 			{
 				Actor->SetWorld(this);
+			}
+        }
+
+		// PCM을 먼저 찾아서 설정 (RegisterAllComponents에서 CameraComponent가 RegisterView 호출 시 필요)
+		this->PlayerCameraManager = FindActor<APlayerCameraManager>();
+
+		// 그 후 RegisterAllComponents 호출
+        for (AActor* Actor : Level->GetActors())
+        {
+			if (Actor)
+			{
 				Actor->RegisterAllComponents(this);
-}
+			}
         }
     }
-
-	// 씬에서 PCM 검색
-	this->PlayerCameraManager = FindActor<APlayerCameraManager>();
-
-	// 에디터 월드에서만 PlayerCameraManager 자동 생성 (게임 월드는 GameMode가 생성함)
-	if (this->PlayerCameraManager == nullptr && !bPie)
-	{
-		AActor* NewPlayerCameraManager = SpawnActor(APlayerCameraManager::StaticClass());
-		this->PlayerCameraManager = Cast<APlayerCameraManager>(NewPlayerCameraManager);
-		UE_LOG("[info] 씬에서 APlayerCameraManager를 찾지 못해, 비어있는 인스턴스를 새로 생성합니다.");
-	}
 
 	// 파티클 이벤트 매니저 생성 (Preview World 제외)
 	if (!IsPreviewWorld() && ParticleEventManager == nullptr)

@@ -53,6 +53,9 @@ public:
     void SetWorld(UWorld* InWorld) { World = InWorld; }
     UWorld* GetWorld() const { return World; }
 
+    // BeginPlay 상태
+    bool HasBegunPlay() const { return bHasBegunPlay; }
+
     // 루트/컴포넌트
     void SetRootComponent(USceneComponent* InRoot);
     USceneComponent* GetRootComponent() const { return RootComponent; }
