@@ -30,6 +30,11 @@ public:
 	virtual void OnSaveAs() {}
 	virtual void OnLoad() {}
 
+	// 파일 작업 버튼 활성화 여부 (각 뷰어에서 오버라이드)
+	virtual bool IsSaveEnabled() const { return ActiveState && ActiveState->CurrentAnimation != nullptr; }
+	virtual bool IsSaveAsEnabled() const { return ActiveState && ActiveState->CurrentAnimation != nullptr; }
+	virtual bool IsLoadEnabled() const { return true; }
+
 	// Accessors (active tab)
 	FViewport* GetViewport() const { return ActiveState ? ActiveState->Viewport : nullptr; }
 	FViewportClient* GetViewportClient() const { return ActiveState ? ActiveState->Client : nullptr; }

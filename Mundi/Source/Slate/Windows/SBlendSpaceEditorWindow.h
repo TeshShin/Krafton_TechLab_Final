@@ -12,6 +12,16 @@ public:
     // SWindow override
     void OnRender() override;
 
+    // 파일 작업 오버라이드
+    void OnSave() override;
+    void OnSaveAs() override;
+    void OnLoad() override;
+
+    // BlendSpace는 BlendInst가 있으면 Save 가능
+    bool IsSaveEnabled() const override { return BlendInst != nullptr; }
+    bool IsSaveAsEnabled() const override { return BlendInst != nullptr; }
+    bool IsLoadEnabled() const override { return true; }
+
 protected:
     // SViewerWindow requirements
     ViewerState* CreateViewerState(const char* Name, UEditorAssetPreviewContext* Context) override;

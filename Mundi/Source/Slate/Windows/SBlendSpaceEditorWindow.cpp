@@ -210,23 +210,7 @@ void SBlendSpaceEditorWindow::OnRender()
         ImGui::PopStyleVar();
 
         // BlendSpace-specific controls
-        ImGui::Dummy(ImVec2(0,6));
-        ImGui::TextUnformatted("File Operations");
-        ImGui::Separator();
-        if (ImGui::Button("Save", ImVec2(60, 0)))
-        {
-            SaveBlendSpace();
-        }
-        ImGui::SameLine();
-        if (ImGui::Button("Save As", ImVec2(60, 0)))
-        {
-            SaveBlendSpaceAs();
-        }
-        ImGui::SameLine();
-        if (ImGui::Button("Load", ImVec2(60, 0)))
-        {
-            LoadBlendSpace();
-        }
+        // 현재 파일 경로 표시
         if (!CurrentFilePath.empty())
         {
             std::filesystem::path fsPath(UTF8ToWide(CurrentFilePath));
@@ -828,6 +812,22 @@ void SBlendSpaceEditorWindow::RebuildTriangles()
     {
         BlendInst->AddTriangle(key.i, key.j, key.k);
     }
+}
+
+// ===== 파일 작업 오버라이드 =====
+void SBlendSpaceEditorWindow::OnSave()
+{
+    SaveBlendSpace();
+}
+
+void SBlendSpaceEditorWindow::OnSaveAs()
+{
+    SaveBlendSpaceAs();
+}
+
+void SBlendSpaceEditorWindow::OnLoad()
+{
+    LoadBlendSpace();
 }
 
 void SBlendSpaceEditorWindow::SaveBlendSpace()

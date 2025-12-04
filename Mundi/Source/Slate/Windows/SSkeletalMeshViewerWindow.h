@@ -16,6 +16,11 @@ public:
     virtual void OnRender() override;
     virtual void PreRenderViewportUpdate() override;
 
+    // Skeletal Mesh Viewer는 파일 작업 비활성화
+    virtual bool IsSaveEnabled() const override { return false; }
+    virtual bool IsSaveAsEnabled() const override { return false; }
+    virtual bool IsLoadEnabled() const override { return false; }
+
 protected:
     virtual ViewerState* CreateViewerState(const char* Name, UEditorAssetPreviewContext* Context) override;
     virtual void DestroyViewerState(ViewerState*& State) override;

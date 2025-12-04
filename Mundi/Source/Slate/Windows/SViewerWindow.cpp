@@ -478,44 +478,48 @@ void SViewerWindow::RenderTabsAndToolbar(EViewerType CurrentViewerType)
     float availableHeight = ImGui::GetContentRegionAvail().y;
     ImGui::SetCursorPosY(ImGui::GetCursorPosY() + (availableHeight - BtnHeight) * 0.5f);
 
-    // 애니메이션이 로드되어 있는지 확인 (Save/SaveAs/Load 버튼 활성화 조건)
-    const bool bHasAnimation = (ActiveState && ActiveState->CurrentAnimation != nullptr);
+    // 파일 작업 버튼 활성화 여부 (각 뷰어에서 오버라이드 가능)
+    const bool bCanSave = IsSaveEnabled();
+    const bool bCanSaveAs = IsSaveAsEnabled();
+    const bool bCanLoad = IsLoadEnabled();
 
     // Save Button (Left-aligned)
-    if (!bHasAnimation) ImGui::BeginDisabled();
+    if (!bCanSave) ImGui::BeginDisabled();
     ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0, 0, 0, 0));
     if (ImGui::ImageButton("##SaveBtn",
         (void*)IconSave->GetShaderResourceView(), IconSizeVec))
     {
         OnSave();
     }
-    if (ImGui::IsItemHovered()) ImGui::SetTooltip(bHasAnimation ? "Save" : "Save (No animation loaded)");
+    if (ImGui::IsItemHovered()) ImGui::SetTooltip(bCanSave ? "Save" : "Save (Disabled)");
     ImGui::PopStyleColor();
-    if (!bHasAnimation) ImGui::EndDisabled();
+    if (!bCanSave) ImGui::EndDisabled();
     ImGui::SameLine();
 
     // Save As Button
-    if (!bHasAnimation) ImGui::BeginDisabled();
+    if (!bCanSaveAs) ImGui::BeginDisabled();
     ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0, 0, 0, 0));
     if (ImGui::ImageButton("##SaveAsBtn",
         (void*)IconSaveAs->GetShaderResourceView(), IconSizeVec))
     {
         OnSaveAs();
     }
-    if (ImGui::IsItemHovered()) ImGui::SetTooltip(bHasAnimation ? "Save As..." : "Save As (No animation loaded)");
+    if (ImGui::IsItemHovered()) ImGui::SetTooltip(bCanSaveAs ? "Save As..." : "Save As (Disabled)");
     ImGui::PopStyleColor();
-    if (!bHasAnimation) ImGui::EndDisabled();
+    if (!bCanSaveAs) ImGui::EndDisabled();
     ImGui::SameLine();
 
-    // Load Button (항상 활성화 - .animsequence에서 애니메이션 로드 가능)
+    // Load Button
+    if (!bCanLoad) ImGui::BeginDisabled();
     ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0, 0, 0, 0));
     if (ImGui::ImageButton("##LoadBtn",
         (void*)IconLoad->GetShaderResourceView(), IconSizeVec))
     {
         OnLoad();
     }
-    if (ImGui::IsItemHovered()) ImGui::SetTooltip("Load AnimSequence");
+    if (ImGui::IsItemHovered()) ImGui::SetTooltip(bCanLoad ? "Load" : "Load (Disabled)");
     ImGui::PopStyleColor();
+    if (!bCanLoad) ImGui::EndDisabled();
     ImGui::SameLine();
 
     const float framePaddingX = ImGui::GetStyle().FramePadding.x;
