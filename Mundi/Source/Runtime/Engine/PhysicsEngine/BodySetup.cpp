@@ -266,7 +266,9 @@ void UBodySetup::DuplicateSubObjects()
 
 	// PhysicalMaterial은 리소스 참조이므로 포인터 공유 (복제 안함)
 	// AggGeom은 값 타입이므로 얕은 복사로 이미 복제됨
-	// 따라서 추가 처리 없음
+
+	// OwningMesh는 새 소유자가 설정해야 함 (원본 참조 방지)
+	OwningMesh = nullptr;
 }
 
 void UBodySetup::Serialize(const bool bInIsLoading, JSON& InOutHandle)
