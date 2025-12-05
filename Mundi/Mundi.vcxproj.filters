@@ -1371,6 +1371,9 @@
     <ClCompile Include="Generated\UGameInstance.generated.cpp">
       <Filter>Generated</Filter>
     </ClCompile>
+    <ClCompile Include="Generated\ALevelTransitionManager.generated.cpp">
+      <Filter>Generated</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="Source\Runtime\AssetManagement\LinesBatch.h" />
@@ -2923,6 +2926,9 @@
     </ClInclude>
     <ClInclude Include="Source\Runtime\Engine\Components\DecalFadeTypes.h" />
     <ClInclude Include="Generated\UGameInstance.generated.h">
+      <Filter>Generated</Filter>
+    </ClInclude>
+    <ClInclude Include="Generated\ALevelTransitionManager.generated.h">
       <Filter>Generated</Filter>
     </ClInclude>
   </ItemGroup>

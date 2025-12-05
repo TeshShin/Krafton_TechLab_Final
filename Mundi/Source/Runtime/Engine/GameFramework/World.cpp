@@ -28,6 +28,7 @@
 #include "Level.h"
 #include "LightManager.h"
 #include "LuaManager.h"
+#include "LevelTransitionManager.h"
 #include "CollisionManager.h"
 #include "ShapeComponent.h"
 #include "PlayerCameraManager.h"
@@ -567,6 +568,35 @@ void UWorld::SpawnDefaultActors()
 	SpawnActor<ADirectionalLightActor>();
 }
 
+// ════════════════════════════════════════════════════════════════════════
+// 레벨 전환 관련
+
+ALevelTransitionManager* UWorld::GetLevelTransitionManager()
+{
+    // PIE 모드에서만 생성
+    if (!LevelTransitionManager && bPie)
+    {
+        LevelTransitionManager = SpawnActor<ALevelTransitionManager>();
+        UE_LOG("[info] World: LevelTransitionManager created");
+    }
+
+    return LevelTransitionManager;
+}
+
+void UWorld::TransitionToLevel(const FWideString& LevelPath)
+{
+    if (ALevelTransitionManager* Manager = GetLevelTransitionManager())
+    {
+        Manager->TransitionToLevel(LevelPath);
+    }
+    else
+    {
+        UE_LOG("[error] World::TransitionToLevel: LevelTransitionManager is null (PIE mode only)");
+    }
+}
+
+// ════════════════════════════════════════════════════════════════════════
+
 void UWorld::SetLevel(std::unique_ptr<ULevel> InLevel)
 {
     // Make UI/selection safe before destroying previous actors
@@ -579,11 +609,28 @@ void UWorld::SetLevel(std::unique_ptr<ULevel> InLevel)
     // Cleanup current
     if (Level)
     {
+        // Persistent Actor 추출 (레벨 전환 시에도 유지)
+        TArray<AActor*> PersistentActors;
         for (AActor* Actor : Level->GetActors())
         {
-            ObjectFactory::DeleteObject(Actor);
+            if (Actor && Actor->IsPersistentActor())
+            {
+                PersistentActors.Add(Actor);
+                UE_LOG("[info] World::SetLevel: Preserving persistent actor: %s", Actor->ObjectName);
+            }
+            else
+            {
+                ObjectFactory::DeleteObject(Actor);
+            }
         }
+
         Level->Clear();
+
+        // Persistent Actor를 새 레벨에 다시 추가
+        for (AActor* Actor : PersistentActors)
+        {
+            InLevel->AddActor(Actor);
+        }
     }
     // Clear spatial indices (skip if partition is null for preview worlds)
     if (Partition)

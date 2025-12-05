@@ -32,6 +32,7 @@ class APlayerCameraManager;
 class AParticleEventManager;
 class UCollisionManager;
 class AGameModeBase;
+class ALevelTransitionManager;
 
 struct FTransform;
 struct FSceneCompData;
@@ -70,6 +71,12 @@ public:
 
     /** GameMode 인스턴스 접근자 */
     AGameModeBase* GetGameMode() const { return GameModeInstance; }
+
+    /** LevelTransitionManager 접근자 (PIE Only) */
+    ALevelTransitionManager* GetLevelTransitionManager();
+
+    /** 편의 메서드: 레벨 전환 */
+    void TransitionToLevel(const FWideString& LevelPath);
 
 public:
     /** 초기화 */
@@ -173,6 +180,9 @@ private:
 
     /** === GameMode 인스턴스 === */
     AGameModeBase* GameModeInstance = nullptr;
+
+    /** === 레벨전환 (PIE Only) === */
+    ALevelTransitionManager* LevelTransitionManager = nullptr;
 
     /** === 레벨 컨테이너 === */
     std::unique_ptr<ULevel> Level;
