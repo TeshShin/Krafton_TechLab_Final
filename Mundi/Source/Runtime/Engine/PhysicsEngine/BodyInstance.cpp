@@ -2,6 +2,7 @@
 #include "BodyInstance.h"
 #include "BodySetup.h"
 #include "PhysScene.h"
+#include "PrimitiveComponent.h"
 
 FBodyInstance::FBodyInstance()
     : OwnerComponent(nullptr)
@@ -11,6 +12,7 @@ FBodyInstance::FBodyInstance()
     , PhysicalMaterialOverride(nullptr)
     , Scale3D(FVector(1.f, 1.f, 1.f))
     , bSimulatePhysics(false)
+    , bKinematic(false)
     , LinearDamping(0.01f)
     , AngularDamping(0.f)
     , MassInKgOverride(100.0f)
@@ -26,6 +28,7 @@ FBodyInstance::FBodyInstance(const FBodyInstance& Other)
     , PhysicalMaterialOverride(Other.PhysicalMaterialOverride)
     , Scale3D(Other.Scale3D)
     , bSimulatePhysics(Other.bSimulatePhysics)
+    , bKinematic(Other.bKinematic)
     , LinearDamping(Other.LinearDamping)
     , AngularDamping(Other.AngularDamping)
     , MassInKgOverride(Other.MassInKgOverride)
@@ -45,6 +48,7 @@ FBodyInstance& FBodyInstance::operator=(const FBodyInstance& Other)
         PhysicalMaterialOverride = Other.PhysicalMaterialOverride;
         Scale3D = Other.Scale3D;
         bSimulatePhysics = Other.bSimulatePhysics;
+        bKinematic = Other.bKinematic;
         LinearDamping = Other.LinearDamping;
         AngularDamping = Other.AngularDamping;
         MassInKgOverride = Other.MassInKgOverride;
@@ -85,13 +89,18 @@ void FBodyInstance::InitBody(UBodySetup* Setup, const FTransform& Transform, UPr
 
     PxTransform PhysicsTransform = U2PTransform(Transform);
 
-    if (bSimulatePhysics)
+    // 컴포넌트의 Mobility에 따라 Actor 타입 결정
+    // Static: PxRigidStatic (움직이지 않음, TriangleMesh 허용)
+    // Movable: PxRigidDynamic (bSimulatePhysics/bKinematic에 따라 동작)
+    EComponentMobility ComponentMobility = Component ? Component->Mobility : EComponentMobility::Movable;
+    switch (ComponentMobility)
     {
-        RigidActor = GPhysXSDK->createRigidDynamic(PhysicsTransform);
-    }
-    else
-    {
+    case EComponentMobility::Static:
         RigidActor = GPhysXSDK->createRigidStatic(PhysicsTransform);
+        break;
+    case EComponentMobility::Movable:
+        RigidActor = GPhysXSDK->createRigidDynamic(PhysicsTransform);
+        break;
     }
 
     if (!RigidActor)
@@ -103,18 +112,19 @@ void FBodyInstance::InitBody(UBodySetup* Setup, const FTransform& Transform, UPr
     RigidActor->userData = this;
 
     UPhysicalMaterial* PhysicalMaterial = GetSimplePhysicalMaterial();
-    
+
     {
-        SCOPED_SCENE_WRITE_LOCK(PhysScene->GetPxScene());    
+        SCOPED_SCENE_WRITE_LOCK(PhysScene->GetPxScene());
         Setup->AddShapesToRigidActor_AssumesLocked(this, Scale3D, RigidActor, PhysicalMaterial);
     }
 
-    if (IsDynamic())
+    if (IsDynamic() || IsKinematic())
     {
         PxRigidDynamic* DynamicActor = RigidActor->is<PxRigidDynamic>();
 
         // Kinematic 모드 설정
-        if (bKinematic)
+        // bSimulatePhysics가 false이거나 bKinematic이 true면 kinematic
+        if (!bSimulatePhysics || bKinematic)
         {
             DynamicActor->setRigidBodyFlag(PxRigidBodyFlag::eKINEMATIC, true);
         }
@@ -321,7 +331,22 @@ void FBodyInstance::AddTorque(const FVector& Torque, bool bAccelChange)
 
 bool FBodyInstance::IsDynamic() const
 {
-    return RigidActor && RigidActor->is<PxRigidDynamic>();
+    // Movable이고 물리 시뮬레이션이 활성화되어 있고 Kinematic이 아닌 경우
+    if (!OwnerComponent) return false;
+    return OwnerComponent->Mobility == EComponentMobility::Movable && bSimulatePhysics && !bKinematic;
+}
+
+bool FBodyInstance::IsStatic() const
+{
+    if (!OwnerComponent) return false;
+    return OwnerComponent->Mobility == EComponentMobility::Static;
+}
+
+bool FBodyInstance::IsKinematic() const
+{
+    // Movable이고 (물리 시뮬레이션이 비활성화되어 있거나 Kinematic인 경우)
+    if (!OwnerComponent) return false;
+    return OwnerComponent->Mobility == EComponentMobility::Movable && (!bSimulatePhysics || bKinematic);
 }
 
 void FBodyInstance::SetCollisionChannel(ECollisionChannel InChannel, uint32 InMask)
@@ -379,7 +404,7 @@ void FBodyInstance::UpdateFilterData()
 
 void FBodyInstance::SetKinematicTarget(const FTransform& NewTransform)
 {
-    if (!IsValidBodyInstance() || !bKinematic || !PhysScene)
+    if (!IsValidBodyInstance() || !IsKinematic() || !PhysScene)
     {
         return;
     }
@@ -398,6 +423,14 @@ void FBodyInstance::SetKinematicTarget(const FTransform& NewTransform)
 
 void FBodyInstance::SetKinematic(bool bEnable)
 {
+    // Static은 Kinematic으로 전환 불가
+    if (!OwnerComponent || OwnerComponent->Mobility == EComponentMobility::Static)
+    {
+        UE_LOG("[FBodyInstance] Static 바디는 Kinematic으로 전환할 수 없습니다.");
+        return;
+    }
+
+    // 이미 같은 상태면 무시
     if (bKinematic == bEnable)
     {
         return;
@@ -418,9 +451,11 @@ void FBodyInstance::SetKinematic(bool bEnable)
 
     SCOPED_SCENE_WRITE_LOCK(PhysScene->GetPxScene());
 
-    DynamicActor->setRigidBodyFlag(PxRigidBodyFlag::eKINEMATIC, bEnable);
+    // bSimulatePhysics가 false이거나 bKinematic이 true면 kinematic 모드
+    bool bShouldBeKinematic = !bSimulatePhysics || bKinematic;
+    DynamicActor->setRigidBodyFlag(PxRigidBodyFlag::eKINEMATIC, bShouldBeKinematic);
 
-    if (!bEnable)
+    if (!bShouldBeKinematic)
     {
         // Kinematic에서 Dynamic으로 전환 시 속도 초기화
         DynamicActor->setLinearVelocity(PxVec3(0.0f));

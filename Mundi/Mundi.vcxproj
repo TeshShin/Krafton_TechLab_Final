@@ -538,6 +538,7 @@ xcopy /y /d "$(ProjectDir)ThirdParty\lib\Cloth\Release\*.dll" "$(OutDir)"</Comma
     <ClCompile Include="Source\Runtime\Engine\PhysicsEngine\PhysXSimEventCallback.cpp" />
     <ClCompile Include="Source\Runtime\Engine\PhysicsEngine\PhysXSupport.cpp" />
     <ClCompile Include="Source\Runtime\Engine\PhysicsEngine\ShapeElem.cpp" />
+    <ClCompile Include="Source\Runtime\Engine\PhysicsEngine\TriangleMeshElem.cpp" />
     <ClCompile Include="Source\Runtime\Engine\PhysicsEngine\Vehicle\VehicleDefinitions.cpp" />
     <ClCompile Include="Source\Runtime\Engine\PhysicsEngine\Vehicle\VehicleWheel.cpp" />
     <ClCompile Include="Source\Runtime\Engine\Scripting\GameObject.cpp" />
@@ -845,6 +846,7 @@ xcopy /y /d "$(ProjectDir)ThirdParty\lib\Cloth\Release\*.dll" "$(OutDir)"</Comma
     <ClCompile Include="Generated\APlayerGameMode.generated.cpp" />
     <ClCompile Include="Generated\UClothComponent.generated.cpp" />
     <ClCompile Include="Generated\FDecalFadeProperty.generated.cpp" />
+    <ClCompile Include="Generated\FKTriangleMeshElem.generated.cpp" />
   </ItemGroup>
   <ItemGroup>
     <FxCompile Include="Shaders\Common\LightingBuffers.hlsl">
@@ -1137,6 +1139,8 @@ xcopy /y /d "$(ProjectDir)ThirdParty\lib\Cloth\Release\*.dll" "$(OutDir)"</Comma
     <ClInclude Include="Source\Runtime\Engine\PhysicsEngine\ShapeElem.h" />
     <ClInclude Include="Source\Runtime\Engine\PhysicsEngine\SphereElem.h" />
     <ClInclude Include="Source\Runtime\Engine\PhysicsEngine\SphylElem.h" />
+    <ClInclude Include="Source\Runtime\Engine\PhysicsEngine\TriangleMeshElem.h" />
+    <ClInclude Include="Source\Runtime\Engine\PhysicsEngine\TriangleMeshSource.h" />
     <ClInclude Include="Source\Runtime\Engine\PhysicsEngine\Vehicle\VehicleDefinitions.h" />
     <ClInclude Include="Source\Runtime\Engine\PhysicsEngine\Vehicle\VehicleWheel.h" />
     <ClInclude Include="Source\Runtime\Engine\Scripting\GameObject.h" />
@@ -1473,6 +1477,7 @@ xcopy /y /d "$(ProjectDir)ThirdParty\lib\Cloth\Release\*.dll" "$(OutDir)"</Comma
     <ClInclude Include="Generated\APlayerGameMode.generated.h" />
     <ClInclude Include="Generated\UClothComponent.generated.h" />
     <ClInclude Include="Generated\FDecalFadeProperty.generated.h" />
+    <ClInclude Include="Generated\FKTriangleMeshElem.generated.h" />
   </ItemGroup>
   <ItemGroup>
     <None Include="BuildTools\CodeGenerator\generate.py" />

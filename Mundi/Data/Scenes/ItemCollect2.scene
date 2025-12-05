@@ -11,6 +11,7 @@
           "Id" : 1269,
           "Intensity" : 0.600000,
           "LightColor" : [1.000000, 1.000000, 1.000000, 1.000000],
+          "Mobility" : 1,
           "ObjectName" : "UDirectionalLightComponent_4",
           "ParentId" : 0,
           "RelativeLocation" : [0.000000, 0.000000, 0.000000],
@@ -43,6 +44,7 @@
           "Id" : 1272,
           "Intensity" : 0.050000,
           "LightColor" : [1.000000, 1.000000, 1.000000, 1.000000],
+          "Mobility" : 1,
           "ObjectName" : "UAmbientLightComponent_4",
           "ParentId" : 0,
           "RelativeLocation" : [0.000000, 0.000000, 0.000000],
@@ -71,6 +73,7 @@
       "ObjectName" : "AParticleEventManager_16",
       "OwnedComponents" : [{
           "Id" : 1274,
+          "Mobility" : 1,
           "ObjectName" : "USceneComponent_17",
           "ParentId" : 0,
           "RelativeLocation" : [0.000000, 0.000000, 0.000000],
@@ -111,6 +114,7 @@
               "ParentPath" : "texture",
               "Type" : "UMaterialInstanceDynamic"
             }],
+          "Mobility" : 1,
           "ObjectName" : "UStaticMeshComponent_2",
           "ParentId" : 0,
           "PhysicalMaterial" : "",
@@ -139,6 +143,7 @@
       "ObjectName" : "AParticleEventManager_3",
       "OwnedComponents" : [{
           "Id" : 1280,
+          "Mobility" : 1,
           "ObjectName" : "USceneComponent_4",
           "ParentId" : 0,
           "RelativeLocation" : [0.000000, 0.000000, 0.000000],
@@ -161,6 +166,7 @@
       "ObjectName" : "AParticleEventManager_4",
       "OwnedComponents" : [{
           "Id" : 1282,
+          "Mobility" : 1,
           "ObjectName" : "USceneComponent_5",
           "ParentId" : 0,
           "RelativeLocation" : [0.000000, 0.000000, 0.000000],
@@ -183,6 +189,7 @@
       "ObjectName" : "AParticleEventManager_5",
       "OwnedComponents" : [{
           "Id" : 1284,
+          "Mobility" : 1,
           "ObjectName" : "USceneComponent_6",
           "ParentId" : 0,
           "RelativeLocation" : [0.000000, 0.000000, 0.000000],
@@ -205,6 +212,7 @@
       "ObjectName" : "AParticleEventManager_6",
       "OwnedComponents" : [{
           "Id" : 1286,
+          "Mobility" : 1,
           "ObjectName" : "USceneComponent_7",
           "ParentId" : 0,
           "RelativeLocation" : [0.000000, 0.000000, 0.000000],
@@ -616,6 +624,7 @@
               "ParentPath" : "Part654Mtl",
               "Type" : "UMaterialInstanceDynamic"
             }],
+          "Mobility" : 1,
           "ObjectName" : "UStaticMeshComponent_5",
           "ParentId" : 0,
           "PhysicalMaterial" : "",
@@ -644,6 +653,7 @@
       "ObjectName" : "AParticleEventManager_7",
       "OwnedComponents" : [{
           "Id" : 1318,
+          "Mobility" : 1,
           "ObjectName" : "USceneComponent_8",
           "ParentId" : 0,
           "RelativeLocation" : [0.000000, 0.000000, 0.000000],
@@ -666,6 +676,7 @@
       "ObjectName" : "AParticleEventManager_8",
       "OwnedComponents" : [{
           "Id" : 1320,
+          "Mobility" : 1,
           "ObjectName" : "USceneComponent_9",
           "ParentId" : 0,
           "RelativeLocation" : [0.000000, 0.000000, 0.000000],
@@ -688,6 +699,7 @@
       "ObjectName" : "AParticleEventManager_9",
       "OwnedComponents" : [{
           "Id" : 1322,
+          "Mobility" : 1,
           "ObjectName" : "USceneComponent_10",
           "ParentId" : 0,
           "RelativeLocation" : [0.000000, 0.000000, 0.000000],
@@ -706,10 +718,11 @@
       "bActorHiddenInGame" : false,
       "bActorIsActive" : true
     },
-    "1334" : {
+    "1323" : {
       "ObjectName" : "AParticleEventManager_10",
       "OwnedComponents" : [{
-          "Id" : 1335,
+          "Id" : 1324,
+          "Mobility" : 1,
           "ObjectName" : "USceneComponent_11",
           "ParentId" : 0,
           "RelativeLocation" : [0.000000, 0.000000, 0.000000],
@@ -722,20 +735,66 @@
           "bTickEnabled" : true,
           "bTickInEditor" : false
         }],
-      "RootComponentId" : 1335,
+      "RootComponentId" : 1324,
+      "Tag" : "",
+      "Type" : "AParticleEventManager",
+      "bActorHiddenInGame" : false,
+      "bActorIsActive" : true
+    },
+    "1325" : {
+      "ObjectName" : "AParticleEventManager_11",
+      "OwnedComponents" : [{
+          "Id" : 1326,
+          "Mobility" : 1,
+          "ObjectName" : "USceneComponent_12",
+          "ParentId" : 0,
+          "RelativeLocation" : [0.000000, 0.000000, 0.000000],
+          "RelativeRotationEuler" : [0.000000, 0.000000, 0.000000],
+          "RelativeScale" : [1.000000, 1.000000, 1.000000],
+          "Type" : "USceneComponent",
+          "bHiddenInGame" : false,
+          "bIsActive" : true,
+          "bIsVisible" : true,
+          "bTickEnabled" : true,
+          "bTickInEditor" : false
+        }],
+      "RootComponentId" : 1326,
+      "Tag" : "",
+      "Type" : "AParticleEventManager",
+      "bActorHiddenInGame" : false,
+      "bActorIsActive" : true
+    },
+    "1340" : {
+      "ObjectName" : "AParticleEventManager_12",
+      "OwnedComponents" : [{
+          "Id" : 1341,
+          "Mobility" : 1,
+          "ObjectName" : "USceneComponent_13",
+          "ParentId" : 0,
+          "RelativeLocation" : [0.000000, 0.000000, 0.000000],
+          "RelativeRotationEuler" : [0.000000, 0.000000, 0.000000],
+          "RelativeScale" : [1.000000, 1.000000, 1.000000],
+          "Type" : "USceneComponent",
+          "bHiddenInGame" : false,
+          "bIsActive" : true,
+          "bIsVisible" : true,
+          "bTickEnabled" : true,
+          "bTickInEditor" : false
+        }],
+      "RootComponentId" : 1341,
       "Tag" : "",
       "Type" : "AParticleEventManager",
       "bActorHiddenInGame" : false,
       "bActorIsActive" : true
     }
   },
-  "NextUUID" : 1373,
+  "NextUUID" : 1520,
   "PerspectiveCamera" : {
     "FOV" : [60.000000],
     "FarClip" : [801.000000],
     "Location" : [-135.219589, 23.837034, 20.392815],
     "NearClip" : [0.500000],
-    "Rotation" : [0.000000, 2.199710, -1.498126]
+    "Rotation" : [0.000000, 2.199710, -1.298126]
   },
   "Version" : 1,
   "WorldSettings" : {
