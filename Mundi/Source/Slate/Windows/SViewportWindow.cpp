@@ -468,6 +468,9 @@ void SViewportWindow::LoadToolbarIcons(ID3D11Device* Device)
 	IconParticles = NewObject<UTexture>();
 	IconParticles->Load(GDataDir + "/Icon/ParticleSystemIcon.png", Device);
 
+	IconRagdoll = NewObject<UTexture>();
+	IconRagdoll->Load(GDataDir + "/Icon/Viewport_Ragdoll.png", Device);
+
 	// 뷰포트 레이아웃 전환 아이콘 로드
 	IconSingleToMultiViewport = NewObject<UTexture>();
 	IconSingleToMultiViewport->Load(GDataDir + "/Icon/Viewport_SingleToMultiViewport.png", Device);
@@ -1695,6 +1698,24 @@ void SViewportWindow::RenderShowFlagDropdownMenu()
 		if (ImGui::IsItemHovered())
 		{
 			ImGui::SetTooltip("파티클 시스템 렌더링을 표시합니다.");
+		}
+
+		// Ragdoll
+		bool bRagdoll = RenderSettings.IsShowFlagEnabled(EEngineShowFlags::SF_Ragdoll);
+		if (ImGui::Checkbox("##Ragdoll", &bRagdoll))
+		{
+			RenderSettings.ToggleShowFlag(EEngineShowFlags::SF_Ragdoll);
+		}
+		ImGui::SameLine();
+		if (IconRagdoll && IconRagdoll->GetShaderResourceView())
+		{
+			ImGui::Image((void*)IconRagdoll->GetShaderResourceView(), IconSize);
+			ImGui::SameLine(0, 4);
+		}
+		ImGui::Text(" 래그돌");
+		if (ImGui::IsItemHovered())
+		{
+			ImGui::SetTooltip("래그돌 피직스 디버그 시각화를 표시합니다.");
 		}
 
 		// Billboard

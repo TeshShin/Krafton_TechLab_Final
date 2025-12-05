@@ -255,6 +255,7 @@
     <ClCompile Include="Source\Runtime\Engine\PhysicsEngine\PhysicalMaterial.cpp" />
     <ClCompile Include="Source\Runtime\Engine\PhysicsEngine\PhysicsAsset.cpp" />
     <ClCompile Include="Source\Runtime\Engine\PhysicsEngine\PhysicsDebugUtils.cpp" />
+    <ClCompile Include="Source\Runtime\Engine\PhysicsEngine\RagdollDebugRenderer.cpp" />
     <ClCompile Include="Source\Runtime\Engine\PhysicsEngine\PhysicsTypes.cpp" />
     <ClCompile Include="Source\Runtime\Engine\PhysicsEngine\PhysScene.cpp" />
     <ClCompile Include="Source\Runtime\Engine\PhysicsEngine\PhysXPublic.cpp" />
@@ -689,6 +690,9 @@
     </ClCompile>
     <ClCompile Include="Source\Runtime\Engine\Components\ClothComponent.cpp" />
     <ClCompile Include="Source\Runtime\Engine\Cloth\NvClothEnvironment.cpp" />
+    <ClCompile Include="Generated\FConstraintInstance.generated.cpp">
+      <Filter>Generated</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="Generated\AActor.generated.h">
@@ -935,6 +939,7 @@
     <ClInclude Include="Source\Runtime\Engine\PhysicsEngine\PhysicsAsset.h" />
     <ClInclude Include="Source\Runtime\Engine\PhysicsEngine\PhysicsCacheData.h" />
     <ClInclude Include="Source\Runtime\Engine\PhysicsEngine\PhysicsDebugUtils.h" />
+    <ClInclude Include="Source\Runtime\Engine\PhysicsEngine\RagdollDebugRenderer.h" />
     <ClInclude Include="Source\Runtime\Engine\PhysicsEngine\PhysicsTypes.h" />
     <ClInclude Include="Source\Runtime\Engine\PhysicsEngine\PhysScene.h" />
     <ClInclude Include="Source\Runtime\Engine\PhysicsEngine\PhysXPublic.h" />
@@ -1454,6 +1459,9 @@
     <ClInclude Include="Source\Runtime\Engine\Cloth\NvClothEnvironment.h" />
     <ClInclude Include="Source\Runtime\Engine\Cloth\ClothAllocatorUtil.h" />
     <ClInclude Include="Generated\APlayerGameMode.generated.h">
+      <Filter>Generated</Filter>
+    </ClInclude>
+    <ClInclude Include="Generated\FConstraintInstance.generated.h">
       <Filter>Generated</Filter>
     </ClInclude>
   </ItemGroup>

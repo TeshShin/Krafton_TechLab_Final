@@ -1,4 +1,4 @@
-#include "pch.h"
+﻿#include "pch.h"
 #include "VehicleMovementComponent.h"
 #include "SceneComponent.h"
 #include "PrimitiveComponent.h"
@@ -277,7 +277,8 @@ void UVehicleMovementComponent::SetupWheelSimulationData(physx::PxRigidDynamic* 
 
             PxVec3 Offset = U2PVector(WheelSetups[i].BoneOffset);
             PWheelsSimData->setWheelCentreOffset(i, Offset); 
-            PWheelsSimData->setSuspTravelDirection(i, PxVec3(0, 0, -1));
+            // PhysX Y-up 좌표계: 서스펜션 방향 = -Y
+            PWheelsSimData->setSuspTravelDirection(i, PxVec3(0, -1, 0));
             PWheelsSimData->setSuspForceAppPointOffset(i, Offset);
             PWheelsSimData->setTireForceAppPointOffset(i, Offset);
             PWheelsSimData->setWheelShapeMapping(i, WheelShapeStartIndex + i);
