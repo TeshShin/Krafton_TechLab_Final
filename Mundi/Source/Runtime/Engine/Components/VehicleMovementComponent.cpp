@@ -343,10 +343,11 @@ void UVehicleMovementComponent::SetupDriveSimulationData(physx::PxRigidDynamic* 
         PxVec3 RL = PWheelsSimData->getWheelCentreOffset(2);
         PxVec3 RR = PWheelsSimData->getWheelCentreOffset(3);
 
+        // U2PVector 변환 후 좌표계: PhysX X=좌우, PhysX Y=상하, PhysX Z=전후
         PxVehicleAckermannGeometryData Ackermann;
-        Ackermann.mAxleSeparation = PxAbs(FL.x - RL.x);
-        Ackermann.mFrontWidth = PxAbs(FL.y - FR.y);
-        Ackermann.mRearWidth = PxAbs(RL.y - RR.y);
+        Ackermann.mAxleSeparation = PxAbs(FL.z - RL.z);  // 전후 거리 (PhysX Z)
+        Ackermann.mFrontWidth = PxAbs(FL.x - FR.x);      // 좌우 폭 (PhysX X)
+        Ackermann.mRearWidth = PxAbs(RL.x - RR.x);       // 좌우 폭 (PhysX X)
         DriveSimData.setAckermannGeometryData(Ackermann);
     }
 
@@ -680,9 +681,9 @@ void UVehicleMovementComponent::ApplyBoostForce(float BoostStrength)
     PxRigidDynamic* Actor = PVehicleDrive->getRigidDynamicActor();
     if (!Actor) return;
 
-    // 차량의 전진 방향 (로컬 X축)
+    // 차량의 전진 방향 (PhysX 로컬 -Z축 = 엔진 X축)
     PxTransform Pose = Actor->getGlobalPose();
-    PxVec3 ForwardDir = Pose.q.rotate(PxVec3(1.0f, 0.0f, 0.0f));
+    PxVec3 ForwardDir = Pose.q.rotate(PxVec3(0.0f, 0.0f, -1.0f));
 
     // 부스터 힘 적용
     PxVec3 BoostForce = ForwardDir * BoostStrength;

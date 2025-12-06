@@ -65,15 +65,25 @@ bool FKTriangleMeshElem::CreateTriangleMesh()
         PxVerts[i] = U2PVector(VertexData[i]);
     }
 
+    // 좌표계 핸드니스 변환(왼손→오른손)으로 인한 와인딩 오더 반전
+    TArray<uint32> FlippedIndices = IndexData;
+    for (int32 i = 0; i < FlippedIndices.Num(); i += 3)
+    {
+        // 삼각형 와인딩 반전: (0, 1, 2) → (0, 2, 1)
+        uint32 Temp = FlippedIndices[i + 1];
+        FlippedIndices[i + 1] = FlippedIndices[i + 2];
+        FlippedIndices[i + 2] = Temp;
+    }
+
     // Triangle Mesh Description 설정
     PxTriangleMeshDesc TriMeshDesc;
     TriMeshDesc.points.count = PxVerts.Num();
     TriMeshDesc.points.stride = sizeof(PxVec3);
     TriMeshDesc.points.data = PxVerts.GetData();
 
-    TriMeshDesc.triangles.count = IndexData.Num() / 3;
+    TriMeshDesc.triangles.count = FlippedIndices.Num() / 3;
     TriMeshDesc.triangles.stride = sizeof(uint32) * 3;
-    TriMeshDesc.triangles.data = IndexData.GetData();
+    TriMeshDesc.triangles.data = FlippedIndices.GetData();
 
     // Cooking 수행 및 결과를 메모리에 저장
     PxDefaultMemoryOutputStream WriteBuffer;
@@ -146,8 +156,11 @@ PxTriangleMeshGeometry FKTriangleMeshElem::GetPxGeometry(const FVector& Scale3D)
         return PxTriangleMeshGeometry();
     }
 
+    // 스케일 축 변환: 엔진 (X, Y, Z) → PhysX (Y, Z, X)
+    // 스케일은 크기이므로 음수 부호 없음 (U2PVector 사용 시 -X가 되어 뒤집힘 발생)
     FVector AbsScale(FMath::Abs(Scale3D.X), FMath::Abs(Scale3D.Y), FMath::Abs(Scale3D.Z));
-    PxMeshScale MeshScale(U2PVector(AbsScale), PxQuat(PxIdentity));
+    PxVec3 PxScale(AbsScale.Y, AbsScale.Z, AbsScale.X);
+    PxMeshScale MeshScale(PxScale, PxQuat(PxIdentity));
     return PxTriangleMeshGeometry(TriangleMesh, MeshScale);
 }
 
