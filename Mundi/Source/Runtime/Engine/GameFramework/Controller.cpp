@@ -13,6 +13,8 @@
 AController::AController()
 	: PossessedPawn(nullptr)
 	, ControlRotation(FQuat::Identity())
+	, ControlPitch(0.0f)
+	, ControlYaw(0.0f)
 {
 }
 
@@ -97,27 +99,29 @@ void AController::OnUnPossess()
 
 void AController::SetControlRotation(const FQuat& NewRotation)
 {
-	ControlRotation = NewRotation.GetNormalized();
+	// 쿼터니언에서 Pitch/Yaw 추출
+	FVector Euler = NewRotation.GetNormalized().ToEulerZYXDeg();
+	ControlPitch = FMath::Clamp(Euler.Y, -89.0f, 89.0f);
+	ControlYaw = Euler.Z;
+	while (ControlYaw >= 360.0f) ControlYaw -= 360.0f;
+	while (ControlYaw < 0.0f) ControlYaw += 360.0f;
+	UpdateControlRotation();
 }
 
 void AController::AddControlRotation(const FQuat& DeltaRotation)
 {
-	ControlRotation = (ControlRotation * DeltaRotation).GetNormalized();
+	FQuat NewRot = (ControlRotation * DeltaRotation).GetNormalized();
+	SetControlRotation(NewRot);
 }
 
 void AController::AddYawInput(float DeltaYaw)
 {
 	if (DeltaYaw != 0.0f)
 	{
-		// Yaw 회전 적용
-		FVector EulerAngles = ControlRotation.ToEulerZYXDeg();
-		EulerAngles.Z += DeltaYaw; // Yaw
-
-		// Yaw를 0~360 범위로 정규화
-		while (EulerAngles.Z >= 360.0f) EulerAngles.Z -= 360.0f;
-		while (EulerAngles.Z < 0.0f) EulerAngles.Z += 360.0f;
-
-		ControlRotation = FQuat::MakeFromEulerZYX(EulerAngles);
+		ControlYaw += DeltaYaw;
+		while (ControlYaw >= 360.0f) ControlYaw -= 360.0f;
+		while (ControlYaw < 0.0f) ControlYaw += 360.0f;
+		UpdateControlRotation();
 	}
 }
 
@@ -125,32 +129,22 @@ void AController::AddPitchInput(float DeltaPitch)
 {
 	if (DeltaPitch != 0.0f)
 	{
-		// Pitch 회전 적용
-		FVector EulerAngles = ControlRotation.ToEulerZYXDeg();
-		EulerAngles.Y += DeltaPitch; // Pitch
-
-		// Pitch를 -90~90 범위로 클램프
-		if (EulerAngles.Y > 89.0f) EulerAngles.Y = 89.0f;
-		if (EulerAngles.Y < -89.0f) EulerAngles.Y = -89.0f;
-
-		ControlRotation = FQuat::MakeFromEulerZYX(EulerAngles);
+		ControlPitch += DeltaPitch;
+		ControlPitch = FMath::Clamp(ControlPitch, -89.0f, 89.0f);
+		UpdateControlRotation();
 	}
 }
 
 void AController::AddRollInput(float DeltaRoll)
 {
-	if (DeltaRoll != 0.0f)
-	{
-		// Roll 회전 적용
-		FVector EulerAngles = ControlRotation.ToEulerZYXDeg();
-		EulerAngles.X += DeltaRoll; // Roll
+	// Roll은 카메라 제어에서 사용하지 않음 (항상 0 유지)
+	// 필요시 별도 ControlRoll 변수 추가
+}
 
-		// Roll을 0~360 범위로 정규화
-		while (EulerAngles.X >= 360.0f) EulerAngles.X -= 360.0f;
-		while (EulerAngles.X < 0.0f) EulerAngles.X += 360.0f;
-
-		ControlRotation = FQuat::MakeFromEulerZYX(EulerAngles);
-	}
+void AController::UpdateControlRotation()
+{
+	// Roll = 0, Pitch, Yaw로 쿼터니언 생성 (변환은 한 번만)
+	ControlRotation = FQuat::MakeFromEulerZYX(FVector(0.0f, ControlPitch, ControlYaw));
 }
 
 // ────────────────────────────────────────────────────────────────────────────
