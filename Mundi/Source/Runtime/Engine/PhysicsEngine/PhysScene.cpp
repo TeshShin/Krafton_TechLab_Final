@@ -4,6 +4,7 @@
 #include "BodyInstance.h"
 #include "PhysXSimEventCallback.h"
 #include "PrimitiveComponent.h"
+#include "LineComponent.h"
 
 // CCT (Character Controller) 관련
 #include "ControllerInstance.h"
