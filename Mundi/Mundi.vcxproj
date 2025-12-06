@@ -321,6 +321,7 @@ xcopy /y /d "$(ProjectDir)ThirdParty\lib\Cloth\Release\*.dll" "$(OutDir)"</Comma
     <ClCompile Include="Source\Runtime\Engine\GameFramework\Controller.cpp" />
     <ClCompile Include="Source\Runtime\Engine\GameFramework\FirefighterCharacter.cpp" />
     <ClCompile Include="Source\Runtime\Engine\GameFramework\GameInstance.cpp" />
+    <ClCompile Include="Source\Runtime\Engine\GameFramework\GameJamGameMode.cpp" />
     <ClCompile Include="Source\Runtime\Engine\GameFramework\GameModeBase.cpp" />
     <ClCompile Include="Source\Runtime\Engine\GameFramework\GameStateBase.cpp" />
     <ClCompile Include="Source\Runtime\Engine\GameFramework\HudExampleGameMode.cpp" />
@@ -518,6 +519,7 @@ xcopy /y /d "$(ProjectDir)ThirdParty\lib\Cloth\Release\*.dll" "$(OutDir)"</Comma
     <ClCompile Include="Source\Runtime\Engine\GameFramework\PointLightActor.cpp" />
     <ClCompile Include="Source\Runtime\Engine\GameFramework\SphereActor.cpp" />
     <ClCompile Include="Source\Runtime\Engine\GameFramework\SpotLightActor.cpp" />
+    <ClCompile Include="Source\Runtime\Engine\GameFramework\TimerTrigger.cpp" />
     <ClCompile Include="Source\Runtime\Engine\GameFramework\Vehicle.cpp" />
     <ClCompile Include="Source\Runtime\Engine\Particles\Distribution.cpp" />
     <ClCompile Include="Source\Runtime\Engine\Particles\Modules\ParticleModuleMeshRotation.cpp" />
@@ -855,6 +857,8 @@ xcopy /y /d "$(ProjectDir)ThirdParty\lib\Cloth\Release\*.dll" "$(OutDir)"</Comma
     <ClCompile Include="Generated\ALevelTransitionManager.generated.cpp" />
     <ClCompile Include="Generated\FKTriangleMeshElem.generated.cpp" />
     <ClCompile Include="Generated\AFirefighterCharacter.generated.cpp" />
+    <ClCompile Include="Generated\AGameJamGameMode.generated.cpp" />
+    <ClCompile Include="Generated\ATimerTrigger.generated.cpp" />
   </ItemGroup>
   <ItemGroup>
     <FxCompile Include="Shaders\Common\LightingBuffers.hlsl">
@@ -1088,6 +1092,7 @@ xcopy /y /d "$(ProjectDir)ThirdParty\lib\Cloth\Release\*.dll" "$(OutDir)"</Comma
     <ClInclude Include="Source\Runtime\Engine\GameFramework\Camera\CamMod_Shake.h" />
     <ClInclude Include="Source\Runtime\Engine\GameFramework\GameEngine.h" />
     <ClInclude Include="Source\Runtime\Engine\GameFramework\GameInstance.h" />
+    <ClInclude Include="Source\Runtime\Engine\GameFramework\GameJamGameMode.h" />
     <ClInclude Include="Source\Runtime\Engine\GameFramework\GameModeBase.h" />
     <ClInclude Include="Source\Runtime\Engine\GameFramework\GameStateBase.h" />
     <ClInclude Include="Source\Runtime\Engine\GameFramework\HudExampleGameMode.h" />
@@ -1105,6 +1110,7 @@ xcopy /y /d "$(ProjectDir)ThirdParty\lib\Cloth\Release\*.dll" "$(OutDir)"</Comma
     <ClInclude Include="Source\Runtime\Engine\GameFramework\SkeletalMeshActor.h" />
     <ClInclude Include="Source\Runtime\Engine\GameFramework\SphereActor.h" />
     <ClInclude Include="Source\Runtime\Engine\GameFramework\SpotLightActor.h" />
+    <ClInclude Include="Source\Runtime\Engine\GameFramework\TimerTrigger.h" />
     <ClInclude Include="Source\Runtime\Engine\GameFramework\Vehicle.h" />
     <ClInclude Include="Source\Runtime\Engine\Particles\Distribution.h" />
     <ClInclude Include="Source\Runtime\Engine\Particles\Modules\ParticleEventGeneratorInfo.h" />
@@ -1492,6 +1498,8 @@ xcopy /y /d "$(ProjectDir)ThirdParty\lib\Cloth\Release\*.dll" "$(OutDir)"</Comma
     <ClInclude Include="Generated\ALevelTransitionManager.generated.h" />
     <ClInclude Include="Generated\FKTriangleMeshElem.generated.h" />
     <ClInclude Include="Generated\AFirefighterCharacter.generated.h" />
+    <ClInclude Include="Generated\AGameJamGameMode.generated.h" />
+    <ClInclude Include="Generated\ATimerTrigger.generated.h" />
   </ItemGroup>
   <ItemGroup>
     <None Include="BuildTools\CodeGenerator\generate.py" />
