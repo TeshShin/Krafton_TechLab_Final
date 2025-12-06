@@ -1,9 +1,17 @@
-#include "pch.h"
+﻿#include "pch.h"
 #include "PhysScene.h"
 
 #include "BodyInstance.h"
 #include "PhysXSimEventCallback.h"
 #include "PrimitiveComponent.h"
+
+// CCT (Character Controller) 관련
+#include "ControllerInstance.h"
+#include "CCTHitReport.h"
+#include "CCTQueryFilterCallback.h"
+#include "CCTBehaviorCallback.h"
+#include "CapsuleComponent.h"
+#include "CharacterMovementComponent.h"
 
 // 커스텀 Simulation Filter Shader
 // FilterData 구조:
@@ -78,6 +86,7 @@ void FPhysScene::StartFrame()
     if (OwningWorld)
     {
         FlushDeferredAdds();
+        FlushCommands();
         float DeltaTime = OwningWorld->GetDeltaTime(EDeltaTime::Game);
         TickPhysScene(DeltaTime);
     }
@@ -139,16 +148,27 @@ void FPhysScene::DeferReleaseActor(PxActor* InActor)
 {
     if (!InActor) { return; }
 
-    InActor->userData = nullptr;
+    {
+        std::lock_guard<std::mutex> Lock(DeferredAddMutex);
+        if (DeferredAddQueue.Contains(InActor))
+        {
+            DeferredAddQueue.Remove(InActor);
+            InActor->release();
+            return;
+        }
+    }
 
-    std::lock_guard<std::mutex> Lock(DeferredReleaseMutex);
-    DeferredReleaseQueue.Add(InActor);
+    InActor->userData = nullptr;
+    {
+        std::lock_guard<std::mutex> Lock(DeferredReleaseMutex);
+        DeferredReleaseQueue.Add(InActor);
+    }
 }
 
 void FPhysScene::FlushDeferredReleases()
 {
     if (!PhysXScene) { return; }
-    
+
     std::lock_guard<std::mutex> Lock(DeferredReleaseMutex);
 
     for (PxActor* Actor : DeferredReleaseQueue)
@@ -159,6 +179,39 @@ void FPhysScene::FlushDeferredReleases()
         }
     }
     DeferredReleaseQueue.Empty();
+}
+
+void FPhysScene::EnqueueCommand(std::function<void()> InCommand)
+{
+    std::lock_guard<std::mutex> Lock(CommandMutex);
+    CommandQueue.Add(InCommand);
+}
+
+void FPhysScene::FlushCommands()
+{
+    // 큐를 비우기 위해 로컬 변수로 이동 (실행 중 락을 잡지 않기 위함)
+    TArray<std::function<void()>> LocalCommands;
+    {
+        std::lock_guard<std::mutex> Lock(CommandMutex);
+        if (CommandQueue.IsEmpty())
+        {
+            return;
+        }
+        LocalCommands = std::move(CommandQueue);
+        CommandQueue.Empty();
+    }
+
+    if (PhysXScene)
+    {
+        SCOPED_SCENE_WRITE_LOCK(PhysXScene);
+        for (auto& Cmd : LocalCommands)
+        {
+            if (Cmd)
+            {
+                Cmd();
+            }
+        }
+    }
 }
 
 void FPhysScene::InitPhysScene()
@@ -185,7 +238,8 @@ void FPhysScene::InitPhysScene()
     SceneDesc.flags |= PxSceneFlag::eENABLE_ACTIVE_ACTORS;
     SceneDesc.flags |= PxSceneFlag::eENABLE_CCD;
 
-    SceneDesc.gravity = PxVec3(0, 0, -9.81);
+    // PhysX는 Y-up 좌표계이므로 중력은 -Y 방향
+    SceneDesc.gravity = PxVec3(0.0f, -9.81f, 0.0f);
 
     SimEventCallback = new FPhysXSimEventCallback(this);
     SceneDesc.simulationEventCallback = SimEventCallback;
@@ -201,6 +255,25 @@ void FPhysScene::InitPhysScene()
                                         PxPvdSceneFlag::eTRANSMIT_SCENEQUERIES);
         }
         UE_LOG("[PhysX] PhysX Scene 생성에 성공했습니다.");
+
+        // CCT (Character Controller) 시스템 초기화
+        ControllerManager = PxCreateControllerManager(*PhysXScene);
+        if (ControllerManager)
+        {
+            // 침투 해결 활성화
+            ControllerManager->setOverlapRecoveryModule(true);
+
+            // CCT 콜백 생성
+            CCTHitReport = new FCCTHitReport(this);
+            CCTBehaviorCallback = new FCCTBehaviorCallback();
+            CCTControllerFilter = new FCCTControllerFilterCallback();
+
+            UE_LOG("[PhysX] CCT Controller Manager 생성에 성공했습니다.");
+        }
+        else
+        {
+            UE_LOG("[PhysX Error] CCT Controller Manager 생성에 실패했습니다.");
+        }
     }
     else
     {
@@ -210,6 +283,31 @@ void FPhysScene::InitPhysScene()
 
 void FPhysScene::TermPhysScene()
 {
+    // CCT 시스템 정리 (ControllerManager는 Scene보다 먼저 해제해야 함)
+    if (ControllerManager)
+    {
+        ControllerManager->release();
+        ControllerManager = nullptr;
+    }
+
+    if (CCTHitReport)
+    {
+        delete CCTHitReport;
+        CCTHitReport = nullptr;
+    }
+
+    if (CCTBehaviorCallback)
+    {
+        delete CCTBehaviorCallback;
+        CCTBehaviorCallback = nullptr;
+    }
+
+    if (CCTControllerFilter)
+    {
+        delete CCTControllerFilter;
+        CCTControllerFilter = nullptr;
+    }
+
     if (PhysXScene)
     {
         WaitPhysScene();
@@ -289,6 +387,13 @@ void FPhysScene::SyncComponentsToBodies()
 
         // 랙돌 바디는 SyncBonesFromPhysics()에서 별도 처리됨
         if (BodyInstance->bIsRagdollBody)
+        {
+            continue;
+        }
+
+        // Kinematic 바디(bSimulatePhysics=false)는 사용자가 직접 제어하므로
+        // 물리 시뮬레이션 결과로 덮어쓰지 않음
+        if (!BodyInstance->bSimulatePhysics)
         {
             continue;
         }
@@ -706,4 +811,43 @@ bool FPhysScene::ComputePenetrationCapsule(const FVector& Position,
     }
 
     return MaxPenetration > 0.0f;
+}
+
+// ==================================================================================
+// CCT (Character Controller) Interface Implementation
+// ==================================================================================
+
+FControllerInstance* FPhysScene::CreateController(UCapsuleComponent* InCapsule, UCharacterMovementComponent* InMovement)
+{
+    if (!ControllerManager || !InCapsule)
+    {
+        UE_LOG("[PhysX CCT] CreateController 실패: ControllerManager 또는 CapsuleComponent가 nullptr");
+        return nullptr;
+    }
+
+    FControllerInstance* NewInstance = new FControllerInstance();
+    NewInstance->InitController(InCapsule, InMovement, this);
+
+    if (!NewInstance->IsValid())
+    {
+        UE_LOG("[PhysX CCT] CreateController 실패: Controller 초기화 실패");
+        delete NewInstance;
+        return nullptr;
+    }
+
+    UE_LOG("[PhysX CCT] Controller 생성 성공");
+    return NewInstance;
+}
+
+void FPhysScene::DestroyController(FControllerInstance* InController)
+{
+    if (!InController)
+    {
+        return;
+    }
+
+    InController->TermController();
+    delete InController;
+
+    UE_LOG("[PhysX CCT] Controller 해제 완료");
 }

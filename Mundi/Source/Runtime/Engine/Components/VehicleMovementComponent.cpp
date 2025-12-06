@@ -308,7 +308,8 @@ void UVehicleMovementComponent::SetupWheelSimulationData(physx::PxRigidDynamic* 
 
             PxVec3 Offset = U2PVector(WheelSetups[i].BoneOffset);
             PWheelsSimData->setWheelCentreOffset(i, Offset); 
-            PWheelsSimData->setSuspTravelDirection(i, PxVec3(0, 0, -1));
+            // PhysX Y-up 좌표계: 서스펜션 방향 = -Y
+            PWheelsSimData->setSuspTravelDirection(i, PxVec3(0, -1, 0));
             PWheelsSimData->setSuspForceAppPointOffset(i, Offset);
             PWheelsSimData->setTireForceAppPointOffset(i, Offset);
             PWheelsSimData->setWheelShapeMapping(i, WheelShapeStartIndex + i);
@@ -352,8 +353,17 @@ void UVehicleMovementComponent::SetupDriveSimulationData(physx::PxRigidDynamic* 
     if (PWheelsSimData)
     {
         PVehicleDrive = PxVehicleDrive4W::allocate(4);
-    
+
         PVehicleDrive->setup(GPhysXSDK, RigidActor, *PWheelsSimData, DriveSimData, 0);
+
+        // setup() 성공 여부 확인 - getRigidDynamicActor()가 유효한 포인터를 반환해야 함
+        if (PVehicleDrive->getRigidDynamicActor() != RigidActor)
+        {
+            UE_LOG("[Vehicle Error] PxVehicleDrive4W::setup() 실패 - RigidActor가 올바르게 설정되지 않음");
+            PVehicleDrive->free();
+            PVehicleDrive = nullptr;
+            return;
+        }
 
         PVehicleDrive->mDriveDynData.setUseAutoGears(true);
         PVehicleDrive->mDriveDynData.forceGearChange(PxVehicleGearsData::eFIRST);

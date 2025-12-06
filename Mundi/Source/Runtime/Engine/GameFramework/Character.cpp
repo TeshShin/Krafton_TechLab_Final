@@ -45,6 +45,13 @@ ACharacter::ACharacter()
 	// CharacterMovementComponent 생성
 	CharacterMovement = CreateDefaultSubobject<UCharacterMovementComponent>("CharacterMovement");
 
+	// CCT(Character Controller) 활성화
+	if (CapsuleComponent && CharacterMovement)
+	{
+		CapsuleComponent->SetLinkedMovementComponent(CharacterMovement);
+		CapsuleComponent->SetUseCCT(true);
+	}
+
 	// SpringArmComponent 생성 (3인칭 카메라용)
 	SpringArmComponent = CreateDefaultSubobject<USpringArmComponent>("SpringArm");
 	if (SpringArmComponent && CapsuleComponent)
@@ -86,7 +93,7 @@ void ACharacter::Tick(float DeltaSeconds)
 	if (CameraComponent)
 	{
 		FVector CamPos = CameraComponent->GetWorldLocation();
-		UE_LOG("[Character::Tick] Camera Position: (%.2f, %.2f, %.2f)", CamPos.X, CamPos.Y, CamPos.Z);
+		//UE_LOG("[Character::Tick] Camera Position: (%.2f, %.2f, %.2f)", CamPos.X, CamPos.Y, CamPos.Z);
 	}
 
 	// 쿼터뷰 카메라 업데이트
@@ -243,7 +250,6 @@ void ACharacter::LookUp(float Value)
 
 void ACharacter::Jump()
 {
-	UE_LOG("[Character::Jump] Called - CharacterMovement=%p", CharacterMovement);
 	if (CharacterMovement)
 	{
 		CharacterMovement->Jump();

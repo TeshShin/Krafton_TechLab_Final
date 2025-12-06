@@ -1,9 +1,11 @@
-﻿#pragma once
+#pragma once
 
 #include "AggregateGeom.h"
+#include "ECollisionComplexity.h"
 #include "UBodySetup.generated.h"
 
 class UPhysicalMaterial;
+class UStaticMesh;
 struct FBodyInstance;
 
 UCLASS()
@@ -14,6 +16,9 @@ public:
 	UBodySetup();
 
 	virtual ~UBodySetup();
+
+	/** 이 BodySetup을 소유하는 StaticMesh (CollisionComplexity 변경 시 필요) */
+	UStaticMesh* OwningMesh = nullptr;
 
     // ====================================================================
 	// 본 바인딩 정보 (발제 기준 UBodySetupCore)
@@ -35,9 +40,35 @@ public:
 	UPROPERTY()
 	FKAggregateGeom AggGeom;
 
+	/** 충돌 복잡도 설정 (UseSimple: Convex, UseComplexAsSimple: TriangleMesh) */
+	UPROPERTY(EditAnywhere, Category="Collision")
+	ECollisionComplexity CollisionComplexity = ECollisionComplexity::UseSimple;
+
     /** 밀도, 마찰 등과 관련된 정보를 포함하는 물리 재질 */
 	UPROPERTY(EditAnywhere, Category="Physics")
 	UPhysicalMaterial* PhysicalMaterial;
+
+	/** 물리 재질 경로 (에셋 저장용) */
+	FString PhysMaterialPath;
+
+	/** PhysicalMaterial 별명 (Week13 호환) */
+	UPhysicalMaterial* PhysMaterial = nullptr;
+
+	// ====================================================================
+	// Physics Properties (Week13 호환)
+	// ====================================================================
+
+	/** 질량 (kg) */
+	UPROPERTY(EditAnywhere, Category="Physics")
+	float MassInKg = 1.0f;
+
+	/** 선형 감쇠 */
+	UPROPERTY(EditAnywhere, Category="Physics")
+	float LinearDamping = 0.01f;
+
+	/** 각도 감쇠 */
+	UPROPERTY(EditAnywhere, Category="Physics")
+	float AngularDamping = 0.05f;
 
     void AddShapesToRigidActor_AssumesLocked(
         FBodyInstance* OwningInstance,
@@ -63,6 +94,9 @@ public:
 
 	/** 서브 객체 복제 */
 	virtual void DuplicateSubObjects() override;
+
+	/** 속성 변경 시 호출 (CollisionComplexity 변경 감지) */
+	virtual void OnPropertyChanged(const FProperty& Prop) override;
 
 	// ====================================================================
 	// UI 렌더링 헬퍼

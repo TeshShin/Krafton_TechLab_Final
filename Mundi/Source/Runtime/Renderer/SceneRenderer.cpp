@@ -61,6 +61,7 @@
 #include "Modules/ParticleModuleTypeDataBeam.h"
 #include "Modules/ParticleModuleTypeDataRibbon.h"
 #include "DOFComponent.h"
+#include "RagdollDebugRenderer.h"
 
 FSceneRenderer::FSceneRenderer(UWorld* InWorld, FSceneView* InView, URenderer* InOwnerRenderer)
 	: World(InWorld)
@@ -205,6 +206,10 @@ void FSceneRenderer::RenderLitPath()
 	RenderOpaquePass(View->RenderSettings->GetViewMode());
 
 	RenderDecalPass();
+
+	// Translucent Pass (반투명: 깊이 쓰기 OFF, 블렌딩 ON)
+	RenderTranslucentPass(View->RenderSettings->GetViewMode());
+
 	RenderParticleSystemPass();
 }
 
@@ -299,13 +304,24 @@ void FSceneRenderer::RenderShadowMaps()
     FLightManager* LightManager = World->GetLightManager();
 	if (!LightManager) return;
 
-	// 2. 그림자 캐스터(Caster) 메시 수집
-	TArray<FMeshBatchElement> ShadowMeshBatches;
+	// 2. 그림자 캐스터(Caster) 메시 수집 (반투명 제외 - 깊이만 기록하므로 alpha 정보 표현 불가)
+	TArray<FMeshBatchElement> AllShadowBatches;
 	for (UMeshComponent* MeshComponent : Proxies.Meshes)
 	{
 		if (MeshComponent && MeshComponent->IsCastShadows() && MeshComponent->IsVisible())
 		{
-			MeshComponent->CollectMeshBatches(ShadowMeshBatches, View);
+			MeshComponent->CollectMeshBatches(AllShadowBatches, View);
+		}
+	}
+
+	// 불투명 배치만 필터링 (단일 패스 O(n))
+	TArray<FMeshBatchElement> ShadowMeshBatches;
+	ShadowMeshBatches.Reserve(AllShadowBatches.Num());
+	for (const FMeshBatchElement& Batch : AllShadowBatches)
+	{
+		if (Batch.RenderMode == EBatchRenderMode::Opaque)
+		{
+			ShadowMeshBatches.Add(Batch);
 		}
 	}
 
@@ -576,6 +592,14 @@ void FSceneRenderer::RenderShadowDepthPass(FShadowRenderRequest& ShadowRequest, 
 
 	for (const FMeshBatchElement& Batch : InShadowBatches)
 	{
+		// 버퍼 유효성 검사 - null 버퍼는 스킵
+		if (!Batch.VertexBuffer || !Batch.IndexBuffer)
+		{
+			UE_LOG("[Shadow] Warning: Skipping batch with null buffer (VB=%p, IB=%p)",
+				Batch.VertexBuffer, Batch.IndexBuffer);
+			continue;
+		}
+
 		// GPU 스키닝 여부 확인
 		bool bUseGPUSkinning = (Batch.BoneMatricesBuffer != nullptr);
 
@@ -980,29 +1004,73 @@ void FSceneRenderer::PerformFrustumCulling()
 void FSceneRenderer::RenderOpaquePass(EViewMode InRenderViewMode)
 {
 	// --- 1. 수집 (Collect) ---
-	MeshBatchElements.Empty();
+	TArray<FMeshBatchElement> AllBatches;
 	for (UMeshComponent* MeshComponent : Proxies.Meshes)
 	{
-		MeshComponent->CollectMeshBatches(MeshBatchElements, View);
+		MeshComponent->CollectMeshBatches(AllBatches, View);
 	}
 
 	for (UBillboardComponent* BillboardComponent : Proxies.Billboards)
 	{
-		BillboardComponent->CollectMeshBatches(MeshBatchElements, View);
+		BillboardComponent->CollectMeshBatches(AllBatches, View);
 	}
 
 	for (UTextRenderComponent* TextRenderComponent : Proxies.Texts)
 	{
 		// TODO: UTextRenderComponent도 CollectMeshBatches를 통해 FMeshBatchElement를 생성하도록 구현
-		//TextRenderComponent->CollectMeshBatches(MeshBatchElements, View);
+		//TextRenderComponent->CollectMeshBatches(AllBatches, View);
 	}
 
-	// --- 2. 정렬 (Sort) ---
+	// --- 2. RenderMode별로 분리 (Opaque / Translucent) ---
+	MeshBatchElements.Empty();
+	TranslucentBatchElements.Empty();
+	for (const FMeshBatchElement& Batch : AllBatches)
+	{
+		if (Batch.RenderMode == EBatchRenderMode::Opaque)
+		{
+			MeshBatchElements.Add(Batch);
+		}
+		else
+		{
+			TranslucentBatchElements.Add(Batch);
+		}
+	}
+
+	// --- 3. 정렬 (Sort) ---
 	MeshBatchElements.Sort();
 
-	// --- 3. 그리기 (Draw) ---
+	// --- 4. 그리기 (Draw) ---
 	// GPU 타이머는 Renderer::BeginFrame/EndFrame에서 프레임 레벨로 측정됨
 	DrawMeshBatches(MeshBatchElements, true);
+}
+
+void FSceneRenderer::RenderTranslucentPass(EViewMode InRenderViewMode)
+{
+	if (TranslucentBatchElements.IsEmpty())
+	{
+		return;
+	}
+
+	// Back-to-front 정렬 (반투명 렌더링을 위한 거리 기반 정렬)
+	FVector CameraPosition = View->ViewLocation;
+	TranslucentBatchElements.Sort([&CameraPosition](const FMeshBatchElement& A, const FMeshBatchElement& B)
+	{
+		FVector PosA = { A.WorldMatrix.M[3][0], A.WorldMatrix.M[3][1], A.WorldMatrix.M[3][2] };
+		FVector PosB = { B.WorldMatrix.M[3][0], B.WorldMatrix.M[3][1], B.WorldMatrix.M[3][2] };
+		return (PosA - CameraPosition).SizeSquared() > (PosB - CameraPosition).SizeSquared();
+	});
+
+	// 반투명 렌더 상태 설정: depth read-only, alpha blend, no culling
+	RHIDevice->RSSetState(ERasterizerMode::Solid_NoCull);
+	RHIDevice->OMSetDepthStencilState(EComparisonFunc::LessEqualReadOnly);
+	RHIDevice->OMSetBlendState(true);
+
+	DrawMeshBatches(TranslucentBatchElements, true);
+
+	// 상태 복구
+	RHIDevice->RSSetState(ERasterizerMode::Solid);
+	RHIDevice->OMSetDepthStencilState(EComparisonFunc::LessEqual);
+	RHIDevice->OMSetBlendState(false);
 }
 
 void FSceneRenderer::RenderDecalPass()
@@ -1580,8 +1648,105 @@ void FSceneRenderer::RenderDebugPass()
 		}
 	}
 
+	// Ragdoll Debug draw
+	if (World->GetRenderSettings().IsShowFlagEnabled(EEngineShowFlags::SF_Ragdoll))
+	{
+		for (AActor* Actor : World->GetActors())
+		{
+			if (!Actor || Actor->IsPendingDestroy()) continue;
+
+			for (USceneComponent* Component : Actor->GetSceneComponents())
+			{
+				if (USkeletalMeshComponent* SkelMeshComp = Cast<USkeletalMeshComponent>(Component))
+				{
+					// PhysicsAsset이 있는 경우 렌더링 시도
+					if (SkelMeshComp->PhysicsAsset != nullptr)
+					{
+						// Bodies가 초기화되어 있으면 RenderSkeletalMeshRagdoll 사용
+						// 그렇지 않으면 PhysicsAsset 기반 Preview 사용 (메인 에디터에서도 동작)
+						const TArray<FBodyInstance*>& Bodies = SkelMeshComp->GetBodies();
+						bool bHasValidBodies = false;
+						for (const FBodyInstance* Body : Bodies)
+						{
+							if (Body && Body->IsValidBodyInstance())
+							{
+								bHasValidBodies = true;
+								break;
+							}
+						}
+
+						if (bHasValidBodies)
+						{
+							FRagdollDebugRenderer::RenderSkeletalMeshRagdoll(
+								OwnerRenderer,
+								SkelMeshComp,
+								FVector4(0.0f, 1.0f, 0.0f, 1.0f),  // 초록색 본
+								FVector4(1.0f, 1.0f, 0.0f, 1.0f)   // 노란색 조인트
+							);
+						}
+						else
+						{
+							// Bodies 없이 PhysicsAsset과 본 트랜스폼으로 직접 렌더링
+							FRagdollDebugRenderer::RenderPhysicsAssetPreview(
+								OwnerRenderer,
+								SkelMeshComp,
+								SkelMeshComp->PhysicsAsset,
+								FVector4(0.0f, 1.0f, 0.0f, 1.0f),  // 초록색 본
+								FVector4(1.0f, 1.0f, 0.0f, 1.0f)   // 노란색 조인트
+							);
+						}
+					}
+				}
+			}
+		}
+	}
+
 	// 수집된 라인을 출력하고 정리
 	OwnerRenderer->EndLineBatch(FMatrix::Identity());
+
+	// Debug Primitive 렌더링 (Physics Body 시각화 등)
+	RenderDebugPrimitivesPass();
+}
+
+void FSceneRenderer::RenderDebugPrimitivesPass()
+{
+	const TArray<FDebugPrimitive>& DebugPrimitives = World->GetDebugPrimitives();
+	if (DebugPrimitives.IsEmpty())
+		return;
+
+	// Debug Primitive 배치 시작
+	OwnerRenderer->BeginDebugPrimitiveBatch();
+
+	for (const FDebugPrimitive& Prim : DebugPrimitives)
+	{
+		switch (Prim.Type)
+		{
+		case EDebugPrimitiveType::Sphere:
+			OwnerRenderer->DrawDebugSphere(Prim.Transform, Prim.Color, Prim.UUID);
+			break;
+		case EDebugPrimitiveType::Box:
+			OwnerRenderer->DrawDebugBox(Prim.Transform, Prim.Color, Prim.UUID);
+			break;
+		case EDebugPrimitiveType::Capsule:
+			OwnerRenderer->DrawDebugCapsule(Prim.Transform, Prim.Radius, Prim.HalfHeight, Prim.Color, Prim.UUID);
+			break;
+		case EDebugPrimitiveType::Cone:
+			OwnerRenderer->DrawDebugCone(Prim.Transform, Prim.Angle1, Prim.Angle2, Prim.Radius, Prim.Color, Prim.UUID);
+			break;
+		case EDebugPrimitiveType::Arc:
+			OwnerRenderer->DrawDebugArc(Prim.Transform, Prim.Angle1, Prim.Radius, Prim.Color, Prim.UUID);
+			break;
+		case EDebugPrimitiveType::Arrow:
+			OwnerRenderer->DrawDebugArrow(Prim.Transform, Prim.Radius, Prim.HalfHeight, Prim.Color, Prim.UUID);
+			break;
+		}
+	}
+
+	// Debug Primitive 배치 종료
+	OwnerRenderer->EndDebugPrimitiveBatch();
+
+	// 렌더링 후 큐 클리어 (매 프레임 갱신)
+	World->ClearDebugPrimitives();
 }
 
 void FSceneRenderer::RenderOverayEditorPrimitivesPass()

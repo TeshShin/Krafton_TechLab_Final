@@ -10,6 +10,8 @@
 class UShader;
 class USphereComponent;
 class UBoxComponent;
+struct FControllerInstance;
+class UCharacterMovementComponent;
 
 /**
  * UCapsuleComponent
@@ -114,6 +116,31 @@ public:
 
 	/** BodySetup을 반환합니다. */
 	virtual UBodySetup* GetBodySetup() override { return CapsuleBodySetup; }
+
+	/** 물리 상태 생성 (CCT/RigidBody 분기) */
+	void OnCreatePhysicsState() override;
+
+	/** 물리 상태 해제 (CCT/RigidBody 분기) */
+	void OnDestroyPhysicsState() override;
+
+	// ────────────────────────────────────────────────
+	// CCT (Character Controller) 관련
+	// ────────────────────────────────────────────────
+
+	/** CCT 사용 여부 (true면 RigidBody 대신 PxController 사용) */
+	bool bUseCCT = false;
+
+	/** CCT 사용 설정 */
+	void SetUseCCT(bool bInUseCCT);
+
+	/** CCT 사용 여부 반환 */
+	bool GetUseCCT() const { return bUseCCT; }
+
+	/** CCT 인스턴스 반환 (CCT 모드일 때만 유효) */
+	FControllerInstance* GetControllerInstance() const { return ControllerInstance; }
+
+	/** 연결된 MovementComponent 설정 (CCT 생성 시 사용) */
+	void SetLinkedMovementComponent(UCharacterMovementComponent* InMovement) { LinkedMovementComponent = InMovement; }
 	
 	// ────────────────────────────────────────────────
 	// Capsule 전용 충돌 감지 함수
@@ -145,6 +172,12 @@ private:
 
 	/** PhysX 형태 정의 데이터 */
 	UBodySetup* CapsuleBodySetup;
+
+	/** CCT 인스턴스 (bUseCCT가 true일 때만 유효) */
+	FControllerInstance* ControllerInstance = nullptr;
+
+	/** 연결된 MovementComponent (CCT 생성 시 설정 참조용) */
+	UCharacterMovementComponent* LinkedMovementComponent = nullptr;
 
 	/**
 	 * Capsule의 선분 끝점을 계산합니다 (월드 스페이스).

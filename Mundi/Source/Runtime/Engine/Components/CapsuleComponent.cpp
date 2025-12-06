@@ -1,4 +1,4 @@
-// ────────────────────────────────────────────────────────────────────────────
+﻿// ────────────────────────────────────────────────────────────────────────────
 // CapsuleComponent.cpp
 // Capsule 형태의 충돌 컴포넌트 구현 (Week09 기반, Week12 적응)
 // ────────────────────────────────────────────────────────────────────────────
@@ -11,6 +11,11 @@
 #include "CollisionManager.h"
 #include "WorldPartitionManager.h"
 #include "ECollisionChannel.h"
+
+// CCT 관련
+#include "PhysScene.h"
+#include "ControllerInstance.h"
+#include "CharacterMovementComponent.h"
 
 // ────────────────────────────────────────────────────────────────────────────
 // 생성자 / 소멸자
@@ -117,6 +122,18 @@ void UCapsuleComponent::OnRegister(UWorld* InWorld)
 {
 	Super::OnRegister(InWorld);
 	UpdateBounds();
+
+	// CCT 모드인데 RigidBody가 생성됐으면 CCT로 전환
+	if (bUseCCT && ControllerInstance == nullptr)
+	{
+		// Super::OnRegister에서 RigidBody가 생성됐으면 제거
+		if (BodyInstance.IsValidBodyInstance())
+		{
+			BodyInstance.TermBody();
+			UE_LOG("[PhysX CCT] RigidBody 제거 후 CCT로 전환");
+		}
+		OnCreatePhysicsState();
+	}
 }
 
 void UCapsuleComponent::GetShape(FShape& Out) const
@@ -359,6 +376,104 @@ void UCapsuleComponent::UpdateBodySetup()
 	SphylElem.Length = FMath::Max(0.0f, CylinderLength);
 
 	CapsuleBodySetup->AggGeom.SphylElems.Add(SphylElem);
+}
+
+// ────────────────────────────────────────────────
+// CCT (Character Controller) 관련
+// ────────────────────────────────────────────────
+
+void UCapsuleComponent::SetUseCCT(bool bInUseCCT)
+{
+	if (bUseCCT == bInUseCCT)
+	{
+		return;
+	}
+
+	// 현재 물리 상태가 있으면 해제
+	if (BodyInstance.IsValidBodyInstance() || ControllerInstance != nullptr)
+	{
+		OnDestroyPhysicsState();
+	}
+
+	bUseCCT = bInUseCCT;
+
+	// 이미 World에 등록되어 있으면 새 물리 상태 생성
+	// (생성자에서 호출된 경우는 OnRegister에서 처리됨)
+	UWorld* World = GetWorld();
+	if (World && World->GetPhysicsScene())
+	{
+		OnCreatePhysicsState();
+	}
+}
+
+void UCapsuleComponent::OnCreatePhysicsState()
+{
+	// NoCollision이면 물리 상태 생성하지 않음
+	if (CollisionEnabled == ECollisionEnabled::NoCollision)
+	{
+		return;
+	}
+
+	UWorld* World = GetWorld();
+	if (!World)
+	{
+		return;
+	}
+
+	FPhysScene* PhysScene = World->GetPhysicsScene();
+	if (!PhysScene)
+	{
+		return;
+	}
+
+	if (bUseCCT)
+	{
+		// CCT 모드: PxController 생성
+		if (ControllerInstance)
+		{
+			return;  // 이미 생성됨
+		}
+
+		ControllerInstance = PhysScene->CreateController(this, LinkedMovementComponent);
+		if (ControllerInstance)
+		{
+			// 충돌 채널 설정
+			ControllerInstance->SetCollisionChannel(CollisionChannel, CollisionMask);
+			UE_LOG("[PhysX CCT] CapsuleComponent CCT 생성 완료");
+		}
+	}
+	else
+	{
+		// 기존 RigidBody 모드: 부모 클래스 호출
+		Super::OnCreatePhysicsState();
+	}
+}
+
+void UCapsuleComponent::OnDestroyPhysicsState()
+{
+	if (bUseCCT)
+	{
+		// CCT 모드: PxController 해제
+		if (ControllerInstance)
+		{
+			UWorld* World = GetWorld();
+			if (World)
+			{
+				FPhysScene* PhysScene = World->GetPhysicsScene();
+				if (PhysScene)
+				{
+					PhysScene->DestroyController(ControllerInstance);
+				}
+			}
+			ControllerInstance = nullptr;
+			UE_LOG("[PhysX CCT] CapsuleComponent CCT 해제 완료");
+		}
+	}
+	else
+	{
+		// 기존 RigidBody 모드: 부모 클래스 호출
+		Super::OnDestroyPhysicsState();
+	}
 }
 
 // ────────────────────────────────────────────────────────────────────────────

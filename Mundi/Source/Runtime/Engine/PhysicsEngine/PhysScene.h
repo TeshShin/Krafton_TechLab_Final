@@ -5,6 +5,12 @@
 #include "PhysXSupport.h"
 
 class FPhysXSimEventCallback;
+class FCCTHitReport;
+class FCCTBehaviorCallback;
+class FCCTControllerFilterCallback;
+struct FControllerInstance;
+class UCapsuleComponent;
+class UCharacterMovementComponent;
 
 class FPhysScene
 {
@@ -50,7 +56,45 @@ public:
 
     /** 대기중인 액터 해제를 일괄적으로 처리한다. */
     void FlushDeferredReleases();
-    
+
+    /** * 물리 명령을 큐에 등록한다.
+     * 주로 액터가 아직 씬에 등록되지 않았을 때(초기화 시점) 사용한다.
+     */
+    void EnqueueCommand(std::function<void()> InCommand);
+
+    /** 등록된 모든 물리 명령을 실행한다. */
+    void FlushCommands();
+
+    // ==================================================================================
+    // Character Controller (CCT) Interface
+    // ==================================================================================
+
+    /** CCT 매니저 반환 */
+    PxControllerManager* GetControllerManager() const { return ControllerManager; }
+
+    /** CCT Controller 필터 콜백 반환 */
+    FCCTControllerFilterCallback* GetCCTControllerFilter() const { return CCTControllerFilter; }
+
+    /** CCT Hit 리포트 반환 */
+    FCCTHitReport* GetCCTHitReport() const { return CCTHitReport; }
+
+    /** CCT Behavior 콜백 반환 */
+    FCCTBehaviorCallback* GetCCTBehaviorCallback() const { return CCTBehaviorCallback; }
+
+    /**
+     * CCT Controller 생성
+     * @param InCapsule 소유 캡슐 컴포넌트
+     * @param InMovement 연결된 이동 컴포넌트 (nullptr 가능)
+     * @return 생성된 FControllerInstance (실패 시 nullptr)
+     */
+    FControllerInstance* CreateController(UCapsuleComponent* InCapsule, UCharacterMovementComponent* InMovement);
+
+    /**
+     * CCT Controller 해제
+     * @param InController 해제할 Controller
+     */
+    void DestroyController(FControllerInstance* InController);
+
     // ==================================================================================
 
     /** PhysX Scene 초기화 */
@@ -188,6 +232,12 @@ private:
     /** 시뮬레이션 중 액터 해제 큐 접근용 뮤텍스 */
     std::mutex DeferredReleaseMutex;
 
+    /** 물리 커맨드 큐 */
+    TArray<std::function<void()>> CommandQueue;
+
+    /** 커맨드 큐 접근용 뮤텍스 */
+    std::mutex CommandMutex;
+
     /** 시뮬레이션이 종료되고 처리될 충돌 정보 큐 */
     TArray<FCollisionNotifyInfo> PendingCollisionNotifies;
 
@@ -196,4 +246,20 @@ private:
 
     /** PhysX Scene 시뮬레이션 실행 여부 (실행 시점과 동기화 시점 사이) */
     bool bPhysXSceneExecuting;
+
+    // ==================================================================================
+    // CCT (Character Controller) 관련 멤버
+    // ==================================================================================
+
+    /** PhysX Controller Manager (CCT 관리) */
+    PxControllerManager* ControllerManager = nullptr;
+
+    /** CCT Hit 리포트 (충돌 이벤트 브릿지) */
+    FCCTHitReport* CCTHitReport = nullptr;
+
+    /** CCT Behavior 콜백 (물리 상호작용 정책) */
+    FCCTBehaviorCallback* CCTBehaviorCallback = nullptr;
+
+    /** CCT Controller 필터 콜백 (CCT간 충돌 필터링) */
+    FCCTControllerFilterCallback* CCTControllerFilter = nullptr;
 };

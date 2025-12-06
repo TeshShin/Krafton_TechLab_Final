@@ -110,6 +110,9 @@ private:
 	/** @brief 불투명(Opaque) 객체들을 렌더링하는 패스입니다. */
 	void RenderOpaquePass(EViewMode InRenderViewMode);
 
+	/** @brief 반투명(Translucent) 객체들을 렌더링하는 패스입니다. */
+	void RenderTranslucentPass(EViewMode InRenderViewMode);
+
 	void DrawMeshBatches(TArray<FMeshBatchElement>& InMeshBatches, bool bClearListAfterDraw);
 
 	/** @brief 데칼(Decal)을 렌더링하는 패스입니다. */
@@ -129,6 +132,9 @@ private:
     /** @brief BVH 등 디버그 시각화 요소를 렌더링하는 패스입니다. */
     void RenderDebugPass();
     void RenderFinalOverlayLines();
+
+    /** @brief Debug Primitive (Physics Body 시각화 등)를 렌더링하는 패스입니다. */
+    void RenderDebugPrimitivesPass();
 	
 	/** @brief FXAA 등 화면에서 최종 이미지 품질을 위해 적용되는 효과를 적용하는 패스입니다. */
 	void ApplyScreenEffectsPass();
@@ -156,6 +162,7 @@ private:
 
 	// 각 패스에서 수집된 드로우 콜 정보 리스트
 	TArray<FMeshBatchElement> MeshBatchElements;
+	TArray<FMeshBatchElement> TranslucentBatchElements;
 
 	// 타일 기반 라이트 컬링 시스템 (매 프레임 생성되고 소멸되어서 스마트 포인터로 설정)
 	std::unique_ptr<FTileLightCuller> TileLightCuller;

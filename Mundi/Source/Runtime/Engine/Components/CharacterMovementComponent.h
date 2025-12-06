@@ -233,8 +233,9 @@ public:
 
 	/**
 	 * 지면에 있는지 확인합니다.
+	 * CCT 모드에서는 실시간 충돌 상태를, 그 외에는 MovementMode 기반으로 확인합니다.
 	 */
-	bool IsGrounded() const { return MovementMode == EMovementMode::Walking; }
+	bool IsGrounded() const;
 
 	/**
 	 * 낙하 중인지 확인합니다.
@@ -300,6 +301,14 @@ protected:
 	 * @param MaxIterations - 최대 슬라이딩 반복 횟수
 	 */
 	void SlideAlongSurface(const FVector& Delta, int32 MaxIterations = 4);
+
+	/**
+	 * CCT(Character Controller)를 사용한 이동 처리
+	 * PhysX CCT의 move()를 호출하여 자동으로 경사면/계단 처리
+	 *
+	 * @param DeltaTime - 프레임 시간
+	 */
+	void MoveWithCCT(float DeltaTime);
 
 	/**
 	 * 계단/장애물을 올라가는 시도를 합니다.

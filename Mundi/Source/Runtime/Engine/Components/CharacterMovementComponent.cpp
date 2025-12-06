@@ -10,6 +10,7 @@
 #include "World.h"
 #include "PhysScene.h"
 #include "PhysXPublic.h"
+#include "ControllerInstance.h"
 
 // ────────────────────────────────────────────────────────────────────────────
 // 생성자 / 소멸자
@@ -69,42 +70,60 @@ void UCharacterMovementComponent::TickComponent(float DeltaTime)
 		return;
 	}
 
+	// CCT 모드 체크
+	UCapsuleComponent* Capsule = CharacterOwner->GetCapsuleComponent();
+	bool bUseCCT = Capsule && Capsule->GetUseCCT() && Capsule->GetControllerInstance();
+
 	// 1. 속도 업데이트 (입력, 마찰, 가속)
 	UpdateVelocity(DeltaTime);
 
 	// 2. 중력 적용
 	ApplyGravity(DeltaTime);
 
-	// 3. 가파른 경사면 미끄러짐 처리
-	HandleSlopeSliding(DeltaTime);
-
-	// 4. 위치 업데이트
-	MoveUpdatedComponent(DeltaTime);
-
-	// 5. 지면 체크
-	bool bWasGrounded = IsGrounded();
-	bool bIsNowGrounded = CheckGround();
-
-	// 6. 이동 모드 업데이트
-	if (bIsNowGrounded && !bWasGrounded)
+	if (bUseCCT)
 	{
-		// 착지
-		SetMovementMode(EMovementMode::Walking);
-		float VerticalSpeed = FVector::Dot(Velocity, GravityDirection);
-		Velocity -= GravityDirection * VerticalSpeed;
-		TimeInAir = 0.0f;
-		bIsJumping = false;
+		// ────────────────────────────────────────────────
+		// CCT 모드: PhysX CCT::move() 사용
+		// ────────────────────────────────────────────────
+		MoveWithCCT(DeltaTime);
 	}
-	else if (!bIsNowGrounded && bWasGrounded)
+	else
 	{
-		// 낙하 시작
-		SetMovementMode(EMovementMode::Falling);
-	}
+		// ────────────────────────────────────────────────
+		// 기존 모드: 수동 충돌 처리
+		// ────────────────────────────────────────────────
 
-	// 7. 공중 시간 체크
-	if (IsFalling())
-	{
-		TimeInAir += DeltaTime;
+		// 3. 가파른 경사면 미끄러짐 처리
+		HandleSlopeSliding(DeltaTime);
+
+		// 4. 위치 업데이트
+		MoveUpdatedComponent(DeltaTime);
+
+		// 5. 지면 체크
+		bool bWasGrounded = IsGrounded();
+		bool bIsNowGrounded = CheckGround();
+
+		// 6. 이동 모드 업데이트
+		if (bIsNowGrounded && !bWasGrounded)
+		{
+			// 착지
+			SetMovementMode(EMovementMode::Walking);
+			float VerticalSpeed = FVector::Dot(Velocity, GravityDirection);
+			Velocity -= GravityDirection * VerticalSpeed;
+			TimeInAir = 0.0f;
+			bIsJumping = false;
+		}
+		else if (!bIsNowGrounded && bWasGrounded)
+		{
+			// 낙하 시작
+			SetMovementMode(EMovementMode::Falling);
+		}
+
+		// 7. 공중 시간 체크
+		if (IsFalling())
+		{
+			TimeInAir += DeltaTime;
+		}
 	}
 
 	// 입력 초기화
@@ -138,7 +157,7 @@ bool UCharacterMovementComponent::Jump()
 {
 	if (!bCanJump || !IsGrounded())
 	{
-		return false;
+ 		return false;
 	}
 
 	FVector JumpVelocity = GravityDirection * -1.0f * JumpZVelocity;
@@ -168,6 +187,33 @@ void UCharacterMovementComponent::SetMovementMode(EMovementMode NewMode)
 		return;
 	}
 	MovementMode = NewMode;
+}
+
+bool UCharacterMovementComponent::IsGrounded() const
+{
+	// MovementMode가 Walking이면 grounded로 간주
+	// (이전 프레임에서 바닥에 있었으면 점프 허용)
+	// 입력 처리가 TickComponent보다 먼저 일어나므로 이 체크가 필요
+	if (MovementMode == EMovementMode::Walking)
+	{
+		return true;
+	}
+
+	// CCT 모드에서 실시간 확인 (낙하 중 착지 감지 등)
+	if (CharacterOwner)
+	{
+		UCapsuleComponent* Capsule = CharacterOwner->GetCapsuleComponent();
+		if (Capsule && Capsule->GetUseCCT())
+		{
+			FControllerInstance* Ctrl = Capsule->GetControllerInstance();
+			if (Ctrl && Ctrl->IsValid())
+			{
+				return Ctrl->IsGrounded();
+			}
+		}
+	}
+
+	return false;
 }
 
 void UCharacterMovementComponent::SetGravityDirection(const FVector& NewDirection)
@@ -771,6 +817,91 @@ void UCharacterMovementComponent::HandleSlopeSliding(float DeltaTime)
 			SetMovementMode(EMovementMode::Falling);
 		}
 	}
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// CCT 이동 처리
+// ────────────────────────────────────────────────────────────────────────────
+
+void UCharacterMovementComponent::MoveWithCCT(float DeltaTime)
+{
+	if (!CharacterOwner || !UpdatedComponent)
+	{
+		return;
+	}
+
+	UCapsuleComponent* Capsule = CharacterOwner->GetCapsuleComponent();
+	if (!Capsule)
+	{
+		return;
+	}
+
+	FControllerInstance* Ctrl = Capsule->GetControllerInstance();
+	if (!Ctrl)
+	{
+		return;
+	}
+
+	// 이동 벡터 계산
+	FVector Displacement = Velocity * DeltaTime;
+
+	// 바닥 충돌 감지를 위해 항상 중력 방향 성분 추가
+	// PhysX CCT는 순수 수평 이동(Z=0) 시 DOWN 충돌을 감지하지 않을 수 있음
+	const float MinDownDisplacement = 0.01f;
+	float VerticalDisp = FVector::Dot(Displacement, GravityDirection);
+	if (VerticalDisp > -MinDownDisplacement)  // 아래로 충분히 안 가고 있으면
+	{
+		// 중력 방향으로 작은 양 추가 (바닥 충돌 감지용)
+		Displacement += GravityDirection * MinDownDisplacement;
+	}
+
+	// CCT::move() 호출 - 자동으로 경사면/계단/장애물 처리
+	PxControllerCollisionFlags Flags = Ctrl->Move(Displacement, DeltaTime);
+
+	// 충돌 플래그 분석
+	bool bGrounded = Flags.isSet(PxControllerCollisionFlag::eCOLLISION_DOWN);
+	bool bCeiling = Flags.isSet(PxControllerCollisionFlag::eCOLLISION_UP);
+	bool bSides = Flags.isSet(PxControllerCollisionFlag::eCOLLISION_SIDES);
+
+	// 이동 모드 업데이트
+	if (bGrounded)
+	{
+		if (MovementMode != EMovementMode::Walking)
+		{
+			SetMovementMode(EMovementMode::Walking);
+			// 착지 시 중력 방향 속도 제거
+			float VerticalSpeed = FVector::Dot(Velocity, GravityDirection);
+			Velocity -= GravityDirection * VerticalSpeed;
+		}
+		TimeInAir = 0.0f;
+		bIsJumping = false;
+	}
+	else
+	{
+		if (MovementMode == EMovementMode::Walking)
+		{
+			SetMovementMode(EMovementMode::Falling);
+		}
+		TimeInAir += DeltaTime;
+	}
+
+	// 천장 충돌 시 위로 가는 속도 제거
+	if (bCeiling)
+	{
+		FVector UpDirection = -GravityDirection;
+		float UpVelocity = FVector::Dot(Velocity, UpDirection);
+		if (UpVelocity > 0.0f)
+		{
+			Velocity -= UpDirection * UpVelocity;
+			bIsJumping = false;
+		}
+	}
+
+	// CCT 위치를 UpdatedComponent에 동기화
+	// GetPosition()은 캡슐 중심, GetFootPosition()은 바닥
+	// CapsuleComponent의 WorldLocation은 중심이므로 GetPosition() 사용
+	FVector NewCenterPos = Ctrl->GetPosition();
+	UpdatedComponent->SetWorldLocation(NewCenterPos);
 }
 
 // ────────────────────────────────────────────────────────────────────────────
