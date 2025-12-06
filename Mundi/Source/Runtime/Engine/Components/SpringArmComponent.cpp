@@ -211,13 +211,36 @@ bool USpringArmComponent::DoCollisionTest(const FVector& DesiredLocation, FVecto
 	}
 
 	// 스윕 시작점: Owner 위치 + TargetOffset
+	// UpdateDesiredArmLocation과 동일한 회전을 사용해야 함
 	FQuat OwnerRotation = OwnerActor->GetActorRotation();
+	if (bUsePawnControlRotation)
+	{
+		if (APawn* Pawn = Cast<APawn>(OwnerActor))
+		{
+			if (AController* Controller = Pawn->GetController())
+			{
+				OwnerRotation = Controller->GetControlRotation();
+			}
+		}
+	}
 	FVector OwnerLocation = OwnerActor->GetActorLocation();
 	FVector RotatedTargetOffset = OwnerRotation.RotateVector(TargetOffset);
 	FVector SweepStart = OwnerLocation + RotatedTargetOffset;
 
 	// 스윕 끝점: 원하는 카메라 위치
 	FVector SweepEnd = DesiredLocation;
+
+	// 디버그 로그: 스윕 정보 출력
+	if (bDrawDebugCollision)
+	{
+		FVector SweepDir = (SweepEnd - SweepStart).GetNormalized();
+		float SweepDist = (SweepEnd - SweepStart).Size();
+		UE_LOG("[SpringArm] Sweep Start:(%.2f,%.2f,%.2f) End:(%.2f,%.2f,%.2f) Dir:(%.2f,%.2f,%.2f) Dist:%.2f",
+			SweepStart.X, SweepStart.Y, SweepStart.Z,
+			SweepEnd.X, SweepEnd.Y, SweepEnd.Z,
+			SweepDir.X, SweepDir.Y, SweepDir.Z,
+			SweepDist);
+	}
 
 	// Sphere 스윕으로 충돌 검사
 	FHitResult HitResult;
@@ -240,15 +263,14 @@ bool USpringArmComponent::DoCollisionTest(const FVector& DesiredLocation, FVecto
 			return false;
 		}
 
-		// Distance를 사용해서 충돌 위치 계산
-		FVector SweepDirection = (SweepEnd - SweepStart).GetNormalized();
-		FVector HitLocation = SweepStart + SweepDirection * HitResult.Distance;
+		// PhysX에서 반환된 충돌 위치를 직접 사용 (P2UVector 좌표 변환이 적용됨)
+		FVector HitLocation = HitResult.ImpactPoint;
 
 		// 충돌 위치를 카메라 위치로 사용
 		OutLocation = HitLocation;
 
-		// 현재 암 길이 업데이트
-		CurrentArmLength = HitResult.Distance;
+		// 현재 암 길이 업데이트 (엔진 좌표계에서 실제 거리 계산)
+		CurrentArmLength = (HitLocation - SweepStart).Size();
 
 		// 디버그 로그
 		if (bDrawDebugCollision)
