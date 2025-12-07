@@ -701,18 +701,32 @@ FLuaManager::FLuaManager()
             // FGameObject를 파괴됨으로 마킹 (Destroy 중/후 콜백에서 접근 방지)
             GameObject.MarkDestroyed();
 
-            // 하이라이트 제거
+            // 하이라이트 제거 (StaticMesh 또는 SkeletalMesh)
             URenderer* Renderer = URenderManager::GetInstance().GetRenderer();
             if (Renderer)
             {
+                UActorComponent* MeshComp = nullptr;
+
+                // 1. StaticMeshComponent 먼저 시도
                 UClass* StaticMeshCompClass = UClass::FindClass("UStaticMeshComponent");
                 if (StaticMeshCompClass)
                 {
-                    UActorComponent* MeshComp = Actor->GetComponent(StaticMeshCompClass);
-                    if (MeshComp)
+                    MeshComp = Actor->GetComponent(StaticMeshCompClass);
+                }
+
+                // 2. StaticMeshComponent가 없으면 SkinnedMeshComponent 시도 (SkeletalMesh 지원)
+                if (!MeshComp)
+                {
+                    UClass* SkinnedMeshCompClass = UClass::FindClass("USkinnedMeshComponent");
+                    if (SkinnedMeshCompClass)
                     {
-                        Renderer->RemoveHighlight(MeshComp->InternalIndex);
+                        MeshComp = Actor->GetComponent(SkinnedMeshCompClass);
                     }
+                }
+
+                if (MeshComp)
+                {
+                    Renderer->RemoveHighlight(MeshComp->InternalIndex);
                 }
             }
 
@@ -753,12 +767,27 @@ FLuaManager::FLuaManager()
             AActor* Actor = GameObject.GetOwner();
             if (!Actor || Actor->IsPendingDestroy()) return false;
 
-            // StaticMeshComponent의 InternalIndex를 ObjectID로 사용
+            // StaticMeshComponent 또는 SkinnedMeshComponent의 InternalIndex를 ObjectID로 사용
             // (IdBuffer에는 컴포넌트의 InternalIndex가 기록됨)
-            UClass* StaticMeshCompClass = UClass::FindClass("UStaticMeshComponent");
-            if (!StaticMeshCompClass) return false;
+            UActorComponent* MeshComp = nullptr;
 
-            UActorComponent* MeshComp = Actor->GetComponent(StaticMeshCompClass);
+            // 1. StaticMeshComponent 먼저 시도
+            UClass* StaticMeshCompClass = UClass::FindClass("UStaticMeshComponent");
+            if (StaticMeshCompClass)
+            {
+                MeshComp = Actor->GetComponent(StaticMeshCompClass);
+            }
+
+            // 2. StaticMeshComponent가 없으면 SkinnedMeshComponent 시도 (SkeletalMesh 지원)
+            if (!MeshComp)
+            {
+                UClass* SkinnedMeshCompClass = UClass::FindClass("USkinnedMeshComponent");
+                if (SkinnedMeshCompClass)
+                {
+                    MeshComp = Actor->GetComponent(SkinnedMeshCompClass);
+                }
+            }
+
             if (!MeshComp) return false;
 
             uint32 ObjectID = MeshComp->InternalIndex;
@@ -799,11 +828,26 @@ FLuaManager::FLuaManager()
             AActor* Actor = GameObject.GetOwner();
             if (!Actor || Actor->IsPendingDestroy()) return false;
 
-            // StaticMeshComponent의 InternalIndex를 ObjectID로 사용
-            UClass* StaticMeshCompClass = UClass::FindClass("UStaticMeshComponent");
-            if (!StaticMeshCompClass) return false;
+            // StaticMeshComponent 또는 SkinnedMeshComponent의 InternalIndex를 ObjectID로 사용
+            UActorComponent* MeshComp = nullptr;
 
-            UActorComponent* MeshComp = Actor->GetComponent(StaticMeshCompClass);
+            // 1. StaticMeshComponent 먼저 시도
+            UClass* StaticMeshCompClass = UClass::FindClass("UStaticMeshComponent");
+            if (StaticMeshCompClass)
+            {
+                MeshComp = Actor->GetComponent(StaticMeshCompClass);
+            }
+
+            // 2. StaticMeshComponent가 없으면 SkinnedMeshComponent 시도 (SkeletalMesh 지원)
+            if (!MeshComp)
+            {
+                UClass* SkinnedMeshCompClass = UClass::FindClass("USkinnedMeshComponent");
+                if (SkinnedMeshCompClass)
+                {
+                    MeshComp = Actor->GetComponent(SkinnedMeshCompClass);
+                }
+            }
+
             if (!MeshComp) return false;
 
             uint32 ObjectID = MeshComp->InternalIndex;
