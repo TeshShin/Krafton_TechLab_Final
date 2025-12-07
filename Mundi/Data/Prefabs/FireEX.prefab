@@ -1,0 +1,50 @@
+{
+  "ObjectName" : "FireEX",
+  "OwnedComponents" : [{
+      "CollisionChannel" : 1,
+      "CollisionEnabled" : 3,
+      "CollisionMask" : -1,
+      "Id" : 4027,
+      "MaterialSlots" : [{
+          "Type" : "None"
+        }, {
+          "AssetPath" : "extincteur",
+          "Type" : "UMaterial"
+        }],
+      "Mobility" : 1,
+      "ObjectName" : "UStaticMeshComponent_211",
+      "ParentId" : 0,
+      "PhysicalMaterial" : "",
+      "RelativeLocation" : [0.000000, 0.000000, 0.000000],
+      "RelativeRotationEuler" : [0.000000, -0.000000, 0.000000],
+      "RelativeScale" : [0.500000, 0.500000, 0.500000],
+      "StaticMesh" : "Data/Model/FireStation/fire_ex.fbx",
+      "Type" : "UStaticMeshComponent",
+      "bBlockComponent" : false,
+      "bCastShadows" : true,
+      "bGenerateOverlapEvents" : true,
+      "bHiddenInGame" : false,
+      "bIsActive" : true,
+      "bIsVisible" : true,
+      "bSimulatePhysics" : true,
+      "bTickEnabled" : true,
+      "bTickInEditor" : false
+    }, {
+      "ItemName" : "FireEx",
+      "ItemType" : 0,
+      "ObjectName" : "UItemComponent_2",
+      "Quantity" : 1,
+      "Type" : "UItemComponent",
+      "bCanPickUp" : true,
+      "bHiddenInGame" : false,
+      "bIsActive" : true,
+      "bIsHighlighted" : false,
+      "bTickEnabled" : true,
+      "bTickInEditor" : false
+    }],
+  "RootComponentId" : 4027,
+  "Tag" : "",
+  "Type" : "AStaticMeshActor",
+  "bActorHiddenInGame" : false,
+  "bActorIsActive" : true
+}

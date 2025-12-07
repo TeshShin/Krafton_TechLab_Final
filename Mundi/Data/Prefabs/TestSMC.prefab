@@ -1,0 +1,36 @@
+{
+  "ObjectName" : "TestSMC",
+  "OwnedComponents" : [{
+      "CollisionChannel" : 1,
+      "CollisionEnabled" : 3,
+      "CollisionMask" : -1,
+      "Id" : 2563,
+      "MaterialSlots" : [{
+          "AssetPath" : "texture",
+          "Type" : "UMaterial"
+        }],
+      "Mobility" : 1,
+      "ObjectName" : "UStaticMeshComponent_211",
+      "ParentId" : 0,
+      "PhysicalMaterial" : "",
+      "RelativeLocation" : [-43.785065, 33.795837, -14.200455],
+      "RelativeRotationEuler" : [0.000000, -0.000000, 0.000000],
+      "RelativeScale" : [1.000000, 1.000000, 1.000000],
+      "StaticMesh" : "Data/cube-tex.obj",
+      "Type" : "UStaticMeshComponent",
+      "bBlockComponent" : false,
+      "bCastShadows" : true,
+      "bGenerateOverlapEvents" : true,
+      "bHiddenInGame" : false,
+      "bIsActive" : true,
+      "bIsVisible" : true,
+      "bSimulatePhysics" : false,
+      "bTickEnabled" : true,
+      "bTickInEditor" : false
+    }],
+  "RootComponentId" : 2563,
+  "Tag" : "",
+  "Type" : "AStaticMeshActor",
+  "bActorHiddenInGame" : false,
+  "bActorIsActive" : true
+}

@@ -50,7 +50,7 @@ AFirefighterCharacter::AFirefighterCharacter()
 	if (SpringArmComponent && CapsuleComponent)
 	{
 		SpringArmComponent->SetupAttachment(CapsuleComponent);
-		SpringArmComponent->SetTargetArmLength(10.0f);
+		SpringArmComponent->SetTargetArmLength(5.0f);
 		SpringArmComponent->SetSocketOffset(FVector(0.0f, 0.0f, 0.0f));
 		SpringArmComponent->SetEnableCameraLag(true);
 		SpringArmComponent->SetCameraLagSpeed(10.0f);
@@ -267,7 +267,7 @@ void AFirefighterCharacter::SetCharacterScale(float Scale)
 	constexpr float BaseCapsuleRadius = 0.33f;
 	constexpr float BaseCapsuleHalfHeight = 1.0f;
 	constexpr float BaseMeshOffsetZ = -1.05f;
-	constexpr float BaseSpringArmLength = 10.0f;
+	constexpr float BaseSpringArmLength = 5.0f;
 	constexpr float BaseItemDetectionRadius = 2.0f;
 
 	// 1. CapsuleComponent 크기 설정 (PhysX CCT용)

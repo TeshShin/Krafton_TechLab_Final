@@ -36,9 +36,9 @@ UCharacterMovementComponent::UCharacterMovementComponent()
 	, MaxAirTime(5.0f)
 	, bCanJump(true)
 	// 바닥 감지 설정
-	, WalkableFloorAngle(44.0f)
+	, WalkableFloorAngle(30.0f)
 	, FloorSnapDistance(0.02f)
-	, MaxStepHeight(45.0f)
+	, MaxStepHeight(0.4f)
 	// 경사면 미끄러짐 설정
 	, bEnableSlopeSliding(true)
 	, SlopeSlideSpeed(0.5f)

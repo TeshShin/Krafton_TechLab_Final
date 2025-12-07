@@ -37,7 +37,8 @@ FLuaManager::FLuaManager()
         sol::lib::coroutine,
         sol::lib::math,
         sol::lib::table,
-        sol::lib::string
+        sol::lib::string,
+        sol::lib::os
     );
 
     SharedLib = Lua->create_table();

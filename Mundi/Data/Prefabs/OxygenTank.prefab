@@ -1,0 +1,48 @@
+{
+  "ObjectName" : "OxygenTank",
+  "OwnedComponents" : [{
+      "CollisionChannel" : 1,
+      "CollisionEnabled" : 3,
+      "CollisionMask" : -1,
+      "Id" : 3088,
+      "MaterialSlots" : [{
+          "AssetPath" : "MTL",
+          "Type" : "UMaterial"
+        }],
+      "Mobility" : 1,
+      "ObjectName" : "UStaticMeshComponent_211",
+      "ParentId" : 0,
+      "PhysicalMaterial" : "",
+      "RelativeLocation" : [0.000000, 0.000000, 0.000000],
+      "RelativeRotationEuler" : [-90.000008, 0.000000, 0.000000],
+      "RelativeScale" : [0.200000, 0.200000, 0.200000],
+      "StaticMesh" : "Data/Model/FireStation/Oxygen_Tank/OxygenTank.obj",
+      "Type" : "UStaticMeshComponent",
+      "bBlockComponent" : false,
+      "bCastShadows" : true,
+      "bGenerateOverlapEvents" : true,
+      "bHiddenInGame" : false,
+      "bIsActive" : true,
+      "bIsVisible" : true,
+      "bSimulatePhysics" : true,
+      "bTickEnabled" : true,
+      "bTickInEditor" : false
+    }, {
+      "ItemName" : "Oxygen",
+      "ItemType" : 0,
+      "ObjectName" : "UItemComponent_1",
+      "Quantity" : 1,
+      "Type" : "UItemComponent",
+      "bCanPickUp" : true,
+      "bHiddenInGame" : false,
+      "bIsActive" : true,
+      "bIsHighlighted" : false,
+      "bTickEnabled" : true,
+      "bTickInEditor" : false
+    }],
+  "RootComponentId" : 3088,
+  "Tag" : "",
+  "Type" : "AStaticMeshActor",
+  "bActorHiddenInGame" : false,
+  "bActorIsActive" : true
+}
