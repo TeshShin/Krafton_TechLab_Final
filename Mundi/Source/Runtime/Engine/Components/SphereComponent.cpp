@@ -36,6 +36,10 @@ USphereComponent::~USphereComponent()
 void USphereComponent::DuplicateSubObjects()
 {
 	Super::DuplicateSubObjects();
+
+	// 새로운 BodySetup 생성 (원본과 공유하면 댕글링 포인터 발생)
+	SphereBodySetup = NewObject<UBodySetup>();
+	UpdateBodySetup();
 }
 
 // ────────────────────────────────────────────────────────────────────────────

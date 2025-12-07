@@ -1,4 +1,4 @@
-#include "pch.h"
+﻿#include "pch.h"
 #include "FireActor.h"
 #include "ParticleSystemComponent.h"
 #include "ParticleSystem.h"
@@ -101,6 +101,7 @@ void AFireActor::Serialize(const bool bInIsLoading, JSON& InOutHandle)
 		FJsonSerializer::ReadFloat(InOutHandle, "FireIntensity", FireIntensity, 1.0f);
 		FJsonSerializer::ReadFloat(InOutHandle, "DamagePerSecond", DamagePerSecond, 10.0f);
 		FJsonSerializer::ReadFloat(InOutHandle, "FireRadius", FireRadius, 2.0f);
+		FJsonSerializer::ReadFloat(InOutHandle, "WaterDamageMultiplier", WaterDamageMultiplier, 1.0f);
 
 		// 로딩 후 반경 업데이트
 		if (DamageSphere)
@@ -115,6 +116,7 @@ void AFireActor::Serialize(const bool bInIsLoading, JSON& InOutHandle)
 		InOutHandle["FireIntensity"] = FireIntensity;
 		InOutHandle["DamagePerSecond"] = DamagePerSecond;
 		InOutHandle["FireRadius"] = FireRadius;
+		InOutHandle["WaterDamageMultiplier"] = WaterDamageMultiplier;
 	}
 }
 
@@ -156,12 +158,16 @@ void AFireActor::ApplyWaterDamage(float DamageAmount)
 {
 	if (!bIsActive)
 	{
+		UE_LOG("ApplyWaterDamage: Fire is not active, skipping");
 		return;
 	}
 
 	// 물 데미지를 불 세기에 적용
 	float ActualDamage = DamageAmount * WaterDamageMultiplier;
 	float NewIntensity = FireIntensity - ActualDamage;
+
+	UE_LOG("ApplyWaterDamage: DamageAmount=%.4f, Multiplier=%.2f, ActualDamage=%.4f, OldIntensity=%.2f, NewIntensity=%.2f",
+		DamageAmount, WaterDamageMultiplier, ActualDamage, FireIntensity, NewIntensity);
 
 	SetFireIntensity(NewIntensity);
 }

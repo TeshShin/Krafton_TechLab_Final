@@ -48,6 +48,10 @@ UCapsuleComponent::~UCapsuleComponent()
 void UCapsuleComponent::DuplicateSubObjects()
 {
 	Super::DuplicateSubObjects();
+
+	// 새로운 BodySetup 생성 (원본과 공유하면 댕글링 포인터 발생)
+	CapsuleBodySetup = NewObject<UBodySetup>();
+	UpdateBodySetup();
 }
 
 // ────────────────────────────────────────────────────────────────────────────

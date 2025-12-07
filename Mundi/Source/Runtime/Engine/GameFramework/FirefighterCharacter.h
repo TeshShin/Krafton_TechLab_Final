@@ -72,10 +72,6 @@ public:
     UFUNCTION(LuaBind, DisplayName="FireWaterMagic")
     void FireWaterMagic(float DamageAmount);
 
-    /** 물 마법 범위 디버그 표시 (파란색 와이어프레임 구) */
-    UFUNCTION(LuaBind, DisplayName="DrawWaterMagicDebug")
-    void DrawWaterMagicDebug();
-
     /** 물 마법 사거리 */
     UPROPERTY(LuaBind, DisplayName="WaterMagicRange")
     float WaterMagicRange = 14.0f;

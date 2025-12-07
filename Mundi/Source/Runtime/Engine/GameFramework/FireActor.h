@@ -57,7 +57,7 @@ public:
 
 	/** 불 반경 */
 	UPROPERTY(LuaBind, DisplayName = "FireRadius")
-	float FireRadius = 1.0f;
+	float FireRadius = 2.0f;
 
 protected:
 	/** 불 파티클 컴포넌트 */
