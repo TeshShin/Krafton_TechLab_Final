@@ -360,6 +360,9 @@ void AFirefighterCharacter::FireWaterMagic(float DamageAmount)
 		return;
 	}
 
+	// 디버그 시각화 그리기
+	DrawWaterMagicDebug();
+
 	FPhysScene* PhysScene = World->GetPhysicsScene();
 	if (!PhysScene)
 	{
@@ -387,5 +390,43 @@ void AFirefighterCharacter::FireWaterMagic(float DamageAmount)
 			FireActor->ApplyWaterDamage(DamageAmount);
 			UE_LOG("FireActor->ApplyWaterDamage");
 		}
+	}
+}
+
+void AFirefighterCharacter::DrawWaterMagicDebug()
+{
+	UWorld* World = GetWorld();
+	if (!World)
+	{
+		return;
+	}
+
+	// 물줄기 반경 (FireWaterMagic과 동일)
+	const float SweepRadius = 0.5f;
+
+	// 시작점: 캐릭터 위치에서 약간 위
+	FVector Start = GetActorLocation() + FVector(0.0f, 0.0f, 1.0f);
+	FVector Direction = GetActorForward();
+	FVector End = Start + Direction * WaterMagicRange;
+
+	// 파란색 (반투명)
+	FLinearColor BlueColor(0.0f, 0.5f, 1.0f, 0.5f);
+
+	// 시작점에 구 그리기
+	FMatrix StartTransform = FMatrix::FromTRS(Start, FQuat::Identity(), FVector(SweepRadius, SweepRadius, SweepRadius));
+	World->AddDebugSphere(StartTransform, BlueColor);
+
+	// 끝점에 구 그리기
+	FMatrix EndTransform = FMatrix::FromTRS(End, FQuat::Identity(), FVector(SweepRadius, SweepRadius, SweepRadius));
+	World->AddDebugSphere(EndTransform, BlueColor);
+
+	// 중간 지점에 구 여러 개 그려서 범위 시각화
+	const int NumSpheres = 5;
+	for (int i = 1; i < NumSpheres; ++i)
+	{
+		float t = static_cast<float>(i) / static_cast<float>(NumSpheres);
+		FVector MidPoint = Start + Direction * WaterMagicRange * t;
+		FMatrix MidTransform = FMatrix::FromTRS(MidPoint, FQuat::Identity(), FVector(SweepRadius, SweepRadius, SweepRadius));
+		World->AddDebugSphere(MidTransform, BlueColor);
 	}
 }
