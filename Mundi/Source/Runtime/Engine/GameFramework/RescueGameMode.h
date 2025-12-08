@@ -128,6 +128,29 @@ public:
     bool bInitialHasFireSuit;
 
     // ────────────────────────────────────────────────
+    // 구조 시스템
+    // ────────────────────────────────────────────────
+
+    /** 구조 구역으로 사용할 Actor의 이름 */
+    UPROPERTY(EditAnywhere, Category="Rescue", Tooltip="구조 구역으로 사용할 Actor의 이름입니다.")
+    FName SafeZoneActorName;
+
+    /** 구조 구역으로 사용할 Actor의 태그 */
+    UPROPERTY(EditAnywhere, Category="Rescue", Tooltip="구조 구역으로 사용할 Actor의 태그입니다.")
+    FName SafeZoneActorTag;
+
+    /** 구조 구역 반경 (미터) */
+    UPROPERTY(EditAnywhere, Category="Rescue", Tooltip="구조 구역의 반경(미터)입니다.")
+    float SafeZoneRadius;
+
+    /** 전체 구조 대상 수 (Lua에서 설정) */
+    UPROPERTY(EditAnywhere, Category="Rescue", Tooltip="전체 구조 대상 수입니다. Lua에서 설정합니다.")
+    int32 TotalPersonCount;
+
+    /** 구조된 사람 수 */
+    int32 RescuedCount;
+
+    // ────────────────────────────────────────────────
     // 외부 접근용 함수
     // ────────────────────────────────────────────────
 
@@ -146,6 +169,17 @@ public:
 
     /** 물 마법 사용 상태 설정 */
     void SetUsingWaterMagic(bool bUsing) { bIsUsingWaterMagic = bUsing; }
+
+    /** 구조 시스템 접근 */
+    int32 GetRescuedCount() const { return RescuedCount; }
+    int32 GetTotalPersonCount() const { return TotalPersonCount; }
+    void SetTotalPersonCount(int32 Count) { TotalPersonCount = Count; }
+
+    /** 위치가 구조 구역 안에 있는지 확인 */
+    bool IsInSafeZone(const FVector& Position) const;
+
+    /** 사람 구조 처리 (구조 카운트 증가) */
+    void OnPersonRescued();
 
 protected:
     // ────────────────────────────────────────────────
@@ -173,6 +207,9 @@ protected:
     /** 물 시스템 업데이트 */
     void UpdateWaterSystem(float DeltaSeconds);
 
+    /** 구조 구역 Actor 찾기 */
+    AActor* FindSafeZoneActor() const;
+
 private:
     // ────────────────────────────────────────────────
     // UI 위젯
@@ -189,4 +226,10 @@ private:
 
     /** 소화기 개수 텍스트 */
     TSharedPtr<STextBlock> FireExtinguisherText;
+
+    /** 구조 카운트 텍스트 (우측 상단) */
+    TSharedPtr<STextBlock> RescueCountText;
+
+    /** 캐시된 구조 구역 Actor */
+    mutable AActor* CachedSafeZoneActor = nullptr;
 };

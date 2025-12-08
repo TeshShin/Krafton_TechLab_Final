@@ -11,6 +11,7 @@
 #include "PlayerController.h"
 #include "Pawn.h"
 #include "GameInstance.h"
+#include "BoxComponent.h"
 
 #include "GameUI/SGameHUD.h"
 #include "GameUI/STextBlock.h"
@@ -43,6 +44,12 @@ ARescueGameMode::ARescueGameMode()
     , InitialOxygenTankCount(1)
     , InitialFireExtinguisherCount(3)
     , bInitialHasFireSuit(true)
+    // 구조 시스템
+    , SafeZoneActorName("SafeZone")
+    , SafeZoneActorTag("None")
+    , SafeZoneRadius(3.0f)
+    , TotalPersonCount(0)
+    , RescuedCount(0)
 {
     DefaultPawnClass = AFirefighterCharacter::StaticClass();
     PlayerSpawnLocation = FVector(0.0f, 0.0f, 1.0f);
@@ -89,6 +96,11 @@ void ARescueGameMode::EndPlay()
         {
             SGameHUD::Get().RemoveWidget(FireExtinguisherText);
             FireExtinguisherText.Reset();
+        }
+        if (RescueCountText)
+        {
+            SGameHUD::Get().RemoveWidget(RescueCountText);
+            RescueCountText.Reset();
         }
     }
 }
@@ -318,6 +330,22 @@ void ARescueGameMode::InitializeHUD()
         .SetPivot(1.f, 1.f)
         .SetOffset(-240.f, -95.f)
         .SetSize(60.f, 30.f);
+
+    // ========================
+    // 구조 카운트 텍스트 (우측 상단)
+    // ========================
+    RescueCountText = MakeShared<STextBlock>();
+    std::wstring RescueStr = L"구조: " + std::to_wstring(RescuedCount) + L"/" + std::to_wstring(TotalPersonCount);
+    RescueCountText->SetText(RescueStr)
+        .SetFontSize(28.f)
+        .SetColor(FSlateColor::White())
+        .SetShadow(true, FVector2D(2.f, 2.f), FSlateColor::Black());
+
+    SGameHUD::Get().AddWidget(RescueCountText)
+        .SetAnchor(1.f, 0.f)      // 우상단 앵커
+        .SetPivot(1.f, 0.f)       // 우상단 피벗
+        .SetOffset(-30.f, 30.f)   // 화면 가장자리에서 오프셋
+        .SetSize(200.f, 40.f);
 }
 
 // ----------------------------------------------------------------------------
@@ -373,6 +401,13 @@ void ARescueGameMode::UpdateHUD()
     if (FireExtinguisherText)
     {
         FireExtinguisherText->SetText(L"x" + std::to_wstring(FireExtinguisherCount));
+    }
+
+    // 구조 카운트 업데이트
+    if (RescueCountText)
+    {
+        std::wstring RescueStr = L"구조: " + std::to_wstring(RescuedCount) + L"/" + std::to_wstring(TotalPersonCount);
+        RescueCountText->SetText(RescueStr);
     }
 }
 
@@ -476,5 +511,93 @@ void ARescueGameMode::UpdateWaterSystem(float DeltaSeconds)
                 CurrentWater = 0.0f;
             }
         }
+    }
+}
+
+// ----------------------------------------------------------------------------
+// 구조 시스템
+// ----------------------------------------------------------------------------
+
+AActor* ARescueGameMode::FindSafeZoneActor() const
+{
+    // 캐시된 Actor가 있으면 반환
+    if (CachedSafeZoneActor)
+    {
+        return CachedSafeZoneActor;
+    }
+
+    if (!World)
+    {
+        return nullptr;
+    }
+
+    // 1. SafeZoneActorName으로 먼저 찾기
+    if (SafeZoneActorName != "None")
+    {
+        AActor* FoundActor = World->FindActorByName(SafeZoneActorName);
+        if (FoundActor)
+        {
+            UE_LOG("[info] RescueGameMode::FindSafeZoneActor - Found actor by name: %s",
+                SafeZoneActorName.ToString().c_str());
+            CachedSafeZoneActor = FoundActor;
+            return FoundActor;
+        }
+    }
+
+    // 2. SafeZoneActorTag로 찾기
+    if (SafeZoneActorTag != "None")
+    {
+        FString TagToFind = SafeZoneActorTag.ToString();
+        for (AActor* Actor : World->GetActors())
+        {
+            if (Actor && Actor->GetTag() == TagToFind)
+            {
+                UE_LOG("[info] RescueGameMode::FindSafeZoneActor - Found actor by tag: %s",
+                    TagToFind.c_str());
+                CachedSafeZoneActor = Actor;
+                return Actor;
+            }
+        }
+    }
+
+    return nullptr;
+}
+
+bool ARescueGameMode::IsInSafeZone(const FVector& Position) const
+{
+    AActor* SafeZoneActor = FindSafeZoneActor();
+    if (!SafeZoneActor)
+    {
+        return false;
+    }
+
+    // BoxComponent가 있으면 ContainsPoint로 체크
+    UBoxComponent* BoxComp = Cast<UBoxComponent>(
+        SafeZoneActor->GetComponent(UBoxComponent::StaticClass()));
+    if (BoxComp)
+    {
+        bool bContains = BoxComp->ContainsPoint(Position);
+        UE_LOG("[info] RescueGameMode::IsInSafeZone - BoxComponent check: %s",
+            bContains ? "true" : "false");
+        return bContains;
+    }
+
+    // BoxComponent가 없으면 기존 radius 방식으로 fallback
+    FVector SafeZonePos = SafeZoneActor->GetActorLocation();
+    float Distance = (Position - SafeZonePos).Size();
+
+    return Distance <= SafeZoneRadius;
+}
+
+void ARescueGameMode::OnPersonRescued()
+{
+    RescuedCount++;
+    UE_LOG("[info] RescueGameMode::OnPersonRescued - Rescued: %d / %d", RescuedCount, TotalPersonCount);
+
+    // 모든 사람 구조 시 추가 처리 가능
+    if (TotalPersonCount > 0 && RescuedCount >= TotalPersonCount)
+    {
+        UE_LOG("[info] RescueGameMode - All persons rescued!");
+        // TODO: 미션 완료 처리
     }
 }

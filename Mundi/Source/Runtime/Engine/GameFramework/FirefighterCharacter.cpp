@@ -27,6 +27,7 @@
 #include "BodyInstance.h"
 #include "PhysXPublic.h"
 #include "ItemComponent.h"
+#include "RescueGameMode.h"
 #include "../Audio/Sound.h"
 
 AFirefighterCharacter::AFirefighterCharacter()
@@ -566,6 +567,42 @@ void AFirefighterCharacter::Die()
 	bIsDead = true;
 	UE_LOG("Firefighter died! Activating ragdoll...");
 
+	// 들고 있던 사람 처리 (크래시 방지를 위해 삭제 대신 숨김)
+	if (bIsCarryingPerson && CarriedPerson)
+	{
+		UE_LOG("[FirefighterCharacter] Die: Releasing carried person");
+
+		// 소켓에서 분리
+		if (LeftHandSocket)
+		{
+			LeftHandSocket->DetachRagdoll();
+		}
+		if (RightHandSocket)
+		{
+			RightHandSocket->DetachRagdoll();
+		}
+
+		// 메시 숨기기
+		USkeletalMeshComponent* PersonMesh = Cast<USkeletalMeshComponent>(
+			CarriedPerson->GetComponent(USkeletalMeshComponent::StaticClass()));
+		if (PersonMesh)
+		{
+			PersonMesh->SetVisibility(false);
+			// 물리도 비활성화
+			PersonMesh->SetPhysicsMode(EPhysicsMode::Animation);
+		}
+
+		// SpringArm 무시 목록에서 제거
+		if (SpringArmComponent)
+		{
+			SpringArmComponent->RemoveIgnoredActor(CarriedPerson);
+		}
+
+		// 상태 초기화
+		CarriedPerson = nullptr;
+		bIsCarryingPerson = false;
+	}
+
 	// 물 마법 사용 중이면 강제 종료
 	ForceStopWaterMagic();
 
@@ -999,9 +1036,34 @@ void AFirefighterCharacter::StopCarryingPerson()
 
 		UE_LOG("[FirefighterCharacter] StopCarrying: Placed at (%.1f, %.1f, %.1f), Kinematic mode",
 			FloorPosition.X, FloorPosition.Y, FloorPosition.Z);
+
+		// ★ SafeZone 체크: 구조 구역 안에 배치되었는지 확인
+		ARescueGameMode* RescueMode = World ? Cast<ARescueGameMode>(World->GetGameMode()) : nullptr;
+		if (RescueMode && RescueMode->IsInSafeZone(FloorPosition))
+		{
+			// 구조 성공!
+			UE_LOG("[FirefighterCharacter] StopCarrying: Person rescued in SafeZone!");
+			RescueMode->OnPersonRescued();
+
+			// 사람 숨기기 및 조작 불가 처리
+			PersonMesh->SetVisibility(false);
+			PersonMesh->SetPhysicsMode(EPhysicsMode::Animation);
+
+			UItemComponent* ItemComp = Cast<UItemComponent>(
+				CarriedPerson->GetComponent(UItemComponent::StaticClass()));
+			if (ItemComp)
+			{
+				ItemComp->SetCanPickUp(false);
+			}
+
+			// 상태 초기화
+			CarriedPerson = nullptr;
+			bIsCarryingPerson = false;
+			return;
+		}
 	}
 
-	// 다시 줍기 가능하도록 ItemComponent의 bCanPickUp 복원
+	// SafeZone 밖에 배치된 경우: 다시 줍기 가능하도록 설정
 	UItemComponent* ItemComp = Cast<UItemComponent>(
 		CarriedPerson->GetComponent(UItemComponent::StaticClass()));
 	if (ItemComp)

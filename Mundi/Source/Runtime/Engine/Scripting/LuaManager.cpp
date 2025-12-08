@@ -16,6 +16,7 @@
 #include "Renderer.h"
 #include "PrimitiveComponent.h"
 #include "PhysScene.h"
+#include "GameModeBase.h"
 #include <tuple>
 
 sol::object MakeCompProxy(sol::state_view SolState, UObject* Instance, UClass* Class) {
@@ -1154,6 +1155,35 @@ void FLuaManager::ExposeAllComponentsToLua()
             }
 
             return MakeCompProxy(*Lua, Actor, Class);
+        }
+    );
+
+    SharedLib.set_function("GetGameModeAs",
+        [this](const FString& ClassName)
+        {
+            if (!GWorld) {
+                UE_LOG("[Lua][error] GetGameModeAs: GWorld is null\n");
+                return sol::make_object(*Lua, sol::nil);
+            }
+
+            AGameModeBase* GameMode = GWorld->GetGameMode();
+            if (!GameMode) {
+                UE_LOG("[Lua][error] GetGameModeAs: GameMode is null\n");
+                return sol::make_object(*Lua, sol::nil);
+            }
+
+            UClass* Class = UClass::FindClass(ClassName);
+            if (!Class) {
+                UE_LOG("[Lua][error] GetGameModeAs: Class '%s' not found\n", ClassName.c_str());
+                return sol::make_object(*Lua, sol::nil);
+            }
+
+            if (!GameMode->IsA(Class)) {
+                UE_LOG("[Lua][error] GetGameModeAs: GameMode is not of type '%s'\n", ClassName.c_str());
+                return sol::make_object(*Lua, sol::nil);
+            }
+
+            return MakeCompProxy(*Lua, GameMode, Class);
         }
     );
 }

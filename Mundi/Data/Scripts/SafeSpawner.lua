@@ -325,12 +325,16 @@ local function SpawnMultiple()
     )
 
     local totalSpawned = 0
+    local personSpawned = 0  -- 사람 프리팹 카운트 (Fire 제외)
 
     -- 각 프리팹별로 개별 스폰
     for _, prefabData in ipairs(PrefabList) do
         local maxCount = prefabData.maxCount or 10
         local maxAttempts = prefabData.maxAttempts or 100
         local spawnedCount = 0
+
+        -- 사람 프리팹인지 확인 (Fire가 아닌 것)
+        local isPerson = not string.find(prefabData.path, "Fire")
 
         for attempt = 1, maxAttempts do
             if spawnedCount >= maxCount then
@@ -341,6 +345,9 @@ local function SpawnMultiple()
             if obj then
                 spawnedCount = spawnedCount + 1
                 totalSpawned = totalSpawned + 1
+                if isPerson then
+                    personSpawned = personSpawned + 1
+                end
             end
         end
 
@@ -348,7 +355,17 @@ local function SpawnMultiple()
               " (attempts: " .. maxAttempts .. ")")
     end
 
-    print("[SafeSpawner] Total spawned: " .. totalSpawned)
+    print("[SafeSpawner] Total spawned: " .. totalSpawned .. ", Persons: " .. personSpawned)
+
+    -- GameMode에 TotalPersonCount 설정
+    local rescueGameMode = GetGameModeAs("ARescueGameMode")
+    if rescueGameMode then
+        rescueGameMode.TotalPersonCount = personSpawned
+        print("[SafeSpawner] Set GameMode.TotalPersonCount = " .. personSpawned)
+    else
+        print("[SafeSpawner] WARNING: Could not set TotalPersonCount - RescueGameMode not found")
+    end
+
     return totalSpawned
 end
 
