@@ -28,7 +28,7 @@ local ANIM_WITH_CLOTH = {
 local MESH_WITH_CLOTH = "Data/firefighter/Firefighter_With_Cloth.fbx"
 
 -- 이동 속도
-local WALK_SPEED = 20.0
+local WALK_SPEED = 3.0
 local RUN_SPEED = 40.0  -- GameMode의 RunSpeed와 동일하게 설정 가능
 
 -- ============================================================================
@@ -292,7 +292,7 @@ function Update(DeltaTime)
             local walkSpeed = gi:GetFloat("FireDispatch_WalkSpeed", WALK_SPEED)
             -- 새로운 위치 생성하여 설정 (Vector 함수 사용, X 방향 반대로)
             local newLoc = Vector(
-                Obj.Location.X - walkSpeed * DeltaTime,  -- X 방향 반대
+                Obj.Location.X - (walkSpeed * 0.5) * DeltaTime,  -- X 방향 반대
                 Obj.Location.Y,
                 Obj.Location.Z
             )

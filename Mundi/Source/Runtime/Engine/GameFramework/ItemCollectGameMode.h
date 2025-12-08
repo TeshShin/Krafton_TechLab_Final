@@ -5,7 +5,11 @@
 #pragma once
 
 #include "GameModeBase.h"
+#include "Source/Runtime/Core/Memory/PointerTypes.h"
 #include "AItemCollectGameMode.generated.h"
+
+class STextBlock;
+class SButton;
 
 /**
  * AItemCollectGameMode
@@ -31,6 +35,8 @@ public:
 	// ────────────────────────────────────────────────
 
 	void BeginPlay() override;
+	void Tick(float DeltaTime) override;
+	void EndPlay() override;
 
 	// ────────────────────────────────────────────────
 	// 스폰 설정
@@ -47,6 +53,26 @@ public:
 	/** 스폰 위치로 사용할 Actor의 태그 (SpawnActorName보다 우선순위 낮음) */
 	UPROPERTY(EditAnywhere, Category="Spawn", Tooltip="스폰 위치로 사용할 Actor의 태그입니다.")
 	FName SpawnActorTag;
+
+	// ────────────────────────────────────────────────
+	// 타이머 설정
+	// ────────────────────────────────────────────────
+
+	/** 제한 시간 (초) */
+	UPROPERTY(EditAnywhere, Category="Timer", Tooltip="제한 시간(초)입니다.")
+	float TimeLimit;
+
+	/** 다음 씬 경로 */
+	UPROPERTY(EditAnywhere, Category="Timer", Tooltip="시간이 다 되면 전환될 씬 경로입니다.")
+	FWideString NextScenePath;
+
+	/** 타이머 위젯 크기 */
+	UPROPERTY(EditAnywhere, Category="Timer", Tooltip="타이머 위젯 크기입니다.")
+	float TimerWidgetSize;
+
+	/** 타이머 텍스트 Y 오프셋 비율 (0.0~1.0) */
+	UPROPERTY(EditAnywhere, Category="Timer", Tooltip="타이머 텍스트의 Y 오프셋 비율입니다. 0.1 = 위젯 크기의 10%")
+	float TimerTextOffsetRatio;
 
 	// ────────────────────────────────────────────────
 	// Getter/Setter
@@ -68,4 +94,46 @@ protected:
 
 	/** 스폰 위치로 사용할 Actor 찾기 */
 	AActor* FindSpawnActor() const;
+
+	/** UI 초기화 */
+	void InitializeUI();
+
+	/** UI 정리 */
+	void ClearUI();
+
+	/** 타이머 UI 업데이트 */
+	void UpdateTimerUI();
+
+	/** 아이템 UI 초기화 */
+	void InitializeItemUI();
+
+	/** 아이템 카운트 UI 업데이트 (GameInstance에서 읽어오기) */
+	void UpdateItemCountUI();
+
+	/** 아이템 UI 정리 */
+	void ClearItemUI();
+
+	/** 아이템 수집 콜백 */
+	void OnItemCollected(const FString& ItemTag);
+
+public:
+	/** 아이템 수집 카운트 업데이트 (외부에서 호출 가능) */
+	void UpdateItemCount(const FString& ItemTag);
+
+private:
+	// 타이머 UI
+	TSharedPtr<STextBlock> TimerBackgroundWidget;  // 배경 이미지
+	TSharedPtr<STextBlock> TimerTextWidget;        // 텍스트만
+
+	// 타이머 상태
+	float RemainingTime;
+	float LastSecond;
+	float ShakeAnimationTime;
+
+	// 아이템 UI (3개 아이템: 소방복, 소화기, 산소통)
+	TSharedPtr<SButton> ItemImageWidgets[3];    // 아이템 이미지 (아틀라스)
+	TSharedPtr<STextBlock> ItemCountWidgets[3]; // 아이템 카운트 텍스트
+
+	// 아이템 카운트
+	int ItemCounts[3]; // 각 아이템 수집 개수
 };

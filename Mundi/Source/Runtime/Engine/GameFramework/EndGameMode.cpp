@@ -641,6 +641,13 @@ void AEndGameMode::OnMainMenuButtonClicked()
                 FAudioDevice::PlaySound3D(EndGameMode->ButtonSound, FVector::Zero(), 1.0f, false);
             }
 
+            // GameInstance 초기화 (게임 진행 데이터 초기화)
+            if (UGameInstance* GameInstance = GEngine.GetGameInstance())
+            {
+                UE_LOG("[info] EndGameMode: Clearing all game data in GameInstance");
+                GameInstance->ClearAll();
+            }
+
             for (AActor* Actor : Context.World->GetActors())
             {
                 if (ALevelTransitionManager* Manager = Cast<ALevelTransitionManager>(Actor))

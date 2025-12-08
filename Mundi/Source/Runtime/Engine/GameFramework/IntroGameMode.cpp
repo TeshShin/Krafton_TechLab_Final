@@ -9,6 +9,7 @@
 #include "FAudioDevice.h"
 #include "Sound.h"
 #include "ResourceManager.h"
+#include "PlayerController.h"
 
 IMPLEMENT_CLASS(AIntroGameMode)
 
@@ -35,7 +36,14 @@ void AIntroGameMode::BeginPlay()
     }
 
     // 입력 모드를 UIOnly로 설정 (마우스 클릭만 허용, 키보드/카메라 입력 차단)
-    UInputManager::GetInstance().SetInputMode(EInputMode::UIOnly);
+    if (PlayerController)
+    {
+        PlayerController->SetInputMode(EInputMode::UIOnly);
+    }
+    else
+    {
+        UInputManager::GetInstance().SetInputMode(EInputMode::UIOnly);
+    }
 
     // 사운드 초기화
     InitializeSounds();
@@ -49,7 +57,14 @@ void AIntroGameMode::EndPlay()
     Super::EndPlay();
 
     // 다른 씬으로 전환 시 입력 모드를 GameAndUI로 복원
-    UInputManager::GetInstance().SetInputMode(EInputMode::GameAndUI);
+    if (PlayerController)
+    {
+        PlayerController->SetInputMode(EInputMode::GameAndUI);
+    }
+    else
+    {
+        UInputManager::GetInstance().SetInputMode(EInputMode::GameAndUI);
+    }
 
     ClearUI();
 }

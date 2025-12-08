@@ -8,6 +8,15 @@
 #include "World.h"
 #include "PlayerController.h"
 #include "Pawn.h"
+#include "GameUI/SGameHUD.h"
+#include "GameUI/STextBlock.h"
+#include "GameUI/SButton.h"
+#include "LevelTransitionManager.h"
+#include "GameInstance.h"
+#include "InputManager.h"
+#include <cmath>
+
+IMPLEMENT_CLASS(AItemCollectGameMode)
 
 // ────────────────────────────────────────────────────────────────────────────
 // 생성자
@@ -17,9 +26,22 @@ AItemCollectGameMode::AItemCollectGameMode()
 	: PlayerSpawnScale(1.5f)
 	, SpawnActorName("PlayerStartPos")
 	, SpawnActorTag("None")
+	, TimeLimit(20.0f)
+	, NextScenePath(L"Data/Scenes/FireDispatch.scene")
+	, TimerWidgetSize(200.f)
+	, TimerTextOffsetRatio(0.12f)
+	, RemainingTime(0.0f)
+	, LastSecond(-1.0f)
+	, ShakeAnimationTime(0.0f)
 {
 	DefaultPawnClass = AFirefighterCharacter::StaticClass();
 	PlayerSpawnLocation = FVector(0.0f, 0.0f, 1.0f);
+
+	// 아이템 카운트 초기화
+	for (int i = 0; i < 3; ++i)
+	{
+		ItemCounts[i] = 0;
+	}
 }
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -29,6 +51,31 @@ AItemCollectGameMode::AItemCollectGameMode()
 void AItemCollectGameMode::BeginPlay()
 {
 	Super::BeginPlay();
+
+	// 입력 모드를 GameAndUI로 설정 (플레이어 조작 가능)
+	UInputManager::GetInstance().SetInputMode(EInputMode::GameAndUI);
+
+	// 타이머 초기화
+	RemainingTime = TimeLimit;
+	LastSecond = -1.0f;
+	ShakeAnimationTime = 0.0f;
+
+	// LevelTransitionManager에 NextLevel 설정
+	if (GetWorld())
+	{
+		for (AActor* Actor : GetWorld()->GetActors())
+		{
+			if (ALevelTransitionManager* Manager = Cast<ALevelTransitionManager>(Actor))
+			{
+				Manager->SetNextLevel(NextScenePath);
+				break;
+			}
+		}
+	}
+
+	// UI 초기화
+	InitializeUI();
+	InitializeItemUI();
 }
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -39,25 +86,17 @@ void AItemCollectGameMode::InitPlayer()
 {
 	// 1. PlayerController 생성
 	PlayerController = SpawnPlayerController();
-
-	if (!PlayerController)
-	{
-		UE_LOG("[error] ItemCollectGameMode::InitPlayer - Failed to spawn PlayerController");
-		return;
-	}
+	if (!PlayerController) { return; }
 
 	// 2. 스폰 위치 결정 (Actor 기준 또는 기본 위치)
 	FVector SpawnLocation = PlayerSpawnLocation;
 	FQuat SpawnRotation = FQuat::Identity();
 
 	// SpawnActor를 찾아서 위치 가져오기
-	AActor* SpawnActor = FindSpawnActor();
-	if (SpawnActor)
+	if (AActor* SpawnActor = FindSpawnActor())
 	{
 		SpawnLocation = SpawnActor->GetActorLocation();
 		SpawnRotation = SpawnActor->GetActorRotation();
-		UE_LOG("[info] ItemCollectGameMode::InitPlayer - Using SpawnActor location: (%.2f, %.2f, %.2f)",
-			SpawnLocation.X, SpawnLocation.Y, SpawnLocation.Z);
 	}
 
 	// 3. 스폰 Transform 설정 (스케일은 SetCharacterScale에서 처리)
@@ -67,50 +106,24 @@ void AItemCollectGameMode::InitPlayer()
 	SpawnTransform.Scale3D = FVector(1.0f, 1.0f, 1.0f);  // 기본 스케일로 스폰
 
 	// 4. Pawn 스폰 및 빙의
-	UE_LOG("[info] ItemCollectGameMode::InitPlayer - DefaultPawnClass: %s",
-		DefaultPawnClass ? DefaultPawnClass->Name : "nullptr");
-
-	APawn* SpawnedPawn = SpawnDefaultPawnFor(PlayerController, SpawnTransform);
-
-	if (!SpawnedPawn)
-	{
-		UE_LOG("[error] ItemCollectGameMode::InitPlayer - Failed to spawn DefaultPawn");
-	}
-	else
+	if (APawn* SpawnedPawn = SpawnDefaultPawnFor(PlayerController, SpawnTransform))
 	{
 		// 5. FirefighterCharacter의 스케일 설정 (캡슐, 메쉬, 스프링암 등 모두 조절)
 		if (AFirefighterCharacter* Firefighter = Cast<AFirefighterCharacter>(SpawnedPawn))
 		{
 			Firefighter->SetCharacterScale(PlayerSpawnScale);
 		}
-
-		UE_LOG("[info] ItemCollectGameMode::InitPlayer - Spawned Pawn: %s with scale %.2f",
-			SpawnedPawn->GetClass()->Name, PlayerSpawnScale);
 	}
 }
 
 AActor* AItemCollectGameMode::FindSpawnActor() const
 {
-	if (!World)
-	{
-		return nullptr;
-	}
+	if (!World) { return nullptr; }
 
 	// 1. SpawnActorName으로 먼저 찾기
 	if (SpawnActorName != "None")
 	{
-		AActor* FoundActor = World->FindActorByName(SpawnActorName);
-		if (FoundActor)
-		{
-			UE_LOG("[info] ItemCollectGameMode::FindSpawnActor - Found actor by name: %s",
-				SpawnActorName.ToString().c_str());
-			return FoundActor;
-		}
-		else
-		{
-			UE_LOG("[warning] ItemCollectGameMode::FindSpawnActor - Actor not found by name: %s",
-				SpawnActorName.ToString().c_str());
-		}
+		if (AActor* FoundActor = World->FindActorByName(SpawnActorName)) { return FoundActor; }
 	}
 
 	// 2. SpawnActorTag로 찾기 (모든 Actor 순회)
@@ -121,14 +134,368 @@ AActor* AItemCollectGameMode::FindSpawnActor() const
 		{
 			if (Actor && Actor->GetTag() == TagToFind)
 			{
-				UE_LOG("[info] ItemCollectGameMode::FindSpawnActor - Found actor by tag: %s",
-					TagToFind.c_str());
 				return Actor;
 			}
 		}
-		UE_LOG("[warning] ItemCollectGameMode::FindSpawnActor - Actor not found by tag: %s",
-			TagToFind.c_str());
 	}
 
 	return nullptr;
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// Tick
+// ────────────────────────────────────────────────────────────────────────────
+
+void AItemCollectGameMode::Tick(float DeltaTime)
+{
+	Super::Tick(DeltaTime);
+
+	// 타이머 업데이트
+	if (RemainingTime > 0.0f)
+	{
+		RemainingTime -= DeltaTime;
+
+		// 0 이하로 떨어지면 씬 전환
+		if (RemainingTime <= 0.0f)
+		{
+			RemainingTime = 0.0f;
+
+			// 씬 전환
+			if (GetWorld())
+			{
+				for (AActor* Actor : GetWorld()->GetActors())
+				{
+					if (ALevelTransitionManager* Manager = Cast<ALevelTransitionManager>(Actor))
+					{
+						if (!Manager->IsTransitioning())
+						{
+							Manager->TransitionToNextLevel();
+						}
+						break;
+					}
+				}
+			}
+		}
+
+		// 애니메이션 시간 감소
+		if (ShakeAnimationTime > 0.0f)
+		{
+			ShakeAnimationTime -= DeltaTime;
+		}
+
+		// UI 업데이트ww
+		UpdateTimerUI();
+	}
+
+	// 아이템 카운트 UI 업데이트 (GameInstance에서 읽어오기)
+	UpdateItemCountUI();
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// EndPlay
+// ────────────────────────────────────────────────────────────────────────────
+
+void AItemCollectGameMode::EndPlay()
+{
+	Super::EndPlay();
+
+	// 입력 모드 복원 (혹시 모를 상태 변경 대비)
+	UInputManager::GetInstance().SetInputMode(EInputMode::GameAndUI);
+
+	ClearUI();
+	ClearItemUI();
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// UI 초기화
+// ────────────────────────────────────────────────────────────────────────────
+
+void AItemCollectGameMode::InitializeUI()
+{
+	if (!SGameHUD::Get().IsInitialized()) { return; }
+
+	// 타이머 배경 이미지 위젯
+	TimerBackgroundWidget = MakeShared<STextBlock>();
+	TimerBackgroundWidget->SetText(L"")
+		.SetBackgroundImage("Data/Textures/Collect/timer.png");
+
+	SGameHUD::Get().AddWidget(TimerBackgroundWidget)
+		.SetAnchor(0.90f, 0.10f)    // 우측 상단
+		.SetPivot(0.5f, 0.5f)       // 중앙 기준
+		.SetSize(TimerWidgetSize, TimerWidgetSize)
+		.SetZOrder(10);
+
+	// 타이머 텍스트 위젯 (배경과 같은 위치, Offset으로 조정)
+	TimerTextWidget = MakeShared<STextBlock>();
+
+	// 초기 텍스트 설정
+	int CurrentSecond = static_cast<int>(std::ceil(RemainingTime));
+	wchar_t TimeText[32];
+	swprintf_s(TimeText, L"%d", CurrentSecond);
+
+	// 텍스트 Y 오프셋 계산 (위젯 크기 * 비율)
+	float TextOffsetY = TimerWidgetSize * TimerTextOffsetRatio;
+
+	TimerTextWidget->SetText(TimeText)
+		.SetFontSize(52.f)
+		.SetFontPath("Data/UI/fonts/ChosunKm.TTF")
+		.SetColor(FSlateColor(0.1f, 0.1f, 0.1f, 1.0f))  // 거의 검은색
+		.SetHAlign(ETextHAlign::Center)    // 중앙 정렬
+		.SetVAlign(ETextVAlign::Center)    // 중앙 정렬
+		.SetShadow(true, FVector2D(2.f, 2.f), FSlateColor(1.0f, 1.0f, 1.0f, 0.8f));  // 흰색 그림자
+
+	SGameHUD::Get().AddWidget(TimerTextWidget)
+		.SetAnchor(0.90f, 0.10f)    // 배경과 동일한 Anchor
+		.SetPivot(0.5f, 0.5f)       // 중앙 기준
+		.SetOffset(0.f, TextOffsetY)  // 비율 기반 오프셋
+		.SetSize(TimerWidgetSize, TimerWidgetSize)
+		.SetZOrder(11);             // 텍스트가 위에
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// UI 정리
+// ────────────────────────────────────────────────────────────────────────────
+
+void AItemCollectGameMode::ClearUI()
+{
+	if (!SGameHUD::Get().IsInitialized()) { return; }
+
+	if (TimerBackgroundWidget)
+	{
+		SGameHUD::Get().RemoveWidget(TimerBackgroundWidget);
+		TimerBackgroundWidget.Reset();
+	}
+
+	if (TimerTextWidget)
+	{
+		SGameHUD::Get().RemoveWidget(TimerTextWidget);
+		TimerTextWidget.Reset();
+	}
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// 타이머 UI 업데이트
+// ────────────────────────────────────────────────────────────────────────────
+
+void AItemCollectGameMode::UpdateTimerUI()
+{
+	if (!TimerBackgroundWidget || !TimerTextWidget || !SGameHUD::Get().IsInitialized()) { return; }
+
+	int CurrentSecond = static_cast<int>(std::ceil(RemainingTime));
+
+	// 1초가 감소할 때마다 흔들림 애니메이션 시작
+	if (CurrentSecond != static_cast<int>(LastSecond))
+	{
+		LastSecond = static_cast<float>(CurrentSecond);
+		ShakeAnimationTime = 0.3f; // 0.3초 동안 애니메이션
+	}
+
+	// 텍스트 업데이트
+	wchar_t TimeText[32];
+	swprintf_s(TimeText, L"%d", CurrentSecond);
+	TimerTextWidget->SetText(TimeText);
+
+	// 시간에 따라 점진적으로 빨간색으로 변경 (Lerp)
+	float TimeRatio = RemainingTime / TimeLimit;  // 1.0 (시작) ~ 0.0 (종료)
+	float Red = 0.1f + (0.9f - 0.1f) * (1.0f - TimeRatio);  // 0.1 -> 0.9
+	TimerTextWidget->SetColor(FSlateColor(Red, 0.1f, 0.1f, 1.0f));
+
+	// 슬롯을 직접 찾아서 애니메이션 적용
+	auto& Slots = SGameHUD::Get().GetRootCanvas()->GetCanvasSlots();
+
+	// 애니메이션 값 계산
+	float Scale = 1.0f;
+	float OffsetX = 0.0f;
+
+	if (ShakeAnimationTime > 0.0f)
+	{
+		float AnimProgress = 1.0f - (ShakeAnimationTime / 0.3f); // 0~1
+		Scale = 1.0f + 0.2f * (1.0f - AnimProgress);
+		OffsetX = std::sin(AnimProgress * 3.14159f * 4.0f) * 10.0f * (1.0f - AnimProgress);
+	}
+
+	// 텍스트 Y 오프셋 계산
+	float TextOffsetY = TimerWidgetSize * TimerTextOffsetRatio;
+
+	// 배경과 텍스트 둘 다 애니메이션 적용
+	for (auto& Slot : Slots)
+	{
+		if (Slot.Widget == TimerBackgroundWidget)
+		{
+			Slot.SetOffset(OffsetX, 0.f)  // 배경은 흔들림만
+				.SetSize(TimerWidgetSize * Scale, TimerWidgetSize * Scale);
+		}
+		else if (Slot.Widget == TimerTextWidget)
+		{
+			Slot.SetOffset(OffsetX, TextOffsetY)  // 텍스트는 비율 기반 오프셋 + 흔들림
+				.SetSize(TimerWidgetSize * Scale, TimerWidgetSize * Scale);
+		}
+	}
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// 아이템 UI 초기화
+// ────────────────────────────────────────────────────────────────────────────
+
+void AItemCollectGameMode::InitializeItemUI()
+{
+	if (!SGameHUD::Get().IsInitialized()) { return; }
+
+	// 아이템 아이콘 크기 및 간격 설정
+	const float ItemImageSize = 150.f;   // 아이템 이미지 크기
+	const float ItemSpacing = 220.f;     // 아이템 간 간격
+	const float StartX = 0.5f;           // 화면 중앙 (X Anchor)
+	const float StartY = 0.08f;          // 상단 (Y Anchor)
+	const float StartOffsetX = -ItemSpacing;  // 중앙 기준 왼쪽으로 이동하여 3개 배치
+
+	for (int i = 0; i < 3; ++i)
+	{
+		// 아이템 이미지 위젯 (items.png 아틀라스, 600x600씩 슬라이싱)
+		ItemImageWidgets[i] = MakeShared<SButton>();
+
+		// 아틀라스 영역 설정 (Left, Top, Right, Bottom)
+		FSlateRect AtlasRect(
+			i * 600.f,           // Left
+			0.f,                 // Top
+			(i + 1) * 600.f,     // Right
+			600.f                // Bottom
+		);
+
+		ItemImageWidgets[i]->SetBackgroundImageAtlas(
+			"Data/Textures/Collect/items.png",
+			AtlasRect,  // Normal
+			AtlasRect,  // Hovered
+			AtlasRect   // Pressed
+		);
+
+		// 화면 중앙 상단에 배치 (3개를 일렬로)
+		SGameHUD::Get().AddWidget(ItemImageWidgets[i])
+			.SetAnchor(StartX, StartY)
+			.SetPivot(0.5f, 0.5f)
+			.SetOffset(StartOffsetX + i * ItemSpacing, 0.f)
+			.SetSize(ItemImageSize, ItemImageSize)
+			.SetZOrder(10);
+
+		// 아이템 카운트 텍스트 위젯 (이미지 오른쪽 옆)
+		ItemCountWidgets[i] = MakeShared<STextBlock>();
+
+		wchar_t CountText[32];
+		swprintf_s(CountText, L"%d", ItemCounts[i]);
+
+		ItemCountWidgets[i]->SetText(CountText)
+			.SetFontSize(48.f)
+			.SetFontPath("Data/UI/fonts/ChosunKm.TTF")
+			.SetColor(FSlateColor(1.0f, 1.0f, 1.0f, 1.0f))  // 흰색
+			.SetHAlign(ETextHAlign::Left)
+			.SetVAlign(ETextVAlign::Center)
+			.SetShadow(true, FVector2D(2.f, 2.f), FSlateColor(0.0f, 0.0f, 0.0f, 0.8f));  // 검은색 그림자
+
+		SGameHUD::Get().AddWidget(ItemCountWidgets[i])
+			.SetAnchor(StartX, StartY)
+			.SetPivot(0.0f, 0.5f)  // 왼쪽 중앙 기준
+			.SetOffset(StartOffsetX + i * ItemSpacing + ItemImageSize * 0.6f, 0.f)  // 이미지 오른쪽
+			.SetSize(100.f, 60.f)
+			.SetZOrder(11);
+	}
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// 아이템 UI 정리
+// ────────────────────────────────────────────────────────────────────────────
+
+void AItemCollectGameMode::ClearItemUI()
+{
+	if (!SGameHUD::Get().IsInitialized()) { return; }
+
+	for (int i = 0; i < 3; ++i)
+	{
+		if (ItemImageWidgets[i])
+		{
+			SGameHUD::Get().RemoveWidget(ItemImageWidgets[i]);
+			ItemImageWidgets[i].Reset();
+		}
+
+		if (ItemCountWidgets[i])
+		{
+			SGameHUD::Get().RemoveWidget(ItemCountWidgets[i]);
+			ItemCountWidgets[i].Reset();
+		}
+	}
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// 아이템 수집 업데이트
+// ────────────────────────────────────────────────────────────────────────────
+
+void AItemCollectGameMode::UpdateItemCount(const FString& ItemTag)
+{
+	// 태그에 따라 인덱스 결정
+	int ItemIndex = -1;
+
+	if (ItemTag.find("firesuit") != FString::npos || ItemTag.find("소방복") != FString::npos)
+	{
+		ItemIndex = 0;
+	}
+	else if (ItemTag.find("extinguisher") != FString::npos || ItemTag.find("소화기") != FString::npos)
+	{
+		ItemIndex = 1;
+	}
+	else if (ItemTag.find("oxygen") != FString::npos || ItemTag.find("산소통") != FString::npos)
+	{
+		ItemIndex = 2;
+	}
+
+	// 유효한 인덱스라면 카운트 증가 및 UI 업데이트
+	if (ItemIndex >= 0 && ItemIndex < 3)
+	{
+		ItemCounts[ItemIndex]++;
+
+		// UI 업데이트
+		if (ItemCountWidgets[ItemIndex] && SGameHUD::Get().IsInitialized())
+		{
+			wchar_t CountText[32];
+			swprintf_s(CountText, L"%d", ItemCounts[ItemIndex]);
+			ItemCountWidgets[ItemIndex]->SetText(CountText);
+		}
+	}
+}
+
+void AItemCollectGameMode::OnItemCollected(const FString& ItemTag)
+{
+	UpdateItemCount(ItemTag);
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// 아이템 카운트 UI 업데이트 (GameInstance에서 읽어오기)
+// ────────────────────────────────────────────────────────────────────────────
+
+void AItemCollectGameMode::UpdateItemCountUI()
+{
+	if (!SGameHUD::Get().IsInitialized()) { return; }
+
+	// GameInstance 가져오기
+	UGameInstance* GameInstance = GetWorld() ? GetWorld()->GetGameInstance() : nullptr;
+	if (!GameInstance) { return; }
+
+	// 각 아이템의 개수를 GameInstance에서 조회
+	const FString ItemNames[] = { "FireSuit", "FireEx", "Oxygen" };
+
+	for (int i = 0; i < 3; ++i)
+	{
+		int32 ItemCount = GameInstance->GetItemCount(ItemNames[i]);
+
+		// 카운트가 변경되었을 때만 UI 업데이트
+		if (ItemCounts[i] != ItemCount)
+		{
+			ItemCounts[i] = ItemCount;
+
+			// UI 업데이트
+			if (ItemCountWidgets[i])
+			{
+				wchar_t CountText[32];
+				swprintf_s(CountText, L"%d", ItemCounts[i]);
+				ItemCountWidgets[i]->SetText(CountText);
+			}
+		}
+	}
 }
