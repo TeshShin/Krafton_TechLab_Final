@@ -196,7 +196,24 @@ void FControllerInstance::TermController()
 
     if (Controller)
     {
-        Controller->release();
+        if (PhysScene)
+        {
+            // PhysScene이 있으면 지연 해제 사용
+            // (SyncComponentsToBodies에서 dangling pointer 접근 방지)
+            UE_LOG("[PhysX CCT] TermController: Using deferred release");
+            PhysScene->DeferReleaseController(Controller);
+        }
+        else
+        {
+            // PhysScene이 없으면 즉시 해제 (정상적인 경우 발생하지 않음)
+            UE_LOG("[PhysX CCT] TermController: PhysScene is nullptr, releasing immediately!");
+            PxRigidDynamic* CCTActor = Controller->getActor();
+            if (CCTActor)
+            {
+                CCTActor->userData = nullptr;
+            }
+            Controller->release();
+        }
         Controller = nullptr;
     }
 

@@ -28,8 +28,9 @@ void FPhysXSimEventCallback::onContact(const PxContactPairHeader& pairHeader, co
 
     if (!Actor0 || !Actor1) return;
 
-    FBodyInstance* BodyInst0 = static_cast<FBodyInstance*>(Actor0->userData);
-    FBodyInstance* BodyInst1 = static_cast<FBodyInstance*>(Actor1->userData);
+    // 타입 안전 캐스팅 (CCT actor는 FControllerInstance이므로 nullptr 반환)
+    FBodyInstance* BodyInst0 = PhysicsUserDataCast<FBodyInstance>(Actor0->userData);
+    FBodyInstance* BodyInst1 = PhysicsUserDataCast<FBodyInstance>(Actor1->userData);
 
     if (!BodyInst0 || !BodyInst1) { return; }
 
@@ -172,13 +173,14 @@ void FPhysXSimEventCallback::onWake(PxActor** actors, PxU32 count)
         PxRigidActor* Actor = actors[i]->is<PxRigidActor>();
         if (!Actor) continue;
 
-        FBodyInstance* BodyInst = static_cast<FBodyInstance*>(Actor->userData);
+        // 타입 안전 캐스팅
+        FBodyInstance* BodyInst = PhysicsUserDataCast<FBodyInstance>(Actor->userData);
         if (BodyInst)
         {
             FCollisionNotifyInfo NotifyInfo;
             NotifyInfo.Type = ECollisionNotifyType::Wake;
-            NotifyInfo.Info0.SetFrom(BodyInst); 
-            NotifyInfo.bCallEvent0 = true; 
+            NotifyInfo.Info0.SetFrom(BodyInst);
+            NotifyInfo.bCallEvent0 = true;
 
             OwnerScene->AddPendingCollisionNotify(NotifyInfo);
         }
@@ -194,7 +196,8 @@ void FPhysXSimEventCallback::onSleep(PxActor** actors, PxU32 count)
         PxRigidActor* Actor = actors[i]->is<PxRigidActor>();
         if (!Actor) continue;
 
-        FBodyInstance* BodyInst = static_cast<FBodyInstance*>(Actor->userData);
+        // 타입 안전 캐스팅
+        FBodyInstance* BodyInst = PhysicsUserDataCast<FBodyInstance>(Actor->userData);
         if (BodyInst)
         {
             FCollisionNotifyInfo NotifyInfo;

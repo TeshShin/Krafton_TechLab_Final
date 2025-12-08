@@ -205,10 +205,19 @@ void FBodyInstance::InitBody(UBodySetup* Setup, const FTransform& Transform, UPr
         PhysScene->DeferAddActor(RigidActor);
         OwningAggregate = nullptr;
     }
+
+    // 활성 바디 목록에 등록 (SyncComponentsToBodies에서 사용)
+    PhysScene->RegisterActiveBody(this);
 }
 
 void FBodyInstance::TermBody()
 {
+    // 활성 바디 목록에서 제거 (dangling pointer 방지)
+    if (PhysScene)
+    {
+        PhysScene->UnregisterActiveBody(this);
+    }
+
     LifeHandle = nullptr;
 
     if (RigidActor)
@@ -228,6 +237,8 @@ void FBodyInstance::TermBody()
         {
             OwningAggregate->removeActor(*RigidActor);
             OwningAggregate = nullptr;
+            // 씬 수정 플래그 설정 (getActiveActors 버퍼 무효화)
+            if (PhysScene) { PhysScene->MarkSceneModified(); }
         }
         else
         {
@@ -235,12 +246,14 @@ void FBodyInstance::TermBody()
             if (ActorScene)
             {
                 ActorScene->removeActor(*RigidActor);
+                // 씬 수정 플래그 설정 (getActiveActors 버퍼 무효화)
+                if (PhysScene) { PhysScene->MarkSceneModified(); }
             }
         }
 
         if (PhysScene)
         {
-            PhysScene->DeferReleaseActor(RigidActor); 
+            PhysScene->DeferReleaseActor(RigidActor);
         }
         else
         {
@@ -288,10 +301,9 @@ void FBodyInstance::SetBodyTransform(const FTransform& NewTransform, bool bTelep
     PxScene* PScene = PhysScene->GetPxScene();
     if (!PScene) { return; }
 
-    // Actor가 이미 Scene에 있으면 즉시 실행, 없으면 Enqueue
-    if (RigidActor->getScene())
+    auto SetTransformImpl = [this, NewTransform, bTeleport]()
     {
-        SCOPED_SCENE_WRITE_LOCK(PScene);
+        if (!IsValidBodyInstance()) return;
 
         PxTransform PNewTransform = U2PTransform(NewTransform);
         RigidActor->setGlobalPose(PNewTransform);
@@ -306,29 +318,22 @@ void FBodyInstance::SetBodyTransform(const FTransform& NewTransform, bool bTelep
                 DynamicActor->wakeUp();
             }
         }
+    };
+
+    // Actor가 Scene에 있고 시뮬레이션 중이 아니면 즉시 실행
+    // 시뮬레이션 중이면 EndFrame 후에 실행되도록 Enqueue
+    if (RigidActor->getScene() && !PhysScene->IsSimulating())
+    {
+        SCOPED_SCENE_WRITE_LOCK(PScene);
+        SetTransformImpl();
     }
     else
     {
         std::weak_ptr<bool> WeakHandle = LifeHandle;
-
-        PhysScene->EnqueueCommand([this, NewTransform, bTeleport, WeakHandle]()
+        PhysScene->EnqueueCommand([this, SetTransformImpl, WeakHandle]()
         {
             if (WeakHandle.expired()) return;
-            if (!IsValidBodyInstance() || !PhysScene) return;
-
-            PxTransform PNewTransform = U2PTransform(NewTransform);
-            RigidActor->setGlobalPose(PNewTransform);
-
-            if (bTeleport && IsDynamic())
-            {
-                PxRigidDynamic* DynamicActor = RigidActor->is<PxRigidDynamic>();
-                if (DynamicActor)
-                {
-                    DynamicActor->setLinearVelocity(PxVec3(0.0f));
-                    DynamicActor->setAngularVelocity(PxVec3(0.0f));
-                    DynamicActor->wakeUp();
-                }
-            }
+            SetTransformImpl();
         });
     }
 }
@@ -364,8 +369,9 @@ void FBodyInstance::SetLinearVelocity(const FVector& NewVel, bool bAddToCurrent)
         }
     };
 
-    // Actor가 이미 Scene에 있으면 즉시 실행, 없으면 Enqueue
-    if (RigidActor->getScene())
+    // Actor가 Scene에 있고 시뮬레이션 중이 아니면 즉시 실행
+    // 시뮬레이션 중이면 EndFrame 후에 실행되도록 Enqueue
+    if (RigidActor->getScene() && !PhysScene->IsSimulating())
     {
         SCOPED_SCENE_WRITE_LOCK(PhysScene->GetPxScene());
         SetVelocityImpl();
@@ -587,8 +593,9 @@ void FBodyInstance::SetKinematicTarget(const FTransform& NewTransform)
         }
     };
 
-    // Actor가 이미 Scene에 있으면 즉시 실행, 없으면 Enqueue
-    if (RigidActor->getScene())
+    // Actor가 Scene에 있고 시뮬레이션 중이 아니면 즉시 실행
+    // 시뮬레이션 중이면 EndFrame 후에 실행되도록 Enqueue
+    if (RigidActor->getScene() && !PhysScene->IsSimulating())
     {
         SCOPED_SCENE_WRITE_LOCK(PhysScene->GetPxScene());
         SetTargetImpl();
@@ -650,8 +657,9 @@ void FBodyInstance::SetKinematic(bool bEnable)
         }
     };
 
-    // Actor가 이미 Scene에 있으면 즉시 실행, 없으면 Enqueue
-    if (RigidActor->getScene())
+    // Actor가 Scene에 있고 시뮬레이션 중이 아니면 즉시 실행
+    // 시뮬레이션 중이면 EndFrame 후에 실행되도록 Enqueue
+    if (RigidActor->getScene() && !PhysScene->IsSimulating())
     {
         SCOPED_SCENE_WRITE_LOCK(PhysScene->GetPxScene());
         SetKinematicImpl();
@@ -664,5 +672,213 @@ void FBodyInstance::SetKinematic(bool bEnable)
             if (WeakHandle.expired()) return;
             SetKinematicImpl();
         });
+    }
+}
+
+void FBodyInstance::SetGravityEnabled(bool bEnable)
+{
+    if (!IsValidBodyInstance() || !PhysScene) return;
+
+    auto SetGravityImpl = [this, bEnable]()
+    {
+        if (!IsValidBodyInstance()) return;
+
+        PxRigidDynamic* DynamicActor = RigidActor->is<PxRigidDynamic>();
+        if (DynamicActor)
+        {
+            // eDISABLE_GRAVITY는 중력 "비활성화" 플래그이므로 반전
+            DynamicActor->setActorFlag(PxActorFlag::eDISABLE_GRAVITY, !bEnable);
+            if (bEnable)
+            {
+                DynamicActor->wakeUp();
+            }
+        }
+    };
+
+    // Actor가 Scene에 있고 시뮬레이션 중이 아니면 즉시 실행
+    if (RigidActor->getScene() && !PhysScene->IsSimulating())
+    {
+        SCOPED_SCENE_WRITE_LOCK(PhysScene->GetPxScene());
+        SetGravityImpl();
+    }
+    else
+    {
+        std::weak_ptr<bool> WeakHandle = LifeHandle;
+        PhysScene->EnqueueCommand([this, SetGravityImpl, WeakHandle]()
+        {
+            if (WeakHandle.expired()) return;
+            SetGravityImpl();
+        });
+    }
+}
+
+void FBodyInstance::SetLinearDamping(float InDamping)
+{
+    LinearDamping = InDamping;
+
+    if (!IsValidBodyInstance() || !PhysScene) return;
+
+    auto SetDampingImpl = [this, InDamping]()
+    {
+        if (!IsValidBodyInstance()) return;
+
+        PxRigidDynamic* DynamicActor = RigidActor->is<PxRigidDynamic>();
+        if (DynamicActor)
+        {
+            DynamicActor->setLinearDamping(InDamping);
+        }
+    };
+
+    if (RigidActor->getScene() && !PhysScene->IsSimulating())
+    {
+        SCOPED_SCENE_WRITE_LOCK(PhysScene->GetPxScene());
+        SetDampingImpl();
+    }
+    else
+    {
+        std::weak_ptr<bool> WeakHandle = LifeHandle;
+        PhysScene->EnqueueCommand([this, SetDampingImpl, WeakHandle]()
+        {
+            if (WeakHandle.expired()) return;
+            SetDampingImpl();
+        });
+    }
+}
+
+void FBodyInstance::SetAngularDamping(float InDamping)
+{
+    AngularDamping = InDamping;
+
+    if (!IsValidBodyInstance() || !PhysScene) return;
+
+    auto SetDampingImpl = [this, InDamping]()
+    {
+        if (!IsValidBodyInstance()) return;
+
+        PxRigidDynamic* DynamicActor = RigidActor->is<PxRigidDynamic>();
+        if (DynamicActor)
+        {
+            DynamicActor->setAngularDamping(InDamping);
+        }
+    };
+
+    if (RigidActor->getScene() && !PhysScene->IsSimulating())
+    {
+        SCOPED_SCENE_WRITE_LOCK(PhysScene->GetPxScene());
+        SetDampingImpl();
+    }
+    else
+    {
+        std::weak_ptr<bool> WeakHandle = LifeHandle;
+        PhysScene->EnqueueCommand([this, SetDampingImpl, WeakHandle]()
+        {
+            if (WeakHandle.expired()) return;
+            SetDampingImpl();
+        });
+    }
+}
+
+void FBodyInstance::SetAngularVelocity(const FVector& NewAngVel, bool bAddToCurrent)
+{
+    if (!IsValidBodyInstance() || !PhysScene) return;
+
+    auto SetVelocityImpl = [this, NewAngVel, bAddToCurrent]()
+    {
+        if (!IsValidBodyInstance()) return;
+
+        PxRigidDynamic* DynamicActor = RigidActor->is<PxRigidDynamic>();
+        if (DynamicActor)
+        {
+            if (bAddToCurrent)
+            {
+                PxVec3 CurrentVel = DynamicActor->getAngularVelocity();
+                DynamicActor->setAngularVelocity(CurrentVel + U2PVector(NewAngVel));
+            }
+            else
+            {
+                DynamicActor->setAngularVelocity(U2PVector(NewAngVel));
+            }
+            DynamicActor->wakeUp();
+        }
+    };
+
+    if (RigidActor->getScene() && !PhysScene->IsSimulating())
+    {
+        SCOPED_SCENE_WRITE_LOCK(PhysScene->GetPxScene());
+        SetVelocityImpl();
+    }
+    else
+    {
+        std::weak_ptr<bool> WeakHandle = LifeHandle;
+        PhysScene->EnqueueCommand([this, SetVelocityImpl, WeakHandle]()
+        {
+            if (WeakHandle.expired()) return;
+            SetVelocityImpl();
+        });
+    }
+}
+
+void FBodyInstance::SetMaxAngularVelocity(float MaxAngVel)
+{
+    if (!IsValidBodyInstance()) return;
+
+    PxRigidDynamic* DynamicActor = RigidActor->is<PxRigidDynamic>();
+    if (DynamicActor && PhysScene)
+    {
+        if (RigidActor->getScene())
+        {
+            SCOPED_SCENE_WRITE_LOCK(PhysScene->GetPxScene());
+            DynamicActor->setMaxAngularVelocity(MaxAngVel);
+        }
+        else
+        {
+            DynamicActor->setMaxAngularVelocity(MaxAngVel);
+        }
+    }
+}
+
+FVector FBodyInstance::GetAngularVelocity() const
+{
+    if (!IsValidBodyInstance()) return FVector::Zero();
+
+    PxRigidDynamic* DynamicActor = RigidActor->is<PxRigidDynamic>();
+    if (DynamicActor)
+    {
+        PxVec3 AngVel = DynamicActor->getAngularVelocity();
+        return P2UVector(AngVel);
+    }
+    return FVector::Zero();
+}
+
+void FBodyInstance::ClampAngularVelocity(float MaxAngVel)
+{
+    if (!IsValidBodyInstance()) return;
+
+    PxRigidDynamic* DynamicActor = RigidActor->is<PxRigidDynamic>();
+    if (!DynamicActor || !PhysScene) return;
+
+    // Kinematic 바디는 각속도를 설정할 수 없음
+    if (DynamicActor->getRigidBodyFlags() & PxRigidBodyFlag::eKINEMATIC)
+    {
+        return;
+    }
+
+    PxVec3 AngVel = DynamicActor->getAngularVelocity();
+    float AngSpeed = AngVel.magnitude();
+
+    if (AngSpeed > MaxAngVel)
+    {
+        // 정규화 후 최대값으로 스케일
+        PxVec3 ClampedVel = AngVel * (MaxAngVel / AngSpeed);
+
+        if (RigidActor->getScene())
+        {
+            SCOPED_SCENE_WRITE_LOCK(PhysScene->GetPxScene());
+            DynamicActor->setAngularVelocity(ClampedVel);
+        }
+        else
+        {
+            DynamicActor->setAngularVelocity(ClampedVel);
+        }
     }
 }

@@ -335,6 +335,7 @@ xcopy /y /d "$(ProjectDir)ThirdParty\lib\Cloth\Release\*.dll" "$(OutDir)"</Comma
     <ClCompile Include="Source\Runtime\Engine\GameFramework\Pawn.cpp" />
     <ClCompile Include="Source\Runtime\Engine\GameFramework\PlayerController.cpp" />
     <ClCompile Include="Source\Runtime\Engine\GameFramework\PlayerGameMode.cpp" />
+    <ClCompile Include="Source\Runtime\Engine\GameFramework\RescueGameMode.cpp" />
     <ClCompile Include="Source\Runtime\Engine\GameFramework\RibbonActor.cpp" />
     <ClCompile Include="Source\Runtime\Engine\GameFramework\SkeletalMeshActor.cpp" />
     <ClCompile Include="Source\Runtime\Engine\Components\BoneAnchorComponent.cpp" />
@@ -598,6 +599,7 @@ xcopy /y /d "$(ProjectDir)ThirdParty\lib\Cloth\Release\*.dll" "$(OutDir)"</Comma
     <ClCompile Include="Source\Runtime\Renderer\PostProcessing\OutlinePass.cpp" />
     <ClCompile Include="Source\Runtime\Renderer\SceneView.cpp" />
     <ClCompile Include="Source\Runtime\Renderer\TileLightCuller.cpp" />
+    <ClCompile Include="Source\Slate\GameUI\SProgressBar.cpp" />
     <ClCompile Include="Source\Slate\Widgets\ModalDialog.cpp" />
     <ClCompile Include="Source\Slate\Widgets\PropertyRenderer.cpp" />
     <ClCompile Include="Source\Slate\Widgets\CurveEditorWidget.cpp" />
@@ -883,6 +885,7 @@ xcopy /y /d "$(ProjectDir)ThirdParty\lib\Cloth\Release\*.dll" "$(OutDir)"</Comma
     <ClCompile Include="Generated\AFireActor.generated.cpp" />
     <ClCompile Include="Generated\AItemCollectGameMode.generated.cpp" />
     <ClCompile Include="Generated\AFireDispatchGameMode.generated.cpp" />
+    <ClCompile Include="Generated\ARescueGameMode.generated.cpp" />
   </ItemGroup>
   <ItemGroup>
     <FxCompile Include="Shaders\Common\LightingBuffers.hlsl">
@@ -1139,6 +1142,7 @@ xcopy /y /d "$(ProjectDir)ThirdParty\lib\Cloth\Release\*.dll" "$(OutDir)"</Comma
     <ClInclude Include="Source\Runtime\Engine\GameFramework\PlayerController.h" />
     <ClInclude Include="Source\Runtime\Engine\GameFramework\PlayerGameMode.h" />
     <ClInclude Include="Source\Runtime\Engine\GameFramework\PointLightActor.h" />
+    <ClInclude Include="Source\Runtime\Engine\GameFramework\RescueGameMode.h" />
     <ClInclude Include="Source\Runtime\Engine\GameFramework\RibbonActor.h" />
     <ClInclude Include="Source\Runtime\Engine\GameFramework\SkeletalMeshActor.h" />
     <ClInclude Include="Source\Runtime\Engine\GameFramework\SphereActor.h" />
@@ -1245,6 +1249,7 @@ xcopy /y /d "$(ProjectDir)ThirdParty\lib\Cloth\Release\*.dll" "$(OutDir)"</Comma
     <ClInclude Include="Source\Runtime\Renderer\TileLightCuller.h" />
     <ClInclude Include="Source\Runtime\RHI\SwapGuard.h" />
     <ClInclude Include="Source\Runtime\RHI\ConstantBufferType.h" />
+    <ClInclude Include="Source\Slate\GameUI\SProgressBar.h" />
     <ClInclude Include="Source\Slate\Widgets\ModalDialog.h" />
     <ClInclude Include="Source\Slate\Widgets\PropertyRenderer.h" />
     <ClInclude Include="Source\Slate\Widgets\CurveEditorWidget.h" />
@@ -1543,6 +1548,7 @@ xcopy /y /d "$(ProjectDir)ThirdParty\lib\Cloth\Release\*.dll" "$(OutDir)"</Comma
     <ClInclude Include="Generated\AFireActor.generated.h" />
     <ClInclude Include="Generated\AItemCollectGameMode.generated.h" />
     <ClInclude Include="Generated\AFireDispatchGameMode.generated.h" />
+    <ClInclude Include="Generated\ARescueGameMode.generated.h" />
   </ItemGroup>
   <ItemGroup>
     <None Include="BuildTools\CodeGenerator\generate.py" />

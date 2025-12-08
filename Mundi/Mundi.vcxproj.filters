@@ -1,5 +1,5 @@
-﻿<?xml version="1.0" encoding="utf-8"?>
-<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+<?xml version='1.0' encoding='utf-8'?>
+<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003" ToolsVersion="4.0">
   <ItemGroup>
     <FxCompile Include="Shaders\Materials\Fireball.hlsl">
       <Filter>Shaders\Materials</Filter>
@@ -1455,6 +1455,10 @@
       <Filter>Generated</Filter>
     </ClCompile>
     <ClCompile Include="Generated\AFireDispatchGameMode.generated.cpp">
+      <Filter>Generated</Filter>
+    </ClCompile>
+    <ClCompile Include="Source\Runtime\Engine\GameFramework\RescueGameMode.cpp" />
+    <ClCompile Include="Generated\ARescueGameMode.generated.cpp">
       <Filter>Generated</Filter>
     </ClCompile>
     <ClCompile Include="Source\Runtime\Engine\GameFramework\Camera\CamMod_StripedWipe.cpp">
@@ -3081,6 +3085,10 @@
       <Filter>Generated</Filter>
     </ClInclude>
     <ClInclude Include="Generated\AFireDispatchGameMode.generated.h">
+      <Filter>Generated</Filter>
+    </ClInclude>
+    <ClInclude Include="Source\Runtime\Engine\GameFramework\RescueGameMode.h" />
+    <ClInclude Include="Generated\ARescueGameMode.generated.h">
       <Filter>Generated</Filter>
     </ClInclude>
     <ClInclude Include="Source\Runtime\Engine\GameFramework\Camera\CamMod_StripedWipe.h">

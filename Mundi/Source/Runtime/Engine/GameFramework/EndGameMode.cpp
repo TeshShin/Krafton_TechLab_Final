@@ -76,6 +76,7 @@ void AEndGameMode::InitializeData()
 
     // 게임 결과 데이터 가져오기
     RescuedCount = GameInstance->GetRescuedCount();
+    TotalPersonCount = GameInstance->GetTotalPersonCount();
     PlayerScore = GameInstance->GetPlayerScore();
     PlayerHealth = GameInstance->GetPlayerHealth();
 
@@ -116,7 +117,7 @@ void AEndGameMode::InitializeUI()
         .SetPivot(0.5f, 0.5f)
         .SetSize(800.f, 1000.f);
 
-    // 구조 인원 텍스트 (서류 우측 상단 첫 번째 줄)
+    // 구조 인원 텍스트 (서류 기준 상대 위치)
     RescuedText = MakeShared<STextBlock>();
     RescuedText->SetText(L"0")
         .SetFontSize(40.f)
@@ -124,12 +125,13 @@ void AEndGameMode::InitializeUI()
         .SetHAlign(ETextHAlign::Right);
 
     SGameHUD::Get().AddWidget(RescuedText)
-        .SetAnchor(0.65f, 0.12f) 
+        .SetAnchor(0.5f, 0.5f)    // 화면 가운데 기준
         .SetPivot(1.0f, 0.5f)     // 오른쪽 정렬
+        .SetOffset(200.f, -405.f) // 가운데에서 우측 위로 오프셋
         .SetSize(200.f, 50.f);
     RescuedText->SetVisibility(ESlateVisibility::Hidden);
 
-    // 점수 텍스트 (서류 우측 상단 두 번째 줄)
+    // 공헌도 텍스트 (서류 기준 상대 위치)
     ScoreText = MakeShared<STextBlock>();
     ScoreText->SetText(L"0")
         .SetFontSize(40.f)
@@ -137,8 +139,9 @@ void AEndGameMode::InitializeUI()
         .SetHAlign(ETextHAlign::Right);
 
     SGameHUD::Get().AddWidget(ScoreText)
-        .SetAnchor(0.65f, 0.22f)
+        .SetAnchor(0.5f, 0.5f)    // 화면 가운데 기준
         .SetPivot(1.0f, 0.5f)     // 오른쪽 정렬
+        .SetOffset(200.f, -288.f) // 가운데에서 우측 위로 오프셋
         .SetSize(200.f, 50.f);
     ScoreText->SetVisibility(ESlateVisibility::Hidden);
 
@@ -242,7 +245,7 @@ void AEndGameMode::UpdateSequence(float DeltaTime)
         break;
 
     case ESequenceState::CountRescued:
-        // 카운팅 애니메이션 (1초 동안)
+        // 카운팅 애니메이션 (1초 동안) - 구출수는 숫자로 표시
         if (SequenceTimer < 1.0f)
         {
             RescuedCountCurrent = FMath::Lerp(0.f, (float)RescuedCount, SequenceTimer);
@@ -267,27 +270,30 @@ void AEndGameMode::UpdateSequence(float DeltaTime)
         break;
 
     case ESequenceState::CountScore:
-        // 카운팅 애니메이션 (1초 동안)
-        if (SequenceTimer < 1.0f)
+        // 카운팅 애니메이션 (1초 동안) - 공헌도는 퍼센트로 표시
         {
-            ScoreCountCurrent = FMath::Lerp(0.f, (float)PlayerScore, SequenceTimer);
-            if (ScoreText)
+            float ContributionPercent = TotalPersonCount > 0 ? (float)RescuedCount / TotalPersonCount * 100.f : 0.f;
+            if (SequenceTimer < 1.0f)
             {
-                FWideString Text = std::to_wstring((int)ScoreCountCurrent);
-                ScoreText->SetText(Text);
+                ScoreCountCurrent = FMath::Lerp(0.f, ContributionPercent, SequenceTimer);
+                if (ScoreText)
+                {
+                    FWideString Text = std::to_wstring((int)ScoreCountCurrent) + L"%";
+                    ScoreText->SetText(Text);
+                }
             }
-        }
-        else
-        {
-            // 카운팅 완료 후 엔딩 멘트 타이핑 시작
-            if (ScoreText)
+            else
             {
-                FWideString Text = std::to_wstring(PlayerScore);
-                ScoreText->SetText(Text);
+                // 카운팅 완료 후 엔딩 멘트 타이핑 시작
+                if (ScoreText)
+                {
+                    FWideString Text = std::to_wstring((int)ContributionPercent) + L"%";
+                    ScoreText->SetText(Text);
+                }
+                StartEndingTextTyping();
+                CurrentState = ESequenceState::ShowEndingText;
+                SequenceTimer = 0.f;
             }
-            StartEndingTextTyping();
-            CurrentState = ESequenceState::ShowEndingText;
-            SequenceTimer = 0.f;
         }
         break;
 
@@ -528,8 +534,8 @@ FString AEndGameMode::GetStampImagePath() const
         return MartyrdomStampImagePath;
     }
 
-    // HP가 0이 아니면 구조 인원 수로 판정
-    if (RescuedCount >= SuccessThreshold)
+    // HP가 0이 아니면 전원 구조 여부로 판정
+    if (TotalPersonCount > 0 && RescuedCount >= TotalPersonCount)
     {
         return SuccessStampImagePath;
     }
@@ -566,8 +572,8 @@ FWideString AEndGameMode::GetEndingText() const
         return MartyrdomTexts[randomIndex];
     }
 
-    // HP가 0이 아니면 구조 인원 수로 판정
-    if (RescuedCount >= SuccessThreshold)
+    // HP가 0이 아니면 전원 구조 여부로 판정
+    if (TotalPersonCount > 0 && RescuedCount >= TotalPersonCount)
     {
         return SuccessTexts[randomIndex];
     }

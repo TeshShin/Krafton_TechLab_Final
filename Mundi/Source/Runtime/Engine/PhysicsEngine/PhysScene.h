@@ -47,6 +47,9 @@ public:
     
     physx::PxScene* GetPxScene() const { return PhysXScene; }
 
+    /** 프레임 중 씬이 수정되었음을 표시 (getActiveActors 버퍼 무효화) */
+    void MarkSceneModified() { bSceneModifiedDuringFrame = true; }
+
     /** @note 액터의 추가는 시뮬레이션 시작 직전에 일괄적으로 이루어진다. */
     void DeferAddActor(PxActor* InActor);
 
@@ -107,6 +110,9 @@ public:
 
     /** 시뮬레이션 종료를 대기한다. (BodyInstance::TermBody에서 호출) */
     void WaitPhysScene();
+
+    /** 현재 시뮬레이션이 실행 중인지 반환 */
+    bool IsSimulating() const { return bPhysXSceneExecuting; }
 
     // ==================================================================================
     // Raycast Interface
@@ -372,6 +378,37 @@ private:
     /** PhysX Scene 시뮬레이션 실행 여부 (실행 시점과 동기화 시점 사이) */
     bool bPhysXSceneExecuting;
 
+    /** 프레임 중 씬이 수정되었는지 (getActiveActors 버퍼 무효화 감지용) */
+    bool bSceneModifiedDuringFrame = false;
+
+    // ==================================================================================
+    // Active Body Management (getActiveActors 대체)
+    // ==================================================================================
+
+    /** 활성 BodyInstance 목록 (우리가 직접 관리) */
+    TArray<struct FBodyInstance*> ActiveBodies;
+
+    /** ActiveBodies 접근용 뮤텍스 */
+    std::mutex ActiveBodiesMutex;
+
+public:
+    /** BodyInstance를 활성 목록에 등록 (InitBody에서 호출) */
+    void RegisterActiveBody(struct FBodyInstance* InBody);
+
+    /** BodyInstance를 활성 목록에서 제거 (TermBody에서 호출) */
+    void UnregisterActiveBody(struct FBodyInstance* InBody);
+
+private:
+
+    /** 물리 시뮬레이션 누적 시간 (서브스테핑용) */
+    float PhysicsAccumulator = 0.0f;
+
+    /** 고정 물리 시간 스텝 (240Hz - CCT와 동일) */
+    static constexpr float FixedPhysicsStep = 1.0f / 240.0f;
+
+    /** 최대 서브스텝 횟수 (프레임 드랍 시 물리가 너무 밀리지 않도록) */
+    static constexpr int32 MaxSubSteps = 8;
+
     // ==================================================================================
     // CCT (Character Controller) 관련 멤버
     // ==================================================================================
@@ -387,4 +424,17 @@ private:
 
     /** CCT Controller 필터 콜백 (CCT간 충돌 필터링) */
     FCCTControllerFilterCallback* CCTControllerFilter = nullptr;
+
+    /** 해제 대기 중인 CCT Controller 목록 */
+    TArray<PxController*> DeferredControllerReleaseQueue;
+
+    /** CCT Controller 해제 큐 접근용 뮤텍스 */
+    std::mutex DeferredControllerReleaseMutex;
+
+public:
+    /**
+     * CCT Controller 해제를 다음 FlushDeferredReleases까지 지연
+     * @param InController 해제할 Controller (userData는 즉시 클리어됨)
+     */
+    void DeferReleaseController(PxController* InController);
 };

@@ -103,6 +103,22 @@ public:
     UFUNCTION(LuaBind, DisplayName="IsUsingWaterMagic")
     bool IsUsingWaterMagic() const { return bIsUsingWaterMagic; }
 
+    /** 물 마법 강제 종료 (C++에서 호출) */
+    UFUNCTION(LuaBind, DisplayName="ForceStopWaterMagic")
+    void ForceStopWaterMagic();
+
+    /** 물 마법 사용 가능 여부 설정 */
+    UFUNCTION(LuaBind, DisplayName="SetCanUseWaterMagic")
+    void SetCanUseWaterMagic(bool bCanUse);
+
+    /** 물 마법 사용 가능 여부 반환 */
+    UFUNCTION(LuaBind, DisplayName="CanUseWaterMagic")
+    bool CanUseWaterMagic() const { return bCanUseWaterMagic; }
+
+    /** 외부에서 즉시 사망 처리 (산소 고갈 등) */
+    UFUNCTION(LuaBind, DisplayName="Kill")
+    void Kill();
+
     /** 데미지 쿨타임 (초) */
     UPROPERTY(LuaBind, DisplayName="DamageCooldown")
     float DamageCooldown = 0.5f;
@@ -208,6 +224,9 @@ private:
 
     /** 물 마법 사용 중 여부 */
     bool bIsUsingWaterMagic = false;
+
+    /** 물 마법 사용 가능 여부 */
+    bool bCanUseWaterMagic = true;
 
     /** 사망 처리 */
     void Die();

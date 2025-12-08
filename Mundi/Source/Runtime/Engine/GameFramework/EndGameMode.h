@@ -144,6 +144,7 @@ private:
     APlayerCameraManager* CameraManager = nullptr;
 
     int32 RescuedCount = 0;
+    int32 TotalPersonCount = 0;
     int32 PlayerScore = 0;
     int32 PlayerHealth = 0;
 

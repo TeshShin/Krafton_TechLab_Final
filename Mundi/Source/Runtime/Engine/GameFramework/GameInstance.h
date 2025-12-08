@@ -58,6 +58,10 @@ public:
     void SetRescuedCount(int32 Count) { RescuedCount = Count; }
     int32 GetRescuedCount() const { return RescuedCount; }
 
+    /** 전체 구조 대상 수 */
+    void SetTotalPersonCount(int32 Count) { TotalPersonCount = Count; }
+    int32 GetTotalPersonCount() const { return TotalPersonCount; }
+
     /** 플레이어 상태 초기화 */
     void ResetPlayerData();
 
@@ -97,6 +101,7 @@ private:
     uint32 PlayerHealth = 100;
     uint32 PlayerScore = 0;
     uint32 RescuedCount = 0;
+    uint32 TotalPersonCount = 0;
     FString PlayerName;
 
     // 범용 키-값 저장소

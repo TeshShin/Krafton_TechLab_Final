@@ -167,4 +167,47 @@ public:
      * InitBody 이후에 채널을 변경할 때 호출합니다.
      */
     void UpdateFilterData();
+
+    /**
+     * 중력 활성화/비활성화
+     * @param bEnable true면 중력 활성화, false면 비활성화
+     */
+    void SetGravityEnabled(bool bEnable);
+
+    /**
+     * 선형 댐핑 설정
+     * @param InDamping 새 선형 댐핑 값
+     */
+    void SetLinearDamping(float InDamping);
+
+    /**
+     * 각형 댐핑 설정
+     * @param InDamping 새 각형 댐핑 값
+     */
+    void SetAngularDamping(float InDamping);
+
+    /**
+     * 각속도 설정
+     * @param NewAngVel 새 각속도
+     * @param bAddToCurrent true면 기존 속도에 더하기
+     */
+    void SetAngularVelocity(const FVector& NewAngVel, bool bAddToCurrent = false);
+
+    /**
+     * 최대 각속도 제한 설정
+     * @param MaxAngVel 최대 각속도 (rad/s)
+     */
+    void SetMaxAngularVelocity(float MaxAngVel);
+
+    /**
+     * 현재 각속도 가져오기
+     * @return 현재 각속도 벡터 (rad/s)
+     */
+    FVector GetAngularVelocity() const;
+
+    /**
+     * 각속도를 수동으로 클램프 (Joint constraint force가 maxAngularVelocity를 무시하므로 필요)
+     * @param MaxAngVel 최대 각속도 (rad/s)
+     */
+    void ClampAngularVelocity(float MaxAngVel);
 };

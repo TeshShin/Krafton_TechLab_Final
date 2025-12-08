@@ -29,7 +29,7 @@ public:
      * 다음 씬 경로 (컷씬 완료 후 이동)
      */
     UPROPERTY(EditAnywhere)
-    FWideString NextScenePath = L"Data/Scenes/Ending.scene";
+    FWideString NextScenePath = L"Data/Scenes/Rescue.scene";
 
     /**
      * 효과음 경로

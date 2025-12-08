@@ -653,6 +653,8 @@ void USkeletalMeshComponent::InitRagdoll(FPhysScene* InPhysScene)
     if (Aggregate && PhysScene && PhysScene->GetPxScene())
     {
         PhysScene->GetPxScene()->addAggregate(*Aggregate);
+        // 씬 수정 플래그 설정 (getActiveActors 버퍼 무효화)
+        PhysScene->MarkSceneModified();
     }
 
     // Note: 부모-자식 충돌 필터링은 Constraint의 bDisableCollision=true가 처리
@@ -751,6 +753,8 @@ void USkeletalMeshComponent::TermRagdoll()
         if (PhysScene && PhysScene->GetPxScene())
         {
             PhysScene->GetPxScene()->removeAggregate(*Aggregate);
+            // 씬 수정 플래그 설정 (getActiveActors 버퍼 무효화)
+            PhysScene->MarkSceneModified();
         }
         Aggregate->release();
         Aggregate = nullptr;
