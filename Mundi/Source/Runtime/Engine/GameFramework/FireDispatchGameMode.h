@@ -89,7 +89,7 @@ public:
     float CameraBlendTime = 0.5f;
 
     UPROPERTY(EditAnywhere)
-    FVector CameraTargetPosition = FVector(-46.5f, 31.0f, -18.5f);
+    FVector CameraTargetPosition = FVector(-48.5f, 31.0f, -18.5f);
 
     UPROPERTY(EditAnywhere)
     FVector CameraTargetRotation = FVector(0.0f, -24.0f, 90.0f);
