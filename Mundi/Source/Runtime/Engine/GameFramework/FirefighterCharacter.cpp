@@ -24,6 +24,8 @@
 #include "BoneSocketComponent.h"
 #include "SkeletalMesh.h"
 #include "GameObject.h"
+#include "BodyInstance.h"
+#include "PhysXPublic.h"
 
 AFirefighterCharacter::AFirefighterCharacter()
 	: bOrientRotationToMovement(true)
@@ -254,6 +256,9 @@ void AFirefighterCharacter::Tick(float DeltaSeconds)
 	{
 		DamageCooldownTimer -= DeltaSeconds;
 	}
+
+	// 사람을 들고 있을 때 상체 본들 위치 업데이트
+	UpdateCarriedPersonPose();
 }
 
 void AFirefighterCharacter::SetupPlayerInputComponent(UInputComponent* InInputComponent)
@@ -528,10 +533,7 @@ void AFirefighterCharacter::StartCarryingPerson(FGameObject* PersonGameObject)
 		return;
 	}
 
-	// Person 스켈레탈 메시를 래그돌 모드로 전환
-	PersonMesh->SetPhysicsMode(EPhysicsMode::Ragdoll);
-
-	// 본 인덱스 찾기 (Neck, Hips)
+	// 본 인덱스 찾기
 	USkeletalMesh* SkelMesh = PersonMesh->GetSkeletalMesh();
 	if (!SkelMesh)
 	{
@@ -546,39 +548,88 @@ void AFirefighterCharacter::StartCarryingPerson(FGameObject* PersonGameObject)
 		return;
 	}
 
-	// 디버그: 모든 본 이름 출력
-	UE_LOG("[FirefighterCharacter] Person bone names:");
-	for (const auto& Pair : Skeleton->BoneNameToIndex)
+	// 1단계: 현재 애니메이션 포즈 캐시 (래그돌 전환 전)
+	int32 NumBones = Skeleton->Bones.Num();
+	TArray<FTransform> CachedBonePoses;
+	CachedBonePoses.SetNum(NumBones);
+	for (int32 i = 0; i < NumBones; ++i)
 	{
-		UE_LOG("  - %s (index: %d)", Pair.first.c_str(), Pair.second);
+		CachedBonePoses[i] = PersonMesh->GetBoneWorldTransform(i);
+	}
+	UE_LOG("[FirefighterCharacter] Cached %d bone poses", NumBones);
+
+	// 2단계: 래그돌 모드로 전환
+	PersonMesh->SetPhysicsMode(EPhysicsMode::Ragdoll);
+
+	// 3단계: kinematic으로 설정할 본들 찾기 (상체: Hips, Spine, Neck, Head)
+	TArray<int32> KinematicBones;
+	const char* KinematicBoneNames[] = { "Hips", "Spine", "Spine1", "Spine2", "Neck", "Head" };
+	for (const char* BoneName : KinematicBoneNames)
+	{
+		int32 BoneIndex = -1;
+		FString FoundName;
+		if (UBoneSocketComponent::FindBoneBySuffix(Skeleton, BoneName, BoneIndex, FoundName))
+		{
+			KinematicBones.Add(BoneIndex);
+			UE_LOG("[FirefighterCharacter] Kinematic bone: %s (index: %d)", FoundName.c_str(), BoneIndex);
+		}
 	}
 
-	// Neck 본 인덱스 찾기 (suffix 검색 사용)
+	// 4단계: 모든 바디를 kinematic으로 설정하고 포즈 복원
+	const TArray<FBodyInstance*>& Bodies = PersonMesh->GetBodies();
+	for (int32 i = 0; i < Bodies.Num(); ++i)
+	{
+		FBodyInstance* Body = Bodies[i];
+		if (Body && Body->IsValidBodyInstance())
+		{
+			Body->SetKinematic(true);
+
+			if (Body->RigidActor)
+			{
+				PxRigidDynamic* DynActor = Body->RigidActor->is<PxRigidDynamic>();
+				if (DynActor && i < CachedBonePoses.Num())
+				{
+					DynActor->setLinearVelocity(PxVec3(0, 0, 0));
+					DynActor->setAngularVelocity(PxVec3(0, 0, 0));
+					PxTransform PxPose = U2PTransform(CachedBonePoses[i]);
+					DynActor->setGlobalPose(PxPose);
+				}
+			}
+		}
+	}
+
+	// 5단계: 팔다리만 dynamic으로 전환 (KinematicBones에 없는 본들)
+	for (int32 i = 0; i < Bodies.Num(); ++i)
+	{
+		FBodyInstance* Body = Bodies[i];
+		if (Body && Body->IsValidBodyInstance())
+		{
+			bool bShouldBeKinematic = KinematicBones.Contains(i);
+			if (!bShouldBeKinematic)
+			{
+				Body->SetKinematic(false);  // 팔다리는 dynamic
+			}
+		}
+	}
+
+	// Neck, Hips 본 인덱스 찾기
 	int32 NeckBoneIndex = -1;
 	FString NeckBoneName;
-	if (UBoneSocketComponent::FindBoneBySuffix(Skeleton, "Neck", NeckBoneIndex, NeckBoneName))
-	{
-		UE_LOG("[FirefighterCharacter] Found Neck bone: %s (index: %d)", NeckBoneName.c_str(), NeckBoneIndex);
-	}
+	UBoneSocketComponent::FindBoneBySuffix(Skeleton, "Neck", NeckBoneIndex, NeckBoneName);
 
-	// Hips 본 인덱스 찾기 (suffix 검색 사용)
 	int32 HipsBoneIndex = -1;
 	FString HipsBoneName;
-	if (UBoneSocketComponent::FindBoneBySuffix(Skeleton, "Hips", HipsBoneIndex, HipsBoneName))
-	{
-		UE_LOG("[FirefighterCharacter] Found Hips bone: %s (index: %d)", HipsBoneName.c_str(), HipsBoneIndex);
-	}
+	UBoneSocketComponent::FindBoneBySuffix(Skeleton, "Hips", HipsBoneIndex, HipsBoneName);
 
 	UE_LOG("[FirefighterCharacter] StartCarryingPerson: Neck=%d, Hips=%d", NeckBoneIndex, HipsBoneIndex);
 
-	// 왼손 소켓에 Neck 부착
+	// 6단계: 소켓에 연결 (AttachRagdoll은 이미 Ragdoll 모드이므로 단순 연결만 수행)
 	if (LeftHandSocket && NeckBoneIndex >= 0)
 	{
 		LeftHandSocket->AttachRagdoll(PersonMesh, NeckBoneIndex);
 		UE_LOG("[FirefighterCharacter] Attached Neck to LeftHand");
 	}
 
-	// 오른손 소켓에 Hips 부착
 	if (RightHandSocket && HipsBoneIndex >= 0)
 	{
 		RightHandSocket->AttachRagdoll(PersonMesh, HipsBoneIndex);
@@ -597,6 +648,92 @@ void AFirefighterCharacter::StartCarryingPerson(FGameObject* PersonGameObject)
 	}
 
 	UE_LOG("[FirefighterCharacter] StartCarryingPerson: Success!");
+}
+
+void AFirefighterCharacter::UpdateCarriedPersonPose()
+{
+	if (!bIsCarryingPerson || !CarriedPerson)
+	{
+		return;
+	}
+
+	// CarriedPerson의 SkeletalMeshComponent 가져오기
+	USkeletalMeshComponent* PersonMesh = Cast<USkeletalMeshComponent>(
+		CarriedPerson->GetComponent(USkeletalMeshComponent::StaticClass()));
+	if (!PersonMesh)
+	{
+		return;
+	}
+
+	// 소켓 위치 가져오기 (GetWorldTransform 사용)
+	FTransform LeftSocketWorld = LeftHandSocket ? LeftHandSocket->GetWorldTransform() : FTransform();
+	FTransform RightSocketWorld = RightHandSocket ? RightHandSocket->GetWorldTransform() : FTransform();
+
+	// Spine 방향 계산 (Hips -> Neck)
+	FVector HipsPos = RightSocketWorld.Translation;
+	FVector NeckPos = LeftSocketWorld.Translation;
+	FVector SpineDir = (NeckPos - HipsPos).GetNormalized();
+
+	// 소방관의 회전을 기준으로 업힌 캐릭터 회전 계산
+	// SpineDir을 Z축(위)으로 하고, 소방관의 Forward를 기준으로 전방 결정
+	FVector FirefighterForward = GetActorForward();
+
+	// SpineDir에 수직인 평면에 Forward 투영하여 X축(전방) 계산
+	FVector ProjectedForward = FirefighterForward - SpineDir * FVector::Dot(FirefighterForward, SpineDir);
+	ProjectedForward = ProjectedForward.GetNormalized();
+
+	// Y축(우측)은 Z × X로 계산
+	FVector RightDir = FVector::Cross(SpineDir, ProjectedForward).GetNormalized();
+
+	// X축 재계산 (직교성 보장)
+	FVector ForwardDir = FVector::Cross(RightDir, SpineDir).GetNormalized();
+
+	// 회전 행렬에서 쿼터니언 생성
+	// Forward = X축, Right = Y축, Spine = Z축
+	FMatrix RotMatrix;
+	RotMatrix.M[0][0] = ForwardDir.X; RotMatrix.M[0][1] = ForwardDir.Y; RotMatrix.M[0][2] = ForwardDir.Z; RotMatrix.M[0][3] = 0;
+	RotMatrix.M[1][0] = RightDir.X;   RotMatrix.M[1][1] = RightDir.Y;   RotMatrix.M[1][2] = RightDir.Z;   RotMatrix.M[1][3] = 0;
+	RotMatrix.M[2][0] = SpineDir.X;   RotMatrix.M[2][1] = SpineDir.Y;   RotMatrix.M[2][2] = SpineDir.Z;   RotMatrix.M[2][3] = 0;
+	RotMatrix.M[3][0] = 0;            RotMatrix.M[3][1] = 0;            RotMatrix.M[3][2] = 0;            RotMatrix.M[3][3] = 1;
+
+	FQuat SpineRotation(RotMatrix);
+
+	// 본 인덱스 찾기
+	USkeletalMesh* SkelMesh = PersonMesh->GetSkeletalMesh();
+	if (!SkelMesh || !SkelMesh->GetSkeleton())
+	{
+		return;
+	}
+	const FSkeleton* Skeleton = SkelMesh->GetSkeleton();
+
+	// kinematic 본들 위치 업데이트
+	const char* KinematicBoneNames[] = { "Hips", "Spine", "Spine1", "Spine2", "Neck", "Head" };
+	float BonePositions[] = { 0.0f, 0.15f, 0.35f, 0.55f, 0.8f, 1.0f };  // Hips(0) ~ Neck(0.8) ~ Head(1.0)
+
+	const TArray<FBodyInstance*>& Bodies = PersonMesh->GetBodies();
+
+	for (int32 i = 0; i < 6; ++i)
+	{
+		int32 BoneIndex = -1;
+		FString FoundName;
+		if (UBoneSocketComponent::FindBoneBySuffix(Skeleton, KinematicBoneNames[i], BoneIndex, FoundName))
+		{
+			if (BoneIndex >= 0 && BoneIndex < Bodies.Num())
+			{
+				FBodyInstance* Body = Bodies[BoneIndex];
+				if (Body && Body->IsValidBodyInstance())
+				{
+					// Hips와 Neck 사이를 보간하여 위치 계산
+					float T = BonePositions[i];
+					FVector BonePos = FMath::Lerp(HipsPos, NeckPos, T);
+
+					// 트랜스폼 설정
+					FTransform BoneTransform(BonePos, SpineRotation, FVector(1, 1, 1));
+					Body->SetKinematicTarget(BoneTransform);
+				}
+			}
+		}
+	}
 }
 
 void AFirefighterCharacter::StopCarryingPerson()

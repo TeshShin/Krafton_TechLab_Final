@@ -213,6 +213,9 @@ public:
     UFUNCTION(LuaBind, DisplayName="StopCarryingPerson")
     void StopCarryingPerson();
 
+    /** 들고 있는 사람의 상체 본들 위치 업데이트 (Tick에서 호출) */
+    void UpdateCarriedPersonPose();
+
     /** 본 소켓 재바인딩 (메시 변경 후 호출, Lua에서 호출) */
     UFUNCTION(LuaBind, DisplayName="RebindBoneSockets")
     void RebindBoneSockets();
