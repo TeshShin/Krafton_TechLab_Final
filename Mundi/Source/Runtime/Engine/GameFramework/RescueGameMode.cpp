@@ -12,6 +12,9 @@
 #include "Pawn.h"
 #include "GameInstance.h"
 #include "BoxComponent.h"
+#include "FAudioDevice.h"
+#include "Sound.h"
+#include "ResourceManager.h"
 #include "PlayerCameraManager.h"
 
 #include "GameUI/SGameHUD.h"
@@ -66,6 +69,9 @@ void ARescueGameMode::BeginPlay()
 {
     Super::BeginPlay();
 
+    // 사운드 초기화 (BGM + 사이렌)
+    InitializeSounds();
+
     // 플레이어 상태 초기화 (아이템 기반)
     InitializePlayerState();
 
@@ -76,6 +82,13 @@ void ARescueGameMode::BeginPlay()
 void ARescueGameMode::EndPlay()
 {
     Super::EndPlay();
+
+    // BGM 정지
+    if (BGMVoice)
+    {
+        FAudioDevice::StopSound(BGMVoice);
+        BGMVoice = nullptr;
+    }
 
     // HUD 위젯 정리
     if (SGameHUD::Get().IsInitialized())
@@ -686,6 +699,27 @@ void ARescueGameMode::TransitionToEnding(bool bPlayerDead)
     bEndingPlayerDead = bPlayerDead;
     bWipeStarted = !bPlayerDead;  // 구조 완료 시에는 이미 와이프 시작됨
     EndingTimer = 0.0f;
+}
+
+// ----------------------------------------------------------------------------
+// 사운드 초기화
+// ----------------------------------------------------------------------------
+
+void ARescueGameMode::InitializeSounds()
+{
+    // BGM 로드 및 재생 (루프)
+    BGMSound = UResourceManager::GetInstance().Load<USound>(BGMSoundPath);
+    if (BGMSound)
+    {
+        BGMVoice = FAudioDevice::PlaySound3D(BGMSound, FVector::Zero(), 0.5f, true);
+    }
+
+    // 사이렌 로드 및 재생 (1회)
+    SirenSound = UResourceManager::GetInstance().Load<USound>(SirenSoundPath);
+    if (SirenSound)
+    {
+        FAudioDevice::PlaySound3D(SirenSound, FVector::Zero(), 0.7f, false);
+    }
 }
 
 // ----------------------------------------------------------------------------

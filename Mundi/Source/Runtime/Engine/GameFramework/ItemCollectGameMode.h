@@ -75,6 +75,18 @@ public:
 	float TimerTextOffsetRatio;
 
 	// ────────────────────────────────────────────────
+	// 사운드 설정
+	// ────────────────────────────────────────────────
+
+	/** BGM 사운드 경로 */
+	UPROPERTY(EditAnywhere, Category="Sound", Tooltip="BGM 사운드 경로입니다.")
+	FString BGMSoundPath = "Data/Audio/CollectSceneBGM.wav";
+
+	/** 사이렌 사운드 경로 */
+	UPROPERTY(EditAnywhere, Category="Sound", Tooltip="사이렌 사운드 경로입니다.")
+	FString SirenSoundPath = "Data/Audio/StartSiren.wav";
+
+	// ────────────────────────────────────────────────
 	// Getter/Setter
 	// ────────────────────────────────────────────────
 
@@ -146,4 +158,12 @@ private:
 
 	// 아이템 카운트
 	int ItemCounts[3]; // 각 아이템 수집 개수
+
+	// 사운드 관련
+	class USound* BGMSound = nullptr;
+	class USound* SirenSound = nullptr;
+	struct IXAudio2SourceVoice* BGMVoice = nullptr;
+
+	/** 사운드 초기화 */
+	void InitializeSounds();
 };
