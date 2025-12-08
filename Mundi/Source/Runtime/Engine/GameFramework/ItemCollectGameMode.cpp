@@ -13,6 +13,7 @@
 #include "GameUI/SButton.h"
 #include "LevelTransitionManager.h"
 #include "GameInstance.h"
+#include "InputManager.h"
 #include <cmath>
 
 IMPLEMENT_CLASS(AItemCollectGameMode)
@@ -26,7 +27,7 @@ AItemCollectGameMode::AItemCollectGameMode()
 	, SpawnActorName("PlayerStartPos")
 	, SpawnActorTag("None")
 	, TimeLimit(20.0f)
-	, NextScenePath(L"Data/Scenes/End.scene")
+	, NextScenePath(L"Data/Scenes/FireDispatch.scene")
 	, TimerWidgetSize(200.f)
 	, TimerTextOffsetRatio(0.12f)
 	, RemainingTime(0.0f)
@@ -50,6 +51,9 @@ AItemCollectGameMode::AItemCollectGameMode()
 void AItemCollectGameMode::BeginPlay()
 {
 	Super::BeginPlay();
+
+	// 입력 모드를 GameAndUI로 설정 (플레이어 조작 가능)
+	UInputManager::GetInstance().SetInputMode(EInputMode::GameAndUI);
 
 	// 타이머 초기화
 	RemainingTime = TimeLimit;
@@ -179,7 +183,7 @@ void AItemCollectGameMode::Tick(float DeltaTime)
 			ShakeAnimationTime -= DeltaTime;
 		}
 
-		// UI 업데이트
+		// UI 업데이트ww
 		UpdateTimerUI();
 	}
 
@@ -194,6 +198,10 @@ void AItemCollectGameMode::Tick(float DeltaTime)
 void AItemCollectGameMode::EndPlay()
 {
 	Super::EndPlay();
+
+	// 입력 모드 복원 (혹시 모를 상태 변경 대비)
+	UInputManager::GetInstance().SetInputMode(EInputMode::GameAndUI);
+
 	ClearUI();
 	ClearItemUI();
 }

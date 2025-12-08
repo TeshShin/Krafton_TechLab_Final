@@ -11,6 +11,7 @@
 #include "GameInstance.h"
 #include "CameraActor.h"
 #include "World.h"
+#include "PlayerController.h"
 
 IMPLEMENT_CLASS(AFireDispatchGameMode)
 
@@ -31,7 +32,16 @@ void AFireDispatchGameMode::BeginPlay()
         }
     }
 
-    UInputManager::GetInstance().SetInputMode(EInputMode::UIOnly);
+    // 입력 모드를 UIOnly로 설정 (PlayerController를 통해 설정)
+    if (PlayerController)
+    {
+        PlayerController->SetInputMode(EInputMode::UIOnly);
+    }
+    else
+    {
+        UInputManager::GetInstance().SetInputMode(EInputMode::UIOnly);
+    }
+
     InitializeAssets();
     InitializeCameraEffects();
     FindMainCamera();
@@ -44,7 +54,15 @@ void AFireDispatchGameMode::EndPlay()
 {
     Super::EndPlay();
 
-    UInputManager::GetInstance().SetInputMode(EInputMode::GameAndUI);
+    // 입력 모드 복원 (PlayerController를 통해 설정)
+    if (PlayerController)
+    {
+        PlayerController->SetInputMode(EInputMode::GameAndUI);
+    }
+    else
+    {
+        UInputManager::GetInstance().SetInputMode(EInputMode::GameAndUI);
+    }
 }
 
 void AFireDispatchGameMode::Tick(float DeltaTime)
