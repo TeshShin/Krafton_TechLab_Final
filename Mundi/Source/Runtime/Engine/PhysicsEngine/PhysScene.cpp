@@ -1039,7 +1039,10 @@ bool FPhysScene::OverlapAnyBox(const FVector& Position,
                                 const FVector& HalfExtent, const FQuat& Rotation,
                                 AActor* IgnoreActor) const
 {
-    PxBoxGeometry BoxGeom(U2PVector(HalfExtent));
+    // 기본 PhysX box overlap 쿼리 사용
+    // 참고: Triangle Mesh에 대해서는 박스 중심이 삼각형 뒤쪽에 있으면 감지 안 될 수 있음
+    // 이 경우 호출자가 추가적인 raycast 체크를 수행해야 함 (SafeSpawner.lua의 벽 체크 참조)
+    PxBoxGeometry BoxGeom(HalfExtent.X, HalfExtent.Y, HalfExtent.Z);
     return OverlapAnyGeometry(BoxGeom, Position, Rotation, IgnoreActor);
 }
 

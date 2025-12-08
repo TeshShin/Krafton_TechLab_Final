@@ -11,14 +11,14 @@
 -- ============================================================================
 
 local MaxSpawnCount = 30              -- 최대 스폰 개수
-local MaxSpawnAttempts = 100          -- 최대 스폰 시도 횟수
+local MaxSpawnAttempts = 300          -- 최대 스폰 시도 횟수
 
 -- 스폰 영역 (이 오브젝트 위치 기준 오프셋)
-local AreaOffsetMin = Vector(-39, -20, -10.5)   -- 영역 최소 오프셋
-local AreaOffsetMax = Vector(39, 20, 10.5)    -- 영역 최대 오프셋
+local AreaOffsetMin = Vector(-39, -20, -11.5)   -- 영역 최소 오프셋
+local AreaOffsetMax = Vector(39, 20, 11.5)    -- 영역 최대 오프셋
 
--- 스폰할 오브젝트 크기 (반크기)
-local ObjectHalfExtent = Vector(2, 2, 1)
+-- 스폰할 오브젝트 크기 (반크기) - 충돌 체크용
+local ObjectHalfExtent = Vector(2,2,2)
 
 -- 물리 조건 설정
 local ExcludeFloorTag = "Ground"       -- 이 태그의 바닥에는 스폰 안함 (빈 문자열이면 체크 안함)
@@ -26,10 +26,18 @@ local MaxFloorDistance = 20.0        -- 바닥 탐지 최대 거리
 local MaxCeilingDistance = 20.0      -- 천장 탐지 최대 거리
 local RequireCeiling = true          -- 천장 필수 여부
 
--- 프리팹 목록과 각각의 가중치
+-- 프리팹 목록과 각각의 설정
+-- path: 프리팹 경로
+-- weight: 스폰 가중치 (높을수록 자주 스폰)
+-- floorOffsetRatio: 바닥 오프셋 비율 (0.0=바닥, 1.0=HalfExtent.Z만큼 위) [기본값: 0.0]
+-- rotationOffset: 회전 오프셋 Vector(Pitch, Yaw, Roll) (도 단위) [기본값: Vector(0,0,0)]
 local PrefabList = {
-    { path = "Data/Prefabs/OxygenTank.prefab", weight = 50 },
-    { path = "Data/Prefabs/FireEX.prefab", weight = 50 }
+    {
+        path = "Data/Prefabs/KneePraying1.prefab",
+        weight = 50,
+        floorOffsetRatio = 0.0,
+        rotationOffset = Vector(0, 0, 0)  -- (Pitch, Yaw, Roll) 또는 (X, Y, Z)
+    }
 }
 
 -- ============================================================================
@@ -60,11 +68,11 @@ local function SelectWeightedRandom(list)
     for _, item in ipairs(list) do
         accumulated = accumulated + item.weight
         if randomValue <= accumulated then
-            return item.path
+            return item  -- 전체 아이템 반환
         end
     end
 
-    return list[1].path
+    return list[1]  -- 전체 아이템 반환
 end
 
 -- ============================================================================
@@ -109,6 +117,39 @@ local function CheckSpawnConditions(position, halfExtent)
     if overlapResult then
         result.FailReason = "SpaceOccupied"
         return result
+    end
+
+    -- 1.5. 벽 체크 (8개 꼭짓점에서 중심으로 레이캐스트)
+    -- PhysX는 Triangle Mesh에 대해 overlap을 제대로 지원하지 않으므로 raycast로 대체
+    -- 각 꼭짓점에서 중심으로 ray를 쏴서 중간에 벽이 있으면 박스가 벽을 관통하는 것
+    local corners = {
+        Vector(position.X - halfExtent.X, position.Y - halfExtent.Y, position.Z - halfExtent.Z),
+        Vector(position.X - halfExtent.X, position.Y - halfExtent.Y, position.Z + halfExtent.Z),
+        Vector(position.X - halfExtent.X, position.Y + halfExtent.Y, position.Z - halfExtent.Z),
+        Vector(position.X - halfExtent.X, position.Y + halfExtent.Y, position.Z + halfExtent.Z),
+        Vector(position.X + halfExtent.X, position.Y - halfExtent.Y, position.Z - halfExtent.Z),
+        Vector(position.X + halfExtent.X, position.Y - halfExtent.Y, position.Z + halfExtent.Z),
+        Vector(position.X + halfExtent.X, position.Y + halfExtent.Y, position.Z - halfExtent.Z),
+        Vector(position.X + halfExtent.X, position.Y + halfExtent.Y, position.Z + halfExtent.Z)
+    }
+
+    for i, corner in ipairs(corners) do
+        -- 꼭짓점에서 중심으로의 방향과 거리 계산
+        local toCenter = Vector(position.X - corner.X, position.Y - corner.Y, position.Z - corner.Z)
+        local dist = math.sqrt(toCenter.X * toCenter.X + toCenter.Y * toCenter.Y + toCenter.Z * toCenter.Z)
+
+        if dist > 0.01 then
+            local dir = Vector(toCenter.X / dist, toCenter.Y / dist, toCenter.Z / dist)
+
+            -- 꼭짓점에서 중심 방향으로 raycast
+            local hit = Physics.Raycast(corner, dir, dist - 0.01)  -- 중심 직전까지만
+
+            if hit.bHit then
+                -- 꼭짓점과 중심 사이에 벽이 있음 = 박스가 벽을 관통
+                result.FailReason = "WallIntersect"
+                return result
+            end
+        end
     end
 
     -- 2. 바닥 확인 (아래로 레이캐스트) - Z축이 Up/Down
@@ -185,27 +226,36 @@ local function TrySpawnOnce(areaMin, areaMax, halfExtent)
         return nil, checkResult
     end
 
+    -- 가중치 기반으로 프리팹 선택
+    local selectedPrefab = SelectWeightedRandom(PrefabList)
+
+    -- 프리팹별 설정 (기본값 적용)
+    local floorOffsetRatio = selectedPrefab.floorOffsetRatio or 0.0
+    local rotationOffset = selectedPrefab.rotationOffset or Vector(0, 0, 0)
+
     -- 바닥 위로 위치 조정 (Z축이 Up/Down)
+    -- floorOffsetRatio: 0.0 = 피벗이 바닥에 위치, 1.0 = 피벗이 HalfExtent.Z만큼 위
     local spawnPos = Vector(
         testPos.X,
         testPos.Y,
-        checkResult.FloorLocation.Z + halfExtent.Z + 0.1
+        checkResult.FloorLocation.Z + (floorOffsetRatio * halfExtent.Z) + 0.05
     )
-
-    -- 조정된 위치에서 다시 공간 체크
-    if Physics.OverlapBox(spawnPos, halfExtent) then
-        return nil, { bValid = false, FailReason = "AdjustedSpaceOccupied" }
-    end
-
-    -- 가중치 기반으로 프리팹 선택
-    local selectedPath = SelectWeightedRandom(PrefabList)
+    -- 참고: 조정된 위치에서의 OverlapBox 체크는 제거함
+    -- (floorOffsetRatio=0일 때 박스 하단이 바닥 아래로 가서 항상 실패하기 때문)
 
     -- 프리팹 스폰
-    local spawnedObj = SpawnPrefab(selectedPath)
+    local spawnedObj = SpawnPrefab(selectedPrefab.path)
     if spawnedObj then
         spawnedObj.Location = spawnPos
+        -- 랜덤 Z 회전 + rotationOffset 적용
+        local randomYaw = math.random() * 360.0
+        spawnedObj.Rotation = Vector(
+            rotationOffset.X,
+            rotationOffset.Y,
+            rotationOffset.Z + randomYaw
+        )
         table.insert(SpawnedObjects, spawnedObj)
-        print("[SafeSpawner] Spawned: " .. selectedPath ..
+        print("[SafeSpawner] Spawned: " .. selectedPrefab.path ..
               " at (" .. string.format("%.2f", spawnPos.X) .. ", " ..
               string.format("%.2f", spawnPos.Y) .. ", " ..
               string.format("%.2f", spawnPos.Z) .. ")" ..
