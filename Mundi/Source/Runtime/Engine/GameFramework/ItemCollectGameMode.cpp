@@ -33,6 +33,7 @@ AItemCollectGameMode::AItemCollectGameMode()
 	, RemainingTime(0.0f)
 	, LastSecond(-1.0f)
 	, ShakeAnimationTime(0.0f)
+	, NoticeElapsedTime(0.0f)
 {
 	DefaultPawnClass = AFirefighterCharacter::StaticClass();
 	PlayerSpawnLocation = FVector(0.0f, 0.0f, 1.0f);
@@ -150,6 +151,12 @@ void AItemCollectGameMode::Tick(float DeltaTime)
 {
 	Super::Tick(DeltaTime);
 
+	// 공지 애니메이션 업데이트 (3초 동안만)
+	if (NoticeElapsedTime < NoticeDuration)
+	{
+		UpdateNoticeAnimation(DeltaTime);
+	}
+
 	// 타이머 업데이트
 	if (RemainingTime > 0.0f)
 	{
@@ -250,6 +257,17 @@ void AItemCollectGameMode::InitializeUI()
 		.SetOffset(0.f, TextOffsetY)  // 비율 기반 오프셋
 		.SetSize(TimerWidgetSize, TimerWidgetSize)
 		.SetZOrder(11);             // 텍스트가 위에
+
+	// 공지 이미지 위젯 (화면 중앙, 3초간 크기 변화 애니메이션)
+	NoticeWidget = MakeShared<STextBlock>();
+	NoticeWidget->SetText(L"")
+		.SetBackgroundImage("Data/Textures/Collect/notice.png");
+
+	SGameHUD::Get().AddWidget(NoticeWidget)
+		.SetAnchor(0.5f, 0.5f)      // 화면 중앙
+		.SetPivot(0.5f, 0.5f)       // 중앙 기준
+		.SetSize(1100.f, 400.f)      // 초기 크기
+		.SetZOrder(100);            // 가장 위에 표시
 }
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -270,6 +288,12 @@ void AItemCollectGameMode::ClearUI()
 	{
 		SGameHUD::Get().RemoveWidget(TimerTextWidget);
 		TimerTextWidget.Reset();
+	}
+
+	if (NoticeWidget)
+	{
+		SGameHUD::Get().RemoveWidget(NoticeWidget);
+		NoticeWidget.Reset();
 	}
 }
 
@@ -496,6 +520,41 @@ void AItemCollectGameMode::UpdateItemCountUI()
 				swprintf_s(CountText, L"%d", ItemCounts[i]);
 				ItemCountWidgets[i]->SetText(CountText);
 			}
+		}
+	}
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// 공지 애니메이션 업데이트
+// ────────────────────────────────────────────────────────────────────────────
+
+void AItemCollectGameMode::UpdateNoticeAnimation(float DeltaTime)
+{
+	if (!NoticeWidget || !SGameHUD::Get().IsInitialized()) { return; }
+
+	NoticeElapsedTime += DeltaTime;
+
+	// 3초가 지나면 완전히 숨김
+	if (NoticeElapsedTime >= NoticeDuration)
+	{
+		NoticeWidget->SetVisibility(ESlateVisibility::Hidden);
+		return;
+	}
+
+	// 애니메이션 계산
+	// 0초~3초: 펄스 애니메이션 (크기 0.9 ~ 1.1 반복)
+	float PulseProgress = (NoticeElapsedTime / 3.0f) * 3.14159f * 4.0f;  // 4회 반복
+	float Scale = 1.0f + std::sin(PulseProgress) * 0.1f;  // 0.9 ~ 1.1
+
+	// 위젯 슬롯 찾아서 크기 적용
+	auto& Slots = SGameHUD::Get().GetRootCanvas()->GetCanvasSlots();
+	for (auto& Slot : Slots)  
+	{
+		if (Slot.Widget == NoticeWidget)
+		{
+			// 크기 적용
+			Slot.SetSize(1100.f * Scale, 400.f * Scale);
+			break;
 		}
 	}
 }
