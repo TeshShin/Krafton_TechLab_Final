@@ -85,6 +85,11 @@ void FConstraintInstance::InitConstraint(FBodyInstance* Body1, FBodyInstance* Bo
     bool bHasRotation1 = !Rotation1.IsZero();
     bool bHasRotation2 = !Rotation2.IsZero();
 
+    // Body 스케일에 맞게 Position 스케일링 (피직스 에셋은 스케일 1.0 기준이므로)
+    FVector Scale3D = Body1->Scale3D;
+    FVector ScaledPosition1 = Position1 * Scale3D;
+    FVector ScaledPosition2 = Position2 * Scale3D;
+
     PxTransform ChildGlobalPose = Child->getGlobalPose();
     PxTransform ParentGlobalPose = Parent->getGlobalPose();
 
@@ -92,15 +97,15 @@ void FConstraintInstance::InitConstraint(FBodyInstance* Body1, FBodyInstance* Bo
     // 양쪽 LocalFrame을 직접 설정
     if (bHasRotation1 || bHasRotation2)
     {
-        // Position1/Rotation1 → LocalFrame1 (Child 로컬)
+        // Position1/Rotation1 → LocalFrame1 (Child 로컬) - 스케일 적용된 Position 사용
         FQuat Rot1 = FQuat::MakeFromEulerZYX(Rotation1);
-        PxVec3 LocalPos1 = PhysxConverter::ToPxVec3(Position1);
+        PxVec3 LocalPos1 = PhysxConverter::ToPxVec3(ScaledPosition1);
         PxQuat LocalRot1 = PhysxConverter::ToPxQuat(Rot1);
         LocalFrame1 = PxTransform(LocalPos1, LocalRot1);
 
-        // Position2/Rotation2 → LocalFrame2 (Parent 로컬)
+        // Position2/Rotation2 → LocalFrame2 (Parent 로컬) - 스케일 적용된 Position 사용
         FQuat Rot2 = FQuat::MakeFromEulerZYX(Rotation2);
-        PxVec3 LocalPos2 = PhysxConverter::ToPxVec3(Position2);
+        PxVec3 LocalPos2 = PhysxConverter::ToPxVec3(ScaledPosition2);
         PxQuat LocalRot2 = PhysxConverter::ToPxQuat(Rot2);
         LocalFrame2 = PxTransform(LocalPos2, LocalRot2);
     }
@@ -114,10 +119,10 @@ void FConstraintInstance::InitConstraint(FBodyInstance* Body1, FBodyInstance* Bo
         }
         PxQuat JointRotation = ComputeJointFrameRotation(BoneDirection);
 
-        // Joint 월드 위치 계산
+        // Joint 월드 위치 계산 - 스케일 적용된 Position 사용
         PxVec3 JointWorldPos = bHasPosition1
-            ? ChildGlobalPose.p + ChildGlobalPose.q.rotate(PhysxConverter::ToPxVec3(Position1))
-            : ParentGlobalPose.p + ParentGlobalPose.q.rotate(PhysxConverter::ToPxVec3(Position2));
+            ? ChildGlobalPose.p + ChildGlobalPose.q.rotate(PhysxConverter::ToPxVec3(ScaledPosition1))
+            : ParentGlobalPose.p + ParentGlobalPose.q.rotate(PhysxConverter::ToPxVec3(ScaledPosition2));
 
         // 각 Body 로컬로 변환
         LocalFrame1 = ChildGlobalPose.getInverse() * PxTransform(JointWorldPos, JointRotation);
