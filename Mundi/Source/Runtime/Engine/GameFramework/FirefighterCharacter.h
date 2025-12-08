@@ -193,6 +193,9 @@ public:
     /** 현재 들고 있는 사람 (스켈레탈 메시 컴포넌트의 오너 액터) */
     AActor* CarriedPerson = nullptr;
 
+    /** 원래 스켈레톤의 척추 길이 (Hips ~ Head) - 소켓 거리 고정용 */
+    float OriginalSpineLength = 0.0f;
+
     /** 사람을 들고 있는지 여부 */
     UPROPERTY(LuaBind, DisplayName="bIsCarryingPerson")
     bool bIsCarryingPerson = false;

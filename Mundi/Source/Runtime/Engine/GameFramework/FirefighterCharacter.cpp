@@ -151,7 +151,7 @@ AFirefighterCharacter::AFirefighterCharacter()
 	{
 		RightHandSocket->SetupAttachment(MeshComponent);
 		RightHandSocket->BoneName = "mixamorig:RightHand";
-		// 손에서 앞쪽(X)으로 오프셋, Person이 눕혀지도록 회전 (Pitch -90도)
+		// 손에서 앞쪽(X)으로 오프셋 + 위(Z)로 올려서 손 관통 방지
 		RightHandSocket->SocketOffsetLocation = FVector(0.5f, 0.0f, 0.0f);
 	}
 }
@@ -558,10 +558,41 @@ void AFirefighterCharacter::StartCarryingPerson(FGameObject* PersonGameObject)
 	}
 	UE_LOG("[FirefighterCharacter] Cached %d bone poses", NumBones);
 
-	// 2단계: 래그돌 모드로 전환
+	// 2단계: 메시 스케일 가져오기 (피직스 에셋 보정용)
+	FVector MeshScale = PersonMesh->GetRelativeScale();
+	float ScaleFactor = MeshScale.X;  // 균일 스케일 가정
+	UE_LOG("[FirefighterCharacter] PersonMesh scale: %.2f", ScaleFactor);
+
+	// 3단계: 래그돌 모드로 전환
 	PersonMesh->SetPhysicsMode(EPhysicsMode::Ragdoll);
 
-	// 3단계: kinematic으로 설정할 본들 찾기 (상체: Hips, Spine, Neck, Head)
+	// 4단계: constraint 앵커 위치를 스케일에 맞게 보정
+	if (ScaleFactor != 1.0f)
+	{
+		const TArray<FConstraintInstance*>& Constraints = PersonMesh->GetConstraints();
+		for (FConstraintInstance* Constraint : Constraints)
+		{
+			if (Constraint && Constraint->ConstraintData)
+			{
+				physx::PxD6Joint* Joint = Constraint->ConstraintData;
+
+				// 두 액터의 로컬 프레임 가져오기
+				PxTransform LocalFrame0 = Joint->getLocalPose(PxJointActorIndex::eACTOR0);
+				PxTransform LocalFrame1 = Joint->getLocalPose(PxJointActorIndex::eACTOR1);
+
+				// 위치만 스케일 적용 (회전은 그대로)
+				LocalFrame0.p *= ScaleFactor;
+				LocalFrame1.p *= ScaleFactor;
+
+				// 스케일 적용된 프레임 설정
+				Joint->setLocalPose(PxJointActorIndex::eACTOR0, LocalFrame0);
+				Joint->setLocalPose(PxJointActorIndex::eACTOR1, LocalFrame1);
+			}
+		}
+		UE_LOG("[FirefighterCharacter] Scaled %d constraint frames by %.2f", Constraints.Num(), ScaleFactor);
+	}
+
+	// 5단계: kinematic으로 설정할 본들 찾기 (상체: Hips, Spine, Neck, Head)
 	TArray<int32> KinematicBones;
 	const char* KinematicBoneNames[] = { "Hips", "Spine", "Spine1", "Spine2", "Neck", "Head" };
 	for (const char* BoneName : KinematicBoneNames)
@@ -575,7 +606,7 @@ void AFirefighterCharacter::StartCarryingPerson(FGameObject* PersonGameObject)
 		}
 	}
 
-	// 4단계: 모든 바디를 kinematic으로 설정하고 포즈 복원
+	// 6단계: 모든 바디를 kinematic으로 설정하고 포즈 복원
 	const TArray<FBodyInstance*>& Bodies = PersonMesh->GetBodies();
 	for (int32 i = 0; i < Bodies.Num(); ++i)
 	{
@@ -598,7 +629,7 @@ void AFirefighterCharacter::StartCarryingPerson(FGameObject* PersonGameObject)
 		}
 	}
 
-	// 5단계: 팔다리만 dynamic으로 전환 (KinematicBones에 없는 본들)
+	// 7단계: 팔다리만 dynamic으로 전환 (KinematicBones에 없는 본들)
 	for (int32 i = 0; i < Bodies.Num(); ++i)
 	{
 		FBodyInstance* Body = Bodies[i];
@@ -612,22 +643,31 @@ void AFirefighterCharacter::StartCarryingPerson(FGameObject* PersonGameObject)
 		}
 	}
 
-	// Neck, Hips 본 인덱스 찾기
-	int32 NeckBoneIndex = -1;
-	FString NeckBoneName;
-	UBoneSocketComponent::FindBoneBySuffix(Skeleton, "Neck", NeckBoneIndex, NeckBoneName);
+	// Head, Hips 본 인덱스 찾기
+	int32 HeadBoneIndex = -1;
+	FString HeadBoneName;
+	UBoneSocketComponent::FindBoneBySuffix(Skeleton, "Head", HeadBoneIndex, HeadBoneName);
 
 	int32 HipsBoneIndex = -1;
 	FString HipsBoneName;
 	UBoneSocketComponent::FindBoneBySuffix(Skeleton, "Hips", HipsBoneIndex, HipsBoneName);
 
-	UE_LOG("[FirefighterCharacter] StartCarryingPerson: Neck=%d, Hips=%d", NeckBoneIndex, HipsBoneIndex);
+	UE_LOG("[FirefighterCharacter] StartCarryingPerson: Head=%d, Hips=%d", HeadBoneIndex, HipsBoneIndex);
 
-	// 6단계: 소켓에 연결 (AttachRagdoll은 이미 Ragdoll 모드이므로 단순 연결만 수행)
-	if (LeftHandSocket && NeckBoneIndex >= 0)
+	// 8단계: 원래 척추 길이 계산 (소켓 거리 고정용)
+	if (HeadBoneIndex >= 0 && HipsBoneIndex >= 0)
 	{
-		LeftHandSocket->AttachRagdoll(PersonMesh, NeckBoneIndex);
-		UE_LOG("[FirefighterCharacter] Attached Neck to LeftHand");
+		FTransform HipsWorldTransform = CachedBonePoses[HipsBoneIndex];
+		FTransform HeadWorldTransform = CachedBonePoses[HeadBoneIndex];
+		OriginalSpineLength = (HeadWorldTransform.Translation - HipsWorldTransform.Translation).Size();
+		UE_LOG("[FirefighterCharacter] Original spine length: %.3f", OriginalSpineLength);
+	}
+
+	// 9단계: 소켓에 연결 (AttachRagdoll은 이미 Ragdoll 모드이므로 단순 연결만 수행)
+	if (LeftHandSocket && HeadBoneIndex >= 0)
+	{
+		LeftHandSocket->AttachRagdoll(PersonMesh, HeadBoneIndex);
+		UE_LOG("[FirefighterCharacter] Attached Head to LeftHand");
 	}
 
 	if (RightHandSocket && HipsBoneIndex >= 0)
@@ -669,17 +709,31 @@ void AFirefighterCharacter::UpdateCarriedPersonPose()
 	FTransform LeftSocketWorld = LeftHandSocket ? LeftHandSocket->GetWorldTransform() : FTransform();
 	FTransform RightSocketWorld = RightHandSocket ? RightHandSocket->GetWorldTransform() : FTransform();
 
-	// Spine 방향 계산 (Hips -> Neck)
-	FVector HipsPos = RightSocketWorld.Translation;
-	FVector NeckPos = LeftSocketWorld.Translation;
-	FVector SpineDir = (NeckPos - HipsPos).GetNormalized();
+	// 기본 소켓 위치
+	FVector HipsSocketPos = RightSocketWorld.Translation;
+	FVector HeadSocketPos = LeftSocketWorld.Translation;
 
-	// 소방관의 회전을 기준으로 업힌 캐릭터 회전 계산
-	// SpineDir을 Z축(위)으로 하고, 소방관의 Forward를 기준으로 전방 결정
-	FVector FirefighterForward = GetActorForward();
+	// 플레이어 Forward 방향으로 오프셋 추가 (충돌 방지)
+	FVector ForwardOffset = GetActorForward() * 0.1f;  // 0.1m 앞으로
 
-	// SpineDir에 수직인 평면에 Forward 투영하여 X축(전방) 계산
-	FVector ProjectedForward = FirefighterForward - SpineDir * FVector::Dot(FirefighterForward, SpineDir);
+	// Spine 방향 계산 (두 소켓 방향 사용)
+	FVector SocketDir = (HeadSocketPos - HipsSocketPos).GetNormalized();
+
+	// Head 위치는 원래 척추 길이를 사용하여 계산 (소켓 거리 고정)
+	FVector HeadPos = HipsSocketPos + ForwardOffset + SocketDir * OriginalSpineLength;
+
+	// Hips 위치 (위로 올려서 손 관통 방지)
+	FVector HipsPos = HipsSocketPos + ForwardOffset;
+	HipsPos.Z += 0.2f;  // 엉덩이만 위로 올림
+
+	FVector SpineDir = SocketDir;
+
+	// 업힌 캐릭터가 하늘을 보도록 회전 계산
+	// SpineDir을 Z축으로 하고, 업힌 캐릭터의 "앞면"이 위(하늘)를 향하게 설정
+	FVector WorldUp(0, 0, 1);
+
+	// SpineDir에 수직인 평면에 WorldUp 투영하여 X축(전방=얼굴 방향) 계산
+	FVector ProjectedForward = WorldUp - SpineDir * FVector::Dot(WorldUp, SpineDir);
 	ProjectedForward = ProjectedForward.GetNormalized();
 
 	// Y축(우측)은 Z × X로 계산
@@ -706,9 +760,9 @@ void AFirefighterCharacter::UpdateCarriedPersonPose()
 	}
 	const FSkeleton* Skeleton = SkelMesh->GetSkeleton();
 
-	// kinematic 본들 위치 업데이트
+	// kinematic 본들 위치 업데이트 (Hips(0) ~ Head(1.0))
 	const char* KinematicBoneNames[] = { "Hips", "Spine", "Spine1", "Spine2", "Neck", "Head" };
-	float BonePositions[] = { 0.0f, 0.15f, 0.35f, 0.55f, 0.8f, 1.0f };  // Hips(0) ~ Neck(0.8) ~ Head(1.0)
+	float BonePositions[] = { 0.0f, 0.2f, 0.4f, 0.6f, 0.8f, 1.0f };
 
 	const TArray<FBodyInstance*>& Bodies = PersonMesh->GetBodies();
 
@@ -723,9 +777,9 @@ void AFirefighterCharacter::UpdateCarriedPersonPose()
 				FBodyInstance* Body = Bodies[BoneIndex];
 				if (Body && Body->IsValidBodyInstance())
 				{
-					// Hips와 Neck 사이를 보간하여 위치 계산
+					// Hips와 Head 사이를 보간하여 위치 계산
 					float T = BonePositions[i];
-					FVector BonePos = FMath::Lerp(HipsPos, NeckPos, T);
+					FVector BonePos = FMath::Lerp(HipsPos, HeadPos, T);
 
 					// 트랜스폼 설정
 					FTransform BoneTransform(BonePos, SpineRotation, FVector(1, 1, 1));
@@ -765,6 +819,7 @@ void AFirefighterCharacter::StopCarryingPerson()
 	// 상태 초기화
 	CarriedPerson = nullptr;
 	bIsCarryingPerson = false;
+	OriginalSpineLength = 0.0f;
 }
 
 void AFirefighterCharacter::RebindBoneSockets()
