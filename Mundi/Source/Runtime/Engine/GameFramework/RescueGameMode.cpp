@@ -30,6 +30,7 @@ ARescueGameMode::ARescueGameMode()
     , OxygenPerTank(100.0f)
     , OxygenDecreaseRate(2.0f)
     , RunningOxygenMultiplier(2.0f)
+    , FireSuitOxygenMultiplier(0.5f)
     , RunningSpeedThreshold(1.2f)
     , OxygenWarningThreshold(30.0f)
     , CurrentOxygen(100.0f)
@@ -108,6 +109,45 @@ void ARescueGameMode::EndPlay()
 void ARescueGameMode::Tick(float DeltaSeconds)
 {
     Super::Tick(DeltaSeconds);
+
+    // 엔딩 전환 대기 중이면 타이머 처리
+    if (bWaitingForEnding)
+    {
+        EndingTimer += DeltaSeconds;
+        if (EndingTimer >= EndingTransitionDelay)
+        {
+            // GameInstance에 결과 저장
+            UGameInstance* GI = GetWorld() ? GetWorld()->GetGameInstance() : nullptr;
+            if (GI)
+            {
+                GI->SetRescuedCount(RescuedCount);
+                GI->SetPlayerHealth(bEndingPlayerDead ? 0 : 100);
+                UE_LOG("[info] RescueGameMode - Saved to GameInstance: Rescued=%d, Health=%d",
+                    RescuedCount, bEndingPlayerDead ? 0 : 100);
+            }
+
+            // 씬 전환 (GWorld 사용 - Lua와 동일)
+            if (GWorld)
+            {
+                GWorld->TransitionToLevel(EndingScenePath);
+            }
+            bWaitingForEnding = false;
+        }
+        return;  // 엔딩 대기 중에는 다른 업데이트 중지
+    }
+
+    // 플레이어 사망 체크 (불 데미지 등)
+    AFirefighterCharacter* Firefighter = nullptr;
+    if (PlayerController)
+    {
+        APawn* ControlledPawn = PlayerController->GetPawn();
+        Firefighter = Cast<AFirefighterCharacter>(ControlledPawn);
+    }
+    if (Firefighter && Firefighter->bIsDead)
+    {
+        TransitionToEnding(true);  // 플레이어 사망
+        return;
+    }
 
     // 산소 시스템 업데이트
     UpdateOxygenSystem(DeltaSeconds);
@@ -229,35 +269,21 @@ void ARescueGameMode::InitializePlayerState()
 {
     UGameInstance* GI = GetWorld() ? GetWorld()->GetGameInstance() : nullptr;
 
-    // 더미 아이템 설정 (테스트용) - GameInstance에도 추가
-    if (GI)
-    {
-        // 기존 아이템 확인 또는 더미 데이터 추가
-        if (!GI->HasItem("Oxygen"))
-        {
-            GI->AddItem("Oxygen", InitialOxygenTankCount);
-        }
-        if (!GI->HasItem("FireEX"))
-        {
-            GI->AddItem("FireEX", InitialFireExtinguisherCount);
-        }
-        if (bInitialHasFireSuit && !GI->HasItem("FireSuit"))
-        {
-            GI->AddItem("FireSuit", 1);
-        }
-    }
+    // GameInstance에서 실제 아이템 개수 가져오기
+    int32 OxygenTankCount = GI ? GI->GetItemCount("Oxygen") : 0;
+    int32 FireExCount = GI ? GI->GetItemCount("FireEX") : 0;
+    bool bHasFireSuit = GI ? GI->HasItem("FireSuit") : false;
 
     // 산소 시스템 초기화
-    int32 OxygenTankCount = GI ? GI->GetItemCount("Oxygen") : InitialOxygenTankCount;
     MaxOxygen = BaseOxygen + (OxygenPerTank * OxygenTankCount);
     CurrentOxygen = MaxOxygen;
 
     // 물 시스템 초기화
-    FireExtinguisherCount = GI ? GI->GetItemCount("FireEX") : InitialFireExtinguisherCount;
+    FireExtinguisherCount = FireExCount;
     CurrentWater = BaseWater;
 
-    UE_LOG("[info] RescueGameMode::InitializePlayerState - MaxOxygen: %.0f, FireExtinguishers: %d",
-        MaxOxygen, FireExtinguisherCount);
+    UE_LOG("[info] RescueGameMode::InitializePlayerState - OxygenTanks: %d, MaxOxygen: %.0f, FireExtinguishers: %d, FireSuit: %s",
+        OxygenTankCount, MaxOxygen, FireExtinguisherCount, bHasFireSuit ? "Yes" : "No");
 }
 
 // ----------------------------------------------------------------------------
@@ -450,7 +476,14 @@ void ARescueGameMode::UpdateOxygenSystem(float DeltaSeconds)
         }
     }
 
-    // 산소 감소 (달리기 시 배율 적용)
+    // 소방복 착용 시 산소 감소율 감소
+    UGameInstance* GI = GetWorld() ? GetWorld()->GetGameInstance() : nullptr;
+    if (GI && GI->HasItem("FireSuit"))
+    {
+        OxygenMultiplier *= FireSuitOxygenMultiplier;
+    }
+
+    // 산소 감소 (달리기 시 배율 적용, 소방복 착용 시 절반)
     CurrentOxygen -= OxygenDecreaseRate * OxygenMultiplier * DeltaSeconds;
 
     // 산소가 0 이하가 되면 플레이어 사망
@@ -462,6 +495,7 @@ void ARescueGameMode::UpdateOxygenSystem(float DeltaSeconds)
         if (Firefighter && !Firefighter->bIsDead)
         {
             Firefighter->Kill();
+            TransitionToEnding(true);  // 플레이어 사망
         }
     }
 }
@@ -594,10 +628,25 @@ void ARescueGameMode::OnPersonRescued()
     RescuedCount++;
     UE_LOG("[info] RescueGameMode::OnPersonRescued - Rescued: %d / %d", RescuedCount, TotalPersonCount);
 
-    // 모든 사람 구조 시 추가 처리 가능
+    // 모든 사람 구조 시 엔딩으로 전환
     if (TotalPersonCount > 0 && RescuedCount >= TotalPersonCount)
     {
-        UE_LOG("[info] RescueGameMode - All persons rescued!");
-        // TODO: 미션 완료 처리
+        UE_LOG("[info] RescueGameMode - All persons rescued! Transitioning to ending...");
+        TransitionToEnding(false);  // 플레이어 생존
     }
+}
+
+void ARescueGameMode::TransitionToEnding(bool bPlayerDead)
+{
+    if (bWaitingForEnding)
+    {
+        return;  // 이미 전환 대기 중
+    }
+
+    UE_LOG("[info] RescueGameMode::TransitionToEnding - PlayerDead: %s, Delay: %.1fs",
+        bPlayerDead ? "true" : "false", EndingTransitionDelay);
+
+    bWaitingForEnding = true;
+    bEndingPlayerDead = bPlayerDead;
+    EndingTimer = 0.0f;
 }

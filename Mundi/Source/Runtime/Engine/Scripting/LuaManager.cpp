@@ -597,6 +597,8 @@ FLuaManager::FLuaManager()
         "GetPlayerName", &UGameInstance::GetPlayerName,
         "SetRescuedCount", &UGameInstance::SetRescuedCount,
         "GetRescuedCount", &UGameInstance::GetRescuedCount,
+        "SetTotalPersonCount", &UGameInstance::SetTotalPersonCount,
+        "GetTotalPersonCount", &UGameInstance::GetTotalPersonCount,
         "ResetPlayerData", &UGameInstance::ResetPlayerData,
 
         // 범용 키-값 저장소

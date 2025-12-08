@@ -1,4 +1,4 @@
-// ----------------------------------------------------------------------------
+﻿// ----------------------------------------------------------------------------
 // RescueGameMode.h
 // 구조 미션 게임 모드
 // ----------------------------------------------------------------------------
@@ -75,6 +75,10 @@ public:
     /** 달리기 시 산소 감소 배율 */
     UPROPERTY(EditAnywhere, Category="Oxygen", Tooltip="달리기 시 산소 감소 배율입니다.")
     float RunningOxygenMultiplier;
+
+    /** 소방복 착용 시 산소 감소 배율 */
+    UPROPERTY(EditAnywhere, Category="Oxygen", Tooltip="소방복 착용 시 산소 감소 배율입니다. (기본값 0.5 = 절반)")
+    float FireSuitOxygenMultiplier;
 
     /** 달리기 판정 속도 비율 (MaxWalkSpeed 기준) */
     UPROPERTY(EditAnywhere, Category="Oxygen", Tooltip="이 비율 이상의 속도면 달리기로 판정합니다.")
@@ -181,6 +185,21 @@ public:
     /** 사람 구조 처리 (구조 카운트 증가) */
     void OnPersonRescued();
 
+    // ────────────────────────────────────────────────
+    // 엔딩 전환
+    // ────────────────────────────────────────────────
+
+    /** 엔딩 씬 경로 */
+    UPROPERTY(EditAnywhere, Category="Ending", Tooltip="엔딩 씬 경로입니다.")
+    FWideString EndingScenePath = L"Data/Scenes/Ending.scene";
+
+    /** 엔딩 전환 지연 시간 (초) */
+    UPROPERTY(EditAnywhere, Category="Ending", Tooltip="게임 오버/구조 완료 후 엔딩 전환까지 지연 시간입니다.")
+    float EndingTransitionDelay = 2.0f;
+
+    /** 엔딩으로 전환 (GameInstance에 결과 저장 후 씬 전환) */
+    void TransitionToEnding(bool bPlayerDead);
+
 protected:
     // ────────────────────────────────────────────────
     // 내부 함수
@@ -232,4 +251,17 @@ private:
 
     /** 캐시된 구조 구역 Actor */
     mutable AActor* CachedSafeZoneActor = nullptr;
+
+    // ────────────────────────────────────────────────
+    // 엔딩 전환 상태
+    // ────────────────────────────────────────────────
+
+    /** 엔딩 전환 대기 중 여부 */
+    bool bWaitingForEnding = false;
+
+    /** 엔딩 전환 타이머 */
+    float EndingTimer = 0.0f;
+
+    /** 플레이어 사망 여부 (엔딩 결과용) */
+    bool bEndingPlayerDead = false;
 };

@@ -33,35 +33,35 @@ local MinSpawnDistance = 5.0         -- 스폰된 오브젝트 간 최소 거리
 local PrefabList = {
     {
         path = "Data/Prefabs/David.prefab",
-        maxCount = 3,
+        maxCount = 1,
         maxAttempts = 50,
         floorOffsetRatio = 0.0,
         rotationOffset = Vector(0, 0, 0)
     },
     {
         path = "Data/Prefabs/Elizabeth.prefab",
-        maxCount = 3,
+        maxCount = 1,
         maxAttempts = 50,
         floorOffsetRatio = 0.0,
         rotationOffset = Vector(0, 0, 0)
     },
     {
         path = "Data/Prefabs/Lewis.prefab",
-        maxCount = 3,
+        maxCount = 1,
         maxAttempts = 50,
         floorOffsetRatio = 0.0,
         rotationOffset = Vector(0, 0, 0)
     },
     {
         path = "Data/Prefabs/Sophie.prefab",
-        maxCount = 3,
+        maxCount = 1,
         maxAttempts = 50,
         floorOffsetRatio = 0.0,
         rotationOffset = Vector(0, 0, 0)
     },
     {
         path = "Data/Prefabs/Suzie.prefab",
-        maxCount = 3,
+        maxCount = 1,
         maxAttempts = 50,
         floorOffsetRatio = 0.0,
         rotationOffset = Vector(0, 0, 0)
@@ -364,6 +364,13 @@ local function SpawnMultiple()
         print("[SafeSpawner] Set GameMode.TotalPersonCount = " .. personSpawned)
     else
         print("[SafeSpawner] WARNING: Could not set TotalPersonCount - RescueGameMode not found")
+    end
+
+    -- GameInstance에도 TotalPersonCount 저장 (Ending에서 사용)
+    local gi = GetGameInstance()
+    if gi then
+        gi:SetTotalPersonCount(personSpawned)
+        print("[SafeSpawner] Set GameInstance.TotalPersonCount = " .. personSpawned)
     end
 
     return totalSpawned

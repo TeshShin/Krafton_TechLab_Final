@@ -118,6 +118,13 @@ function OnBeginPlay()
 
     -- 애니메이션 상태 머신 설정
     SetupAnimationStateMachine()
+
+    -- GameInstance에서 FireSuit 보유 확인 후 자동 장착
+    local gi = GetGameInstance()
+    if gi and gi:HasItem("FireSuit") then
+        print("[FirefighterController] FireSuit found in GameInstance - Auto equipping...")
+        EquipFireSuit()
+    end
 end
 
 -- ============================================================================
