@@ -1,0 +1,66 @@
+{
+  "ObjectName" : "Elizabeth",
+  "OwnedComponents" : [{
+      "CollisionChannel" : 1,
+      "CollisionEnabled" : 3,
+      "CollisionMask" : -1,
+      "Id" : 3150,
+      "MaterialSlots" : [{
+          "Type" : "None"
+        }, {
+          "AssetPath" : "Ch26_body",
+          "Type" : "UMaterial"
+        }, {
+          "AssetPath" : "Ch26_hair",
+          "Type" : "UMaterial"
+        }],
+      "Mobility" : 1,
+      "ObjectName" : "USkeletalMeshComponent_73",
+      "ParentId" : 0,
+      "PhysicalMaterial" : "",
+      "PhysicsAsset" : "Data/Physics/Elizabeth.physicsasset",
+      "PhysicsMode" : 1,
+      "RagdollRootBoneIndex" : 0,
+      "RagdollRootBoneName" : "",
+      "RelativeLocation" : [9.285559, 12.427480, -7.918000],
+      "RelativeRotationEuler" : [0.000000, -0.000000, -179.999985],
+      "RelativeScale" : [1.500000, 1.500000, 1.500000],
+      "SkeletalMesh" : "Data/People/Elizabeth.fbx",
+      "Type" : "USkeletalMeshComponent",
+      "bBlockComponent" : false,
+      "bCastShadows" : true,
+      "bGenerateOverlapEvents" : true,
+      "bHiddenInGame" : false,
+      "bIsActive" : true,
+      "bIsVisible" : true,
+      "bSimulatePhysics" : true,
+      "bTickEnabled" : true,
+      "bTickInEditor" : false,
+      "bUpdateComponentLocationFromRagdoll" : true
+    }, {
+      "ObjectName" : "ULuaScriptComponent_16",
+      "ScriptFilePath" : "Data/Scripts/RescuedPeople.lua",
+      "Type" : "ULuaScriptComponent",
+      "bHiddenInGame" : false,
+      "bIsActive" : true,
+      "bTickEnabled" : true,
+      "bTickInEditor" : false
+    }, {
+      "ItemName" : "",
+      "ItemType" : 1,
+      "ObjectName" : "UItemComponent_26",
+      "Quantity" : 1,
+      "Type" : "UItemComponent",
+      "bCanPickUp" : true,
+      "bHiddenInGame" : false,
+      "bIsActive" : true,
+      "bIsHighlighted" : true,
+      "bTickEnabled" : true,
+      "bTickInEditor" : false
+    }],
+  "RootComponentId" : 3150,
+  "Tag" : "",
+  "Type" : "ASkeletalMeshActor",
+  "bActorHiddenInGame" : false,
+  "bActorIsActive" : true
+}

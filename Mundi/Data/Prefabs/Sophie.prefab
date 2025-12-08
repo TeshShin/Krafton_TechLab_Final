@@ -1,0 +1,66 @@
+{
+  "ObjectName" : "Sophie",
+  "OwnedComponents" : [{
+      "CollisionChannel" : 1,
+      "CollisionEnabled" : 3,
+      "CollisionMask" : -1,
+      "Id" : 3200,
+      "MaterialSlots" : [{
+          "Type" : "None"
+        }, {
+          "AssetPath" : "Ch02_body",
+          "Type" : "UMaterial"
+        }, {
+          "AssetPath" : "Ch02_hair",
+          "Type" : "UMaterial"
+        }],
+      "Mobility" : 1,
+      "ObjectName" : "USkeletalMeshComponent_73",
+      "ParentId" : 0,
+      "PhysicalMaterial" : "",
+      "PhysicsAsset" : "Data/Physics/Sophie.physicsasset",
+      "PhysicsMode" : 1,
+      "RagdollRootBoneIndex" : 0,
+      "RagdollRootBoneName" : "",
+      "RelativeLocation" : [9.285559, 18.015514, -7.918000],
+      "RelativeRotationEuler" : [0.000000, -0.000000, -179.999985],
+      "RelativeScale" : [1.500000, 1.500000, 1.500000],
+      "SkeletalMesh" : "Data/People/Sophie.fbx",
+      "Type" : "USkeletalMeshComponent",
+      "bBlockComponent" : false,
+      "bCastShadows" : true,
+      "bGenerateOverlapEvents" : true,
+      "bHiddenInGame" : false,
+      "bIsActive" : true,
+      "bIsVisible" : true,
+      "bSimulatePhysics" : true,
+      "bTickEnabled" : true,
+      "bTickInEditor" : false,
+      "bUpdateComponentLocationFromRagdoll" : true
+    }, {
+      "ItemName" : "",
+      "ItemType" : 1,
+      "ObjectName" : "UItemComponent_28",
+      "Quantity" : 1,
+      "Type" : "UItemComponent",
+      "bCanPickUp" : true,
+      "bHiddenInGame" : false,
+      "bIsActive" : true,
+      "bIsHighlighted" : true,
+      "bTickEnabled" : true,
+      "bTickInEditor" : false
+    }, {
+      "ObjectName" : "ULuaScriptComponent_18",
+      "ScriptFilePath" : "Data/Scripts/RescuedPeople.lua",
+      "Type" : "ULuaScriptComponent",
+      "bHiddenInGame" : false,
+      "bIsActive" : true,
+      "bTickEnabled" : true,
+      "bTickInEditor" : false
+    }],
+  "RootComponentId" : 3200,
+  "Tag" : "",
+  "Type" : "ASkeletalMeshActor",
+  "bActorHiddenInGame" : false,
+  "bActorIsActive" : true
+}

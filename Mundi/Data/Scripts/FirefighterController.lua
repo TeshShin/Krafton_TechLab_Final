@@ -28,8 +28,11 @@ local STATE_WATERMAGIC_END = "WaterMagic_End"
 -- 애니메이션 에셋 경로 (Without_Cloth 버전)
 local ANIM_WITHOUT_CLOTH = {
     IDLE = "Data/firefighter/Firefighter_Without_Cloth_Idle_mixamo.com",
+    IDLE_WITH_OBJECT = "Data/firefighter/Firefighter_Without_Cloth_Idle_With_Object_mixamo.com",
     WALKING = "Data/firefighter/Firefighter_Without_Cloth_Walking_mixamo.com",
+    WALKING_WITH_OBJECT = "Data/firefighter/Firefighter_Without_Cloth_Walking_With_Object_mixamo.com",
     RUNNING = "Data/firefighter/Firefighter_Without_Cloth_Running_mixamo.com",
+    RUNNING_WITH_OBJECT = "Data/firefighter/Firefighter_Without_Cloth_Running_With_Object_mixamo.com",
     PICKUP = "Data/firefighter/Firefighter_Without_Cloth_Picking_Up_Object_mixamo.com",
     WATERMAGIC_START = "Data/firefighter/Firefighter_Without_Cloth_WaterMagic_Start_mixamo.com",
     WATERMAGIC_PROGRESS = "Data/firefighter/Firefighter_Without_Cloth_WaterMagic_Progress_mixamo.com",
@@ -39,8 +42,11 @@ local ANIM_WITHOUT_CLOTH = {
 -- 애니메이션 에셋 경로 (With_Cloth 버전 - 소방복 장착 시)
 local ANIM_WITH_CLOTH = {
     IDLE = "Data/firefighter/Firefighter_With_Cloth_Idle_mixamo.com",
+    IDLE_WITH_OBJECT = "Data/firefighter/Firefighter_With_Cloth_Idle_With_Object_mixamo.com",
     WALKING = "Data/firefighter/Firefighter_With_Cloth_Walking_mixamo.com",
+    WALKING_WITH_OBJECT = "Data/firefighter/Firefighter_With_Cloth_Walking_With_Object_mixamo.com",
     RUNNING = "Data/firefighter/Firefighter_With_Cloth_Running_mixamo.com",
+    RUNNING_WITH_OBJECT = "Data/firefighter/Firefighter_With_Cloth_Running_With_Object_mixamo.com",
     PICKUP = "Data/firefighter/Firefighter_With_Cloth_Picking_Up_Object_mixamo.com",
     WATERMAGIC_START = "Data/firefighter/Firefighter_With_Cloth_WaterMagic_Start_mixamo.com",
     WATERMAGIC_PROGRESS = "Data/firefighter/Firefighter_With_Cloth_WaterMagic_Progress_mixamo.com",

@@ -1,0 +1,66 @@
+{
+  "ObjectName" : "David",
+  "OwnedComponents" : [{
+      "CollisionChannel" : 1,
+      "CollisionEnabled" : 3,
+      "CollisionMask" : -1,
+      "Id" : 3125,
+      "MaterialSlots" : [{
+          "Type" : "None"
+        }, {
+          "AssetPath" : "Ch28_body",
+          "Type" : "UMaterial"
+        }, {
+          "AssetPath" : "Ch28_hair",
+          "Type" : "UMaterial"
+        }],
+      "Mobility" : 1,
+      "ObjectName" : "USkeletalMeshComponent_73",
+      "ParentId" : 0,
+      "PhysicalMaterial" : "",
+      "PhysicsAsset" : "Data/Physics/David.physicsasset",
+      "PhysicsMode" : 1,
+      "RagdollRootBoneIndex" : 0,
+      "RagdollRootBoneName" : "",
+      "RelativeLocation" : [9.212778, 9.657928, -7.918000],
+      "RelativeRotationEuler" : [0.000000, -0.000000, -179.999985],
+      "RelativeScale" : [1.500000, 1.500000, 1.500000],
+      "SkeletalMesh" : "Data/People/David.fbx",
+      "Type" : "USkeletalMeshComponent",
+      "bBlockComponent" : false,
+      "bCastShadows" : true,
+      "bGenerateOverlapEvents" : true,
+      "bHiddenInGame" : false,
+      "bIsActive" : true,
+      "bIsVisible" : true,
+      "bSimulatePhysics" : true,
+      "bTickEnabled" : true,
+      "bTickInEditor" : false,
+      "bUpdateComponentLocationFromRagdoll" : true
+    }, {
+      "ItemName" : "",
+      "ItemType" : 1,
+      "ObjectName" : "UItemComponent_25",
+      "Quantity" : 1,
+      "Type" : "UItemComponent",
+      "bCanPickUp" : true,
+      "bHiddenInGame" : false,
+      "bIsActive" : true,
+      "bIsHighlighted" : true,
+      "bTickEnabled" : true,
+      "bTickInEditor" : false
+    }, {
+      "ObjectName" : "ULuaScriptComponent_3",
+      "ScriptFilePath" : "Data/Scripts/RescuedPeople.lua",
+      "Type" : "ULuaScriptComponent",
+      "bHiddenInGame" : false,
+      "bIsActive" : true,
+      "bTickEnabled" : true,
+      "bTickInEditor" : false
+    }],
+  "RootComponentId" : 3125,
+  "Tag" : "",
+  "Type" : "ASkeletalMeshActor",
+  "bActorHiddenInGame" : false,
+  "bActorIsActive" : true
+}
