@@ -137,7 +137,27 @@ bool UGameEngine::CreateMainWindow(HINSTANCE hInstance)
     WCHAR WindowClass[] = L"JungleWindowClass";
     WCHAR Title[] = L"Mundi Engine";
     HICON hIcon = (HICON)LoadImageW(NULL, L"Data\\Icon\\MND.ico", IMAGE_ICON, 0, 0, LR_LOADFROMFILE | LR_DEFAULTSIZE);
+
+#ifdef _GAME
+    int cursorWidth = GetSystemMetrics(SM_CXCURSOR) * 2;   // 2배 크기
+    int cursorHeight = GetSystemMetrics(SM_CYCURSOR) * 2;  // 2배 크기
+
+    HCURSOR hCustomCursor = (HCURSOR)LoadImageW(
+        NULL,
+        L"Data\\Textures\\Cursor\\firefighter_cursor.cur",
+        IMAGE_CURSOR,
+        cursorWidth,
+        cursorHeight,
+        LR_LOADFROMFILE
+    );
+
+    // 커스텀 커서가 로드되면 윈도우 클래스에 설정
+    WNDCLASSW wndclass = { 0, WndProc, 0, 0, 0, hIcon, hCustomCursor ? hCustomCursor : LoadCursor(NULL, IDC_ARROW), 0, 0, WindowClass };
+#else
+    // 에디터 빌드에서는 기본 커서 사용
     WNDCLASSW wndclass = { 0, WndProc, 0, 0, 0, hIcon, 0, 0, 0, WindowClass };
+#endif
+
     RegisterClassW(&wndclass);
 
     // Load client area size from INI
