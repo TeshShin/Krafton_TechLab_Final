@@ -30,6 +30,7 @@
 #include "ItemComponent.h"
 #include "RescueGameMode.h"
 #include "../Audio/Sound.h"
+#include "StaticMeshComponent.h"
 
 AFirefighterCharacter::AFirefighterCharacter()
 	: bOrientRotationToMovement(true)
@@ -173,6 +174,22 @@ AFirefighterCharacter::AFirefighterCharacter()
 	WaterStartSound = UResourceManager::GetInstance().Load<USound>("Data/Audio/water_start.wav");
 	WaterLoopSound = UResourceManager::GetInstance().Load<USound>("Data/Audio/water_ing.wav");
 	WaterEndSound = UResourceManager::GetInstance().Load<USound>("Data/Audio/water_end.wav");
+	
+	// 아이템 획득 사운드 로드
+	ItemPickupSound = UResourceManager::GetInstance().Load<USound>("Data/Audio/AcquisitionSound.wav");
+
+	// 아이템 픽업 파티클 컴포넌트 생성
+	ItemPickupParticle = CreateDefaultSubobject<UParticleSystemComponent>("ItemPickupParticle");
+	if (ItemPickupParticle)
+	{
+		// 루트에 붙이지 않고 월드 위치로 직접 설정할 것임
+		ItemPickupParticle->bAutoActivate = false;
+		UParticleSystem* PickupEffect = UResourceManager::GetInstance().Load<UParticleSystem>("Data/Particles/ItemPickup.particle");
+		if (PickupEffect)
+		{
+			ItemPickupParticle->SetTemplate(PickupEffect);
+		}
+	}
 
 	// 왼손 본 소켓 컴포넌트 생성 (사람 들기용 - Neck 부착)
 	LeftHandSocket = CreateDefaultSubobject<UBoneSocketComponent>("LeftHandSocket");
@@ -193,6 +210,39 @@ AFirefighterCharacter::AFirefighterCharacter()
 		// 손에서 앞쪽(X)으로 오프셋 + 위(Z)로 올려서 손 관통 방지
 		RightHandSocket->SocketOffsetLocation = FVector(0.5f, 0.0f, 0.0f);
 	}
+
+	// 충돌 파티클 컴포넌트 생성 (1~4)
+	const char* CollisionParticlePaths[4] = {
+		"Data/Particles/CollisionBoom1.particle",
+		"Data/Particles/CollisionBoom2.particle",
+		"Data/Particles/CollisionBoom3.particle",
+		"Data/Particles/CollisionBoom4.particle"
+	};
+
+	const char* CollisionParticleNames[4] = {
+		"CollisionBoomParticle1",
+		"CollisionBoomParticle2",
+		"CollisionBoomParticle3",
+		"CollisionBoomParticle4"
+	};
+
+	for (int32 i = 0; i < 4; ++i)
+	{
+		CollisionBoomParticles[i] = CreateDefaultSubobject<UParticleSystemComponent>(CollisionParticleNames[i]);
+		if (CollisionBoomParticles[i])
+		{
+			CollisionBoomParticles[i]->bAutoActivate = false;
+			UParticleSystem* Effect = UResourceManager::GetInstance().Load<UParticleSystem>(CollisionParticlePaths[i]);
+			if (Effect)
+			{
+				CollisionBoomParticles[i]->SetTemplate(Effect);
+			}
+		}
+	}
+
+	// 충돌 사운드 로드
+	GlassBreakSounds[0] = UResourceManager::GetInstance().Load<USound>("Data/Audio/GlassBreak1.wav");
+	GlassBreakSounds[1] = UResourceManager::GetInstance().Load<USound>("Data/Audio/GlassBreak2.wav");
 }
 
 AFirefighterCharacter::~AFirefighterCharacter()
@@ -219,6 +269,12 @@ void AFirefighterCharacter::BeginPlay()
 	{
 		RightHandSocket->SetTargetByName(MeshComponent, "mixamorig:RightHand");
 		UE_LOG("[FirefighterCharacter] RightHandSocket TargetMesh set, BoneIndex=%d", RightHandSocket->BoneIndex);
+	}
+
+	// CapsuleComponent 충돌 이벤트 바인딩
+	if (CapsuleComponent)
+	{
+		CapsuleComponent->OnComponentHit.AddDynamic(this, &AFirefighterCharacter::HandleCapsuleHit);
 	}
 }
 
@@ -315,6 +371,12 @@ void AFirefighterCharacter::Tick(float DeltaSeconds)
 	if (DamageCooldownTimer > 0.0f)
 	{
 		DamageCooldownTimer -= DeltaSeconds;
+	}
+
+	// 충돌 이펙트 쿨타임 타이머 업데이트
+	if (CollisionEffectCooldownTimer > 0.0f)
+	{
+		CollisionEffectCooldownTimer -= DeltaSeconds;
 	}
 
 	// 사람을 들고 있을 때 상체 본들 위치 업데이트
@@ -488,6 +550,25 @@ void AFirefighterCharacter::StopWaterMagicEffect()
 	if (WaterEndSound)
 	{
 		FAudioDevice::PlaySound3D(WaterEndSound, GetWaterEmitterLocation(), 0.35f, false);
+	}
+}
+
+void AFirefighterCharacter::PlayItemPickupEffect(const FVector& Position)
+{
+	if (!ItemPickupParticle)
+	{
+		return;
+	}
+
+	// 지정된 위치에 파티클 배치
+	ItemPickupParticle->SetWorldLocation(Position);
+	ItemPickupParticle->ResetParticles();
+	ItemPickupParticle->ActivateSystem();
+
+	// 아이템 획득 사운드 재생
+	if (ItemPickupSound)
+	{
+		FAudioDevice::PlaySound3D(ItemPickupSound, Position, 1.0f, false);
 	}
 }
 
@@ -1245,4 +1326,66 @@ void AFirefighterCharacter::SetCanUseWaterMagic(bool bCanUse)
 			ForceStopWaterMagic();
 		}
 	}
+}
+
+void AFirefighterCharacter::PlayCollisionEffect(const FVector& Position)
+{
+	// 쿨타임 중이면 재생하지 않음
+	if (CollisionEffectCooldownTimer > 0.0f)
+	{
+		return;
+	}
+
+	// 쿨타임 시작
+	CollisionEffectCooldownTimer = CollisionEffectCooldown;
+
+	// 랜덤 파티클 선택 (1~4)
+	int32 ParticleIndex = rand() % 4;
+	if (CollisionBoomParticles[ParticleIndex])
+	{
+		UE_LOG("[CollisionEffect] Position: (%.2f, %.2f, %.2f), Particle: %d", Position.X, Position.Y, Position.Z, ParticleIndex + 1);
+		CollisionBoomParticles[ParticleIndex]->SetWorldLocation(Position);
+		CollisionBoomParticles[ParticleIndex]->ResetParticles();
+		CollisionBoomParticles[ParticleIndex]->ActivateSystem();
+	}
+
+	// 랜덤 사운드 선택 (1~2)
+	int32 SoundIndex = rand() % 2;
+	if (GlassBreakSounds[SoundIndex])
+	{
+		FAudioDevice::PlaySound3D(GlassBreakSounds[SoundIndex], Position, 0.7f, false);
+	}
+}
+
+void AFirefighterCharacter::HandleCapsuleHit(UPrimitiveComponent* HitComp, AActor* OtherActor, UPrimitiveComponent* OtherComp, FVector NormalImpulse, const FHitResult& Hit)
+{
+	// 사망 상태면 무시
+	if (bIsDead)
+	{
+		return;
+	}
+
+	// 충돌한 컴포넌트가 없으면 무시
+	if (!OtherComp)
+	{
+		return;
+	}
+
+	// 충돌한 컴포넌트가 StaticMesh인지 확인
+	UStaticMeshComponent* StaticMesh = Cast<UStaticMeshComponent>(OtherComp);
+	if (!StaticMesh)
+	{
+		return;
+	}
+
+	// 물리 시뮬레이션 중인 (움직이는) 메시인지 확인
+	if (!StaticMesh->bSimulatePhysics)
+	{
+		return;
+	}
+
+	// 충돌한 오브젝트 위치에서 이펙트 재생
+	FVector ParticlePlayLocation = OtherComp->GetWorldLocation();
+	ParticlePlayLocation.Z += 1.0f;
+	PlayCollisionEffect(ParticlePlayLocation);
 }

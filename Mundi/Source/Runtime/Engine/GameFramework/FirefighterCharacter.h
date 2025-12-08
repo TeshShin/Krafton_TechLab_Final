@@ -9,6 +9,7 @@ class UParticleSystemComponent;
 class UBoneSocketComponent;
 class USound;
 struct IXAudio2SourceVoice;
+struct FHitResult;
 
 UCLASS(DisplayName = "파이어 파이터 캐릭터", Description = "렛츠고 파이어 파이터")
 class AFirefighterCharacter : public ACharacter
@@ -66,6 +67,10 @@ public:
     /** 물 마법 파티클 재생 중지 (Lua에서 호출) */
     UFUNCTION(LuaBind, DisplayName="StopWaterMagicEffect")
     void StopWaterMagicEffect();
+
+    /** 아이템 픽업 파티클 재생 (Lua에서 호출) */
+    UFUNCTION(LuaBind, DisplayName="PlayItemPickupEffect")
+    void PlayItemPickupEffect(const FVector& Position);
 
     /** 소화 게이지 감소 (Lua에서 호출) */
     UFUNCTION(LuaBind, DisplayName="DrainExtinguishGauge")
@@ -189,6 +194,9 @@ private:
     /** 오른발 먼지 파티클 컴포넌트 */
     UParticleSystemComponent* RightFootDustParticle;
 
+    /** 아이템 픽업 파티클 컴포넌트 */
+    UParticleSystemComponent* ItemPickupParticle;
+
     /** 발먼지 파티클 재생 (내부 함수) */
     void PlayFootDustEffect(bool bLeftFoot);
 
@@ -208,6 +216,31 @@ private:
 
     /** 물 루프 사운드 Voice 핸들 */
     IXAudio2SourceVoice* WaterLoopVoice = nullptr;
+    
+    /** 아이템 획득 사운드 */
+    USound* ItemPickupSound = nullptr;
+
+    // ────────────────────────────────────────────────
+    // 충돌 이펙트 (움직이는 물체와 충돌 시)
+    // ────────────────────────────────────────────────
+
+    /** 충돌 파티클 컴포넌트 (1~4) */
+    UParticleSystemComponent* CollisionBoomParticles[4] = { nullptr };
+
+    /** 충돌 사운드 (1~2) */
+    USound* GlassBreakSounds[2] = { nullptr };
+
+    /** 충돌 이펙트 쿨타임 (초) */
+    float CollisionEffectCooldown = 0.5f;
+
+    /** 충돌 이펙트 쿨타임 타이머 */
+    float CollisionEffectCooldownTimer = 0.0f;
+
+    /** 충돌 이펙트 재생 */
+    void PlayCollisionEffect(const FVector& Position);
+
+    /** CapsuleComponent 충돌 핸들러 */
+    void HandleCapsuleHit(UPrimitiveComponent* HitComp, AActor* OtherActor, UPrimitiveComponent* OtherComp, FVector NormalImpulse, const FHitResult& Hit);
 
     /** 데미지 쿨타임 타이머 */
     float DamageCooldownTimer = 0.0f;
