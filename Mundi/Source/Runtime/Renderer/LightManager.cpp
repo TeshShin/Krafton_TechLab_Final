@@ -563,7 +563,7 @@ void FLightManager::AllocateAtlasRegions2D(TArray<FShadowRenderRequest>& InOutRe
 			// Only log error for non-preview worlds (preview worlds have shadows disabled intentionally)
 			if (!OwningWorld || !OwningWorld->IsPreviewWorld())
 			{
-				UE_LOG("그림자 맵 아틀라스가 가득차서 더 이상 그림자를 추가할 수 없습니다.");
+				//UE_LOG("그림자 맵 아틀라스가 가득차서 더 이상 그림자를 추가할 수 없습니다.");
 			}
 			continue;
 		}
