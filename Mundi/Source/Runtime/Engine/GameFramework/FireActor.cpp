@@ -10,6 +10,10 @@
 #include "World.h"
 #include "FirefighterCharacter.h"
 
+TArray<AFireActor*> AFireActor::ActiveFires;
+int32 AFireActor::AudioUpdateCursor = 0;
+TArray<AFireActor::FExtinguishVoice> AFireActor::ActiveExtinguishVoices;
+
 AFireActor::AFireActor()
 	: bIsActive(true)
 	, FireIntensity(1.0f)
@@ -60,6 +64,8 @@ AFireActor::~AFireActor()
 		FAudioDevice::StopSound(FireLoopVoice);
 		FireLoopVoice = nullptr;
 	}
+
+	UnregisterFireActor(this);
 }
 
 void AFireActor::BeginPlay()
@@ -71,11 +77,7 @@ void AFireActor::BeginPlay()
 		FireParticle->ActivateSystem();
 	}
 
-	// 불이 활성화 상태면 루프 사운드 시작
-	if (bIsActive && FireLoopSound)
-	{
-		FireLoopVoice = FAudioDevice::PlaySound3D(FireLoopSound, GetActorLocation(), 1.0f, true);
-	}
+	RegisterFireActor(this);
 }
 
 void AFireActor::Tick(float DeltaSeconds)
@@ -128,6 +130,13 @@ void AFireActor::Tick(float DeltaSeconds)
 
 		Player->TakeDamage(Damage);
 	}
+
+	// 루프 사운드/끄는 사운드는 프레임당 한 번만 전역 갱신 (가장 가까운 4개만 재생, 끄는 사운드는 전역 제한)
+	if (AudioUpdateCursor == 0)
+	{
+		UpdateFireLoopAudio(DeltaSeconds);
+	}
+	AudioUpdateCursor = (AudioUpdateCursor + 1) % FMath::Max(1, ActiveFires.Num());
 }
 
 void AFireActor::DuplicateSubObjects()
@@ -149,6 +158,12 @@ void AFireActor::DuplicateSubObjects()
 	// 사운드 다시 로드
 	FireLoopSound = UResourceManager::GetInstance().Load<USound>("Data/Audio/fire.wav");
 	FireExtinguishSound = UResourceManager::GetInstance().Load<USound>("Data/Audio/fire_over.wav");
+}
+
+void AFireActor::EndPlay()
+{
+	UnregisterFireActor(this);
+	Super::EndPlay();
 }
 
 void AFireActor::Serialize(const bool bInIsLoading, JSON& InOutHandle)
@@ -192,6 +207,55 @@ void AFireActor::Serialize(const bool bInIsLoading, JSON& InOutHandle)
 	}
 }
 
+void AFireActor::PruneExtinguishVoices(float DeltaSeconds)
+{
+	if (ActiveExtinguishVoices.Num() == 0)
+	{
+		return;
+	}
+
+	for (int32 i = ActiveExtinguishVoices.Num() - 1; i >= 0; --i)
+	{
+		ActiveExtinguishVoices[i].TimeLeft -= DeltaSeconds;
+		if (ActiveExtinguishVoices[i].TimeLeft <= 0.0f)
+		{
+			ActiveExtinguishVoices.RemoveAtSwap(i);
+		}
+	}
+}
+
+void AFireActor::TryPlayExtinguishSound(USound* Sound, const FVector& Location)
+{
+	if (!Sound)
+	{
+		return;
+	}
+
+	// 만료된 엔트리 제거
+	PruneExtinguishVoices(0.0f);
+
+	if (ActiveExtinguishVoices.Num() >= MaxSimultaneousExtinguishSounds)
+	{
+		return;
+	}
+
+	int32 NewCount = ActiveExtinguishVoices.Num() + 1;
+	float VolumeScale = ExtinguishBaseVolume;
+	if (NewCount > 1)
+	{
+		VolumeScale = ExtinguishBaseVolume / FMath::Sqrt(static_cast<float>(NewCount));
+	}
+
+	IXAudio2SourceVoice* Voice = FAudioDevice::PlaySound3D(Sound, Location, VolumeScale, false);
+	if (Voice)
+	{
+		FExtinguishVoice Entry;
+		Entry.Voice = Voice;
+		Entry.TimeLeft = ExtinguishSoundWindow;
+		ActiveExtinguishVoices.Add(Entry);
+	}
+}
+
 void AFireActor::SetFireActive(bool bActive)
 {
 	bIsActive = bActive;
@@ -210,14 +274,7 @@ void AFireActor::SetFireActive(bool bActive)
 	}
 
 	// 불 루프 사운드 제어
-	if (bActive)
-	{
-		if (FireLoopSound && !FireLoopVoice)
-		{
-			FireLoopVoice = FAudioDevice::PlaySound3D(FireLoopSound, GetActorLocation(), 1.0f, true);
-		}
-	}
-	else
+	if (!bActive)
 	{
 		if (FireLoopVoice)
 		{
@@ -261,9 +318,193 @@ void AFireActor::ApplyWaterDamage(float DamageAmount)
 	// 불이 작아질 때 fire_over 사운드 재생 (쿨다운 적용)
 	if (FireExtinguishSound && ExtinguishSoundCooldown <= 0.0f)
 	{
-		FAudioDevice::PlaySound3D(FireExtinguishSound, GetActorLocation(), 1.0f, false);
-		ExtinguishSoundCooldown = 0.3f;  // 0.3초 쿨다운
+		// 전역 동시 재생 제한/볼륨 스케일 적용
+		TryPlayExtinguishSound(FireExtinguishSound, GetActorLocation());
+		ExtinguishSoundCooldown = ExtinguishSoundWindow;  // 0.3초 쿨다운
 	}
 
 	SetFireIntensity(NewIntensity);
+}
+
+void AFireActor::RegisterFireActor(AFireActor* FireActor)
+{
+	if (!FireActor)
+	{
+		return;
+	}
+
+	ActiveFires.AddUnique(FireActor);
+}
+
+void AFireActor::UnregisterFireActor(AFireActor* FireActor)
+{
+	if (!FireActor)
+	{
+		return;
+	}
+
+	ActiveFires.Remove(FireActor);
+
+	if (FireActor->FireLoopVoice)
+	{
+		FAudioDevice::StopSound(FireActor->FireLoopVoice);
+		FireActor->FireLoopVoice = nullptr;
+	}
+}
+
+void AFireActor::UpdateFireLoopAudio(float DeltaSeconds)
+{
+	PruneExtinguishVoices(DeltaSeconds);
+
+	// 월드/플레이어 없으면 모두 정지
+	if (ActiveFires.Num() == 0)
+	{
+		return;
+	}
+
+	UWorld* World = ActiveFires[0] ? ActiveFires[0]->GetWorld() : nullptr;
+	if (!World)
+	{
+		for (AFireActor* Fire : ActiveFires)
+		{
+			if (Fire && Fire->FireLoopVoice)
+			{
+				FAudioDevice::StopSound(Fire->FireLoopVoice);
+				Fire->FireLoopVoice = nullptr;
+			}
+		}
+		return;
+	}
+
+	AFirefighterCharacter* Player = World->FindActor<AFirefighterCharacter>();
+	if (!Player)
+	{
+		for (AFireActor* Fire : ActiveFires)
+		{
+			if (Fire && Fire->FireLoopVoice)
+			{
+				FAudioDevice::StopSound(Fire->FireLoopVoice);
+				Fire->FireLoopVoice = nullptr;
+			}
+		}
+		return;
+	}
+
+	FVector PlayerLocation = Player->GetActorLocation();
+
+	struct FFireDistance
+	{
+		AFireActor* Fire;
+		float DistanceSq;
+	};
+
+	TArray<FFireDistance> Candidates;
+	Candidates.Reserve(ActiveFires.Num());
+
+	for (AFireActor* Fire : ActiveFires)
+	{
+		if (!Fire || !Fire->bIsActive || !Fire->FireLoopSound)
+		{
+			// 비활성/사운드 없음: 보이스 정지
+			if (Fire && Fire->FireLoopVoice)
+			{
+				FAudioDevice::StopSound(Fire->FireLoopVoice);
+				Fire->FireLoopVoice = nullptr;
+			}
+			continue;
+		}
+
+		float DistSq = (Fire->GetActorLocation() - PlayerLocation).SizeSquared();
+		Candidates.Add({ Fire, DistSq });
+	}
+
+	// 거리 오름차순 정렬
+	// 가장 가까운 N개 선형 선택(O(n)): 상위 4개만 유지
+	AFireActor* Closest[MaxSimultaneousFireLoops] = { nullptr, nullptr, nullptr, nullptr };
+	float DistSqArr[MaxSimultaneousFireLoops] = { FLT_MAX, FLT_MAX, FLT_MAX, FLT_MAX };
+
+	for (const FFireDistance& Entry : Candidates)
+	{
+		for (int32 i = 0; i < MaxSimultaneousFireLoops; ++i)
+		{
+			if (Entry.DistanceSq < DistSqArr[i])
+			{
+				// 뒤로 밀기
+				for (int32 j = MaxSimultaneousFireLoops - 1; j > i; --j)
+				{
+					DistSqArr[j] = DistSqArr[j - 1];
+					Closest[j] = Closest[j - 1];
+				}
+				DistSqArr[i] = Entry.DistanceSq;
+				Closest[i] = Entry.Fire;
+				break;
+			}
+		}
+	}
+
+	int32 ChosenCount = 0;
+	for (AFireActor* Chosen : Closest)
+	{
+		if (Chosen)
+		{
+			++ChosenCount;
+		}
+	}
+
+	float VolumeScale = 1.0f;
+	if (ChosenCount > 1)
+	{
+		VolumeScale = 1.0f / FMath::Sqrt(static_cast<float>(ChosenCount));
+	}
+
+	// 선택된 N개만 재생/업데이트, 나머지 정지
+	for (const FFireDistance& Entry : Candidates)
+	{
+		AFireActor* Fire = Entry.Fire;
+		if (!Fire)
+		{
+			continue;
+		}
+
+		bool bShouldPlay = false;
+		for (AFireActor* Chosen : Closest)
+		{
+			if (Chosen == Fire)
+			{
+				bShouldPlay = true;
+				break;
+			}
+		}
+
+		if (bShouldPlay)
+		{
+			if (!Fire->FireLoopVoice && Fire->FireLoopSound)
+			{
+				Fire->FireLoopVoice = FAudioDevice::PlaySound3D(Fire->FireLoopSound, Fire->GetActorLocation(), VolumeScale, true);
+				Fire->FireLoopVolume = VolumeScale;
+			}
+			else if (Fire->FireLoopVoice)
+			{
+				if (FMath::Abs(Fire->FireLoopVolume - VolumeScale) > 0.05f)
+				{
+					FAudioDevice::StopSound(Fire->FireLoopVoice);
+					Fire->FireLoopVoice = FAudioDevice::PlaySound3D(Fire->FireLoopSound, Fire->GetActorLocation(), VolumeScale, true);
+					Fire->FireLoopVolume = VolumeScale;
+				}
+				else
+				{
+					FAudioDevice::UpdateSoundPosition(Fire->FireLoopVoice, Fire->GetActorLocation());
+				}
+			}
+		}
+		else
+		{
+			if (Fire->FireLoopVoice)
+			{
+				FAudioDevice::StopSound(Fire->FireLoopVoice);
+				Fire->FireLoopVoice = nullptr;
+				Fire->FireLoopVolume = 1.0f;
+			}
+		}
+	}
 }

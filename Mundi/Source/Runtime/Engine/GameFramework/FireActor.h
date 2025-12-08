@@ -7,6 +7,7 @@ class UParticleSystemComponent;
 class USphereComponent;
 class USound;
 struct IXAudio2SourceVoice;
+class UWorld;
 
 UCLASS(DisplayName = "불 액터", Description = "강렬한 불 이펙트를 생성하는 액터입니다")
 class AFireActor : public AActor
@@ -22,6 +23,7 @@ protected:
 public:
 	virtual void BeginPlay() override;
 	virtual void Tick(float DeltaSeconds) override;
+	virtual void EndPlay() override;
 
 	void DuplicateSubObjects() override;
 	void Serialize(const bool bInIsLoading, JSON& InOutHandle) override;
@@ -77,6 +79,9 @@ protected:
 	/** 현재 재생 중인 루프 사운드 Voice */
 	IXAudio2SourceVoice* FireLoopVoice;
 
+	/** 현재 루프 볼륨 (재생 시 반영한 값) */
+	float FireLoopVolume = 1.0f;
+
 	/** 꺼지는 사운드 쿨다운 타이머 */
 	float ExtinguishSoundCooldown;
 
@@ -85,4 +90,27 @@ protected:
 
 	/** 불 세기 (0.0 ~ 1.0) */
 	float FireIntensity;
+
+private:
+	/** 오디오 업데이트용 전역 등록 */
+	static void RegisterFireActor(AFireActor* FireActor);
+	static void UnregisterFireActor(AFireActor* FireActor);
+	static void UpdateFireLoopAudio(float DeltaSeconds);
+	static void PruneExtinguishVoices(float DeltaSeconds);
+	static void TryPlayExtinguishSound(USound* Sound, const FVector& Location);
+
+	static TArray<AFireActor*> ActiveFires;
+	static int32 AudioUpdateCursor;
+	static constexpr int32 MaxSimultaneousFireLoops = 4;
+	static constexpr int32 MaxSimultaneousExtinguishSounds = 4;
+	static constexpr float ExtinguishSoundWindow = 0.3f;
+	static constexpr float ExtinguishBaseVolume = 1.25f;
+
+	struct FExtinguishVoice
+	{
+		IXAudio2SourceVoice* Voice = nullptr;
+		float TimeLeft = 0.0f;
+	};
+
+	static TArray<FExtinguishVoice> ActiveExtinguishVoices;
 };
