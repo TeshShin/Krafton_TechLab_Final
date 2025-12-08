@@ -116,6 +116,9 @@ protected:
 	/** 아이템 수집 콜백 */
 	void OnItemCollected(const FString& ItemTag);
 
+	/** 공지 애니메이션 업데이트 */
+	void UpdateNoticeAnimation(float DeltaTime);
+
 public:
 	/** 아이템 수집 카운트 업데이트 (외부에서 호출 가능) */
 	void UpdateItemCount(const FString& ItemTag);
@@ -129,6 +132,13 @@ private:
 	float RemainingTime;
 	float LastSecond;
 	float ShakeAnimationTime;
+
+	// 공지 UI
+	TSharedPtr<STextBlock> NoticeWidget;  // 공지 이미지
+
+	// 공지 애니메이션 상태
+	float NoticeElapsedTime;  // 경과 시간 (0 ~ 3초)
+	static constexpr float NoticeDuration = 3.0f;  // 전체 애니메이션 시간
 
 	// 아이템 UI (3개 아이템: 소방복, 소화기, 산소통)
 	TSharedPtr<SButton> ItemImageWidgets[3];    // 아이템 이미지 (아틀라스)
