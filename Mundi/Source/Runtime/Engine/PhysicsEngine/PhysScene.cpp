@@ -89,6 +89,10 @@ void FPhysScene::StartFrame()
         // 이전 프레임의 씬 수정 플래그 리셋
         bSceneModifiedDuringFrame = false;
 
+        // ★ 이전 프레임에서 예약된 해제를 시뮬레이션 전에 처리
+        // 이렇게 하면 getActiveActors() 버퍼에 해제된 Actor가 포함되지 않음
+        FlushDeferredReleases();
+
         FlushDeferredAdds();
         FlushCommands();
         float DeltaTime = OwningWorld->GetDeltaTime(EDeltaTime::Game);
@@ -177,6 +181,8 @@ void FPhysScene::FlushDeferredReleases()
 {
     if (!PhysXScene) { return; }
 
+    bool bReleasedAny = false;
+
     // 일반 액터 해제
     {
         std::lock_guard<std::mutex> Lock(DeferredReleaseMutex);
@@ -186,6 +192,7 @@ void FPhysScene::FlushDeferredReleases()
             if (Actor)
             {
                 Actor->release();
+                bReleasedAny = true;
             }
         }
         DeferredReleaseQueue.Empty();
@@ -200,9 +207,17 @@ void FPhysScene::FlushDeferredReleases()
             if (Controller)
             {
                 Controller->release();
+                bReleasedAny = true;
             }
         }
         DeferredControllerReleaseQueue.Empty();
+    }
+
+    // ★ release() 후 getActiveActors() 버퍼가 즉시 업데이트되지 않을 수 있음
+    // 이 프레임의 SyncComponentsToBodies()를 스킵하여 dangling pointer 방지
+    if (bReleasedAny)
+    {
+        MarkSceneModified();
     }
 }
 
@@ -219,9 +234,36 @@ void FPhysScene::DeferReleaseController(PxController* InController)
         UE_LOG("[PhysX] DeferReleaseController: Cleared userData, added to deferred queue");
     }
 
+    // 씬 수정 플래그 설정 - getActiveActors() 버퍼가 무효화됨
+    // 이 플래그가 설정되면 SyncComponentsToBodies()가 스킵되어 크래시 방지
+    MarkSceneModified();
+
     // 해제 큐에 추가 (실제 해제는 FlushDeferredReleases에서)
     std::lock_guard<std::mutex> Lock(DeferredControllerReleaseMutex);
     DeferredControllerReleaseQueue.Add(InController);
+}
+
+// ==================================================================================
+// Active Body Management
+// ==================================================================================
+
+void FPhysScene::RegisterActiveBody(FBodyInstance* InBody)
+{
+    if (!InBody) { return; }
+
+    std::lock_guard<std::mutex> Lock(ActiveBodiesMutex);
+    if (!ActiveBodies.Contains(InBody))
+    {
+        ActiveBodies.Add(InBody);
+    }
+}
+
+void FPhysScene::UnregisterActiveBody(FBodyInstance* InBody)
+{
+    if (!InBody) { return; }
+
+    std::lock_guard<std::mutex> Lock(ActiveBodiesMutex);
+    ActiveBodies.Remove(InBody);
 }
 
 void FPhysScene::EnqueueCommand(std::function<void()> InCommand)
@@ -333,6 +375,16 @@ void FPhysScene::InitPhysScene()
 
 void FPhysScene::TermPhysScene()
 {
+    // ★ 활성 바디 목록 클리어 (씬 소멸 시 stale pointer 방지)
+    {
+        std::lock_guard<std::mutex> Lock(ActiveBodiesMutex);
+        ActiveBodies.Empty();
+    }
+
+    // ★ 씬 종료 전에 대기 중인 모든 해제 처리
+    // StartFrame()이 다시 호출되지 않으므로 여기서 정리
+    FlushDeferredReleases();
+
     // CCT 시스템 정리 (ControllerManager는 Scene보다 먼저 해제해야 함)
     if (ControllerManager)
     {
@@ -421,69 +473,42 @@ void FPhysScene::ProcessPhysScene()
 
     DispatchPhysNotifications_AssumesLocked();
 
-    FlushDeferredReleases();
+    // ★ FlushDeferredReleases()는 다음 프레임의 StartFrame()에서 호출됨
+    // 이렇게 하면 getActiveActors() 버퍼가 항상 유효한 Actor만 포함
 }
 
 void FPhysScene::SyncComponentsToBodies()
 {
     if (!PhysXScene) { return; }
 
-    // 프레임 중 씬이 수정되었으면 getActiveActors() 버퍼가 무효화됨
-    // 이 경우 동기화를 건너뛰고 다음 프레임에서 처리
-    if (bSceneModifiedDuringFrame)
+    // ★ getActiveActors() 대신 우리가 직접 관리하는 ActiveBodies 목록 사용
+    // 이렇게 하면 dangling pointer 문제가 완전히 해결됨
+
+    // 로컬 복사본으로 작업 (동기화 중 목록 변경 방지)
+    TArray<FBodyInstance*> LocalBodies;
     {
-        UE_LOG("[PhysScene] SyncComponentsToBodies skipped: scene was modified during frame");
-        return;
+        std::lock_guard<std::mutex> Lock(ActiveBodiesMutex);
+        LocalBodies = ActiveBodies;
     }
 
-    PxU32 NbActiveActors = 0;
-    PxActor** ActiveActors = PhysXScene->getActiveActors(NbActiveActors);
-
-    for (PxU32 i = 0; i < NbActiveActors; i++)
+    for (FBodyInstance* BodyInstance : LocalBodies)
     {
-        if (!ActiveActors[i]) { continue; }
-
-        // ★ 액터가 아직 씬에 있는지 확인 (TermBody에서 removeActor 후 getActiveActors가 여전히 반환할 수 있음)
-        if (!ActiveActors[i]->getScene()) { continue; }
-
-        PxRigidActor* RigidActor = ActiveActors[i]->is<PxRigidActor>();
-
-        if (!RigidActor) { continue; }
-
-        // userData가 nullptr이면 이미 정리된 바디/CCT (TermBody/DeferReleaseController에서 클리어됨)
-        void* UserData = RigidActor->userData;
-        if (!UserData) { continue; }
-
-        // 타입 안전한 캐스팅 사용 (CCT Actor인 경우 nullptr 반환)
-        FBodyInstance* BodyInstance = PhysicsUserDataCast<FBodyInstance>(UserData);
+        // null 체크
         if (!BodyInstance) { continue; }
 
-        // BodyInstance 유효성 검사: RigidActor가 일치하는지 확인
-        // (정리 중인 바디이거나 잘못된 포인터인 경우 방지)
-        if (!BodyInstance->IsValidBodyInstance() || BodyInstance->RigidActor != RigidActor)
-        {
-            continue;
-        }
+        // 유효한 바디인지 확인
+        if (!BodyInstance->IsValidBodyInstance()) { continue; }
 
         // 랙돌 바디는 SyncBonesFromPhysics()에서 별도 처리됨
-        if (BodyInstance->bIsRagdollBody)
-        {
-            continue;
-        }
+        if (BodyInstance->bIsRagdollBody) { continue; }
 
         // Kinematic 바디(bSimulatePhysics=false)는 사용자가 직접 제어하므로
         // 물리 시뮬레이션 결과로 덮어쓰지 않음
-        if (!BodyInstance->bSimulatePhysics)
-        {
-            continue;
-        }
+        if (!BodyInstance->bSimulatePhysics) { continue; }
 
         // OwnerComponent가 유효한지 확인
         UPrimitiveComponent* OwnerComp = BodyInstance->OwnerComponent;
-        if (!OwnerComp)
-        {
-            continue;
-        }
+        if (!OwnerComp) { continue; }
 
         FTransform NewTransform = BodyInstance->GetUnrealWorldTransform();
         NewTransform.Scale3D = OwnerComp->GetWorldScale();

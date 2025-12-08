@@ -381,6 +381,25 @@ private:
     /** 프레임 중 씬이 수정되었는지 (getActiveActors 버퍼 무효화 감지용) */
     bool bSceneModifiedDuringFrame = false;
 
+    // ==================================================================================
+    // Active Body Management (getActiveActors 대체)
+    // ==================================================================================
+
+    /** 활성 BodyInstance 목록 (우리가 직접 관리) */
+    TArray<struct FBodyInstance*> ActiveBodies;
+
+    /** ActiveBodies 접근용 뮤텍스 */
+    std::mutex ActiveBodiesMutex;
+
+public:
+    /** BodyInstance를 활성 목록에 등록 (InitBody에서 호출) */
+    void RegisterActiveBody(struct FBodyInstance* InBody);
+
+    /** BodyInstance를 활성 목록에서 제거 (TermBody에서 호출) */
+    void UnregisterActiveBody(struct FBodyInstance* InBody);
+
+private:
+
     /** 물리 시뮬레이션 누적 시간 (서브스테핑용) */
     float PhysicsAccumulator = 0.0f;
 

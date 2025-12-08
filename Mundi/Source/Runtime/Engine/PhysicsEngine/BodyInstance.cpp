@@ -205,10 +205,19 @@ void FBodyInstance::InitBody(UBodySetup* Setup, const FTransform& Transform, UPr
         PhysScene->DeferAddActor(RigidActor);
         OwningAggregate = nullptr;
     }
+
+    // 활성 바디 목록에 등록 (SyncComponentsToBodies에서 사용)
+    PhysScene->RegisterActiveBody(this);
 }
 
 void FBodyInstance::TermBody()
 {
+    // 활성 바디 목록에서 제거 (dangling pointer 방지)
+    if (PhysScene)
+    {
+        PhysScene->UnregisterActiveBody(this);
+    }
+
     LifeHandle = nullptr;
 
     if (RigidActor)
