@@ -31,7 +31,7 @@ void ATimerTrigger::BeginPlay()
     }
 
     UE_LOG("[info] TimerTrigger: BeginPlay - %s (TriggerTime: %.1fs, AutoStart: %d)",
-        ObjectName.ToString(), TriggerTime, bAutoStart);
+        ObjectName.ToString().c_str(), TriggerTime, bAutoStart);
 }
 
 void ATimerTrigger::Tick(float DeltaSeconds)
@@ -51,7 +51,7 @@ void ATimerTrigger::Tick(float DeltaSeconds)
     // 남은 시간 로그 (5초마다)
     if (bShowRemainingTime && ElapsedTime - LastLogTime >= 5.0f)
     {
-        UE_LOG("[info] TimerTrigger: %s - Remaining time: %.1fs", ObjectName.ToString(), RemainingTime);
+        UE_LOG("[info] TimerTrigger: %s - Remaining time: %.1fs", ObjectName.ToString().c_str(), RemainingTime);
         LastLogTime = ElapsedTime;
     }
 
@@ -62,7 +62,7 @@ void ATimerTrigger::Tick(float DeltaSeconds)
         bIsRunning = false;
         RemainingTime = 0.0f;
 
-        UE_LOG("[info] TimerTrigger: Timer expired - %s", ObjectName.ToString());
+        UE_LOG("[info] TimerTrigger: Timer expired - %s", ObjectName.ToString().c_str());
         CallLuaOnTimerExpired();
     }
 }
@@ -76,13 +76,13 @@ void ATimerTrigger::StartTimer()
     }
 
     bIsRunning = true;
-    UE_LOG("[info] TimerTrigger: Timer started - %s (%.1fs)", ObjectName.ToString(), TriggerTime);
+    UE_LOG("[info] TimerTrigger: Timer started - %s (%.1fs)", ObjectName.ToString().c_str(), TriggerTime);
 }
 
 void ATimerTrigger::StopTimer()
 {
     bIsRunning = false;
-    UE_LOG("[info] TimerTrigger: Timer stopped - %s (Elapsed: %.1fs)", ObjectName.ToString(), ElapsedTime);
+    UE_LOG("[info] TimerTrigger: Timer stopped - %s (Elapsed: %.1fs)", ObjectName.ToString().c_str(), ElapsedTime);
 }
 
 void ATimerTrigger::ResetTimer()
@@ -93,7 +93,7 @@ void ATimerTrigger::ResetTimer()
     RemainingTime = TriggerTime;
     LastLogTime = 0.0f;
 
-    UE_LOG("[info] TimerTrigger: Timer reset - %s", ObjectName.ToString());
+    UE_LOG("[info] TimerTrigger: Timer reset - %s", ObjectName.ToString().c_str());
 }
 
 void ATimerTrigger::CallLuaOnTimerExpired()
