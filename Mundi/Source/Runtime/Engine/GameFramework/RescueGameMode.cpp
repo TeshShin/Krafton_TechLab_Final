@@ -885,18 +885,18 @@ void ARescueGameMode::TransitionToEnding(bool bPlayerDead)
 
 void ARescueGameMode::InitializeSounds()
 {
-    // BGM 로드 및 재생 (루프)
+    // BGM 로드 및 재생 (루프, 2D 사운드)
     BGMSound = UResourceManager::GetInstance().Load<USound>(BGMSoundPath);
     if (BGMSound)
     {
-        BGMVoice = FAudioDevice::PlaySound3D(BGMSound, FVector::Zero(), 0.5f, true);
+        BGMVoice = FAudioDevice::PlaySound2D(BGMSound, 0.5f, true);
     }
 
-    // 사이렌 로드 및 재생 (1회)
+    // 사이렌 로드 및 재생 (1회, 2D 사운드)
     SirenSound = UResourceManager::GetInstance().Load<USound>(SirenSoundPath);
     if (SirenSound)
     {
-        FAudioDevice::PlaySound3D(SirenSound, FVector::Zero(), 0.7f, false);
+        FAudioDevice::PlaySound2D(SirenSound, 0.7f, false);
     }
 }
 

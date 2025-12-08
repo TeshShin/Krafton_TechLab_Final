@@ -369,7 +369,7 @@ void AEndGameMode::UpdateSequence(float DeltaTime)
                 // 크레딧 사운드 재생
                 if (CheckSound)
                 {
-                    FAudioDevice::PlaySound3D(CheckSound, FVector::Zero(), 1.0f, false);
+                    FAudioDevice::PlaySound2D(CheckSound, 1.0f, false);
                 }
 
                 CurrentState = ESequenceState::ShowCredit;
@@ -503,7 +503,7 @@ void AEndGameMode::StartRescuedCountAnimation()
     // 체크 사운드 재생
     if (CheckSound)
     {
-        FAudioDevice::PlaySound3D(CheckSound, FVector::Zero(), 1.0f, false);
+        FAudioDevice::PlaySound2D(CheckSound, 1.0f, false);
     }
 }
 
@@ -517,7 +517,7 @@ void AEndGameMode::StartScoreCountAnimation()
     // 체크 사운드 재생
     if (CheckSound)
     {
-        FAudioDevice::PlaySound3D(CheckSound, FVector::Zero(), 1.0f, false);
+        FAudioDevice::PlaySound2D(CheckSound, 1.0f, false);
     }
 }
 
@@ -526,7 +526,7 @@ void AEndGameMode::StartStampAnimation()
     // 도장 사운드 재생
     if (StampSound)
     {
-        FAudioDevice::PlaySound3D(StampSound, FVector::Zero(), 1.0f, false);
+        FAudioDevice::PlaySound2D(StampSound, 1.0f, false);
     }
 
     // 도장 진동
@@ -677,7 +677,7 @@ void AEndGameMode::UpdateTypingEffect(float DeltaTime)
         // 타이핑 사운드 재생 (딱 1번만, 타이핑 시작할 때)
         if (TypingSound && !bTypingSoundPlayed)
         {
-            FAudioDevice::PlaySound3D(TypingSound, FVector::Zero(), 0.5f, false);
+            FAudioDevice::PlaySound2D(TypingSound, 0.5f, false);
             bTypingSoundPlayed = true;
         }
     }
@@ -698,7 +698,7 @@ void AEndGameMode::OnMainMenuButtonClicked()
             if (EndGameMode && EndGameMode->ButtonSound)
             {
                 UE_LOG("[info] EndGameMode: Playing button click sound");
-                FAudioDevice::PlaySound3D(EndGameMode->ButtonSound, FVector::Zero(), 1.0f, false);
+                FAudioDevice::PlaySound2D(EndGameMode->ButtonSound, 1.0f, false);
             }
 
             // GameInstance 초기화 (게임 진행 데이터 초기화)

@@ -224,7 +224,7 @@ void AItemCollectGameMode::Tick(float DeltaTime)
 			// 시계 알람 재생 (limit 화면용)
 			if (ClockAlarmSound)
 			{
-				FAudioDevice::PlaySound3D(ClockAlarmSound, FVector::Zero(), 1.0f, false);
+				FAudioDevice::PlaySound2D(ClockAlarmSound, 1.0f, false);
 			}
 
 			// Limit 위젯 생성 및 표시
@@ -681,18 +681,18 @@ void AItemCollectGameMode::UpdateNoticeAnimation(float DeltaTime)
 
 void AItemCollectGameMode::InitializeSounds()
 {
-	// BGM 로드 및 재생 (루프)
+	// BGM 로드 및 재생 (루프, 2D 사운드)
 	BGMSound = UResourceManager::GetInstance().Load<USound>(BGMSoundPath);
 	if (BGMSound)
 	{
-		BGMVoice = FAudioDevice::PlaySound3D(BGMSound, FVector::Zero(), 0.5f, true);
+		BGMVoice = FAudioDevice::PlaySound2D(BGMSound, 0.5f, true);
 	}
 
-	// 사이렌 로드 및 재생 (1회)
+	// 사이렌 로드 및 재생 (1회, 2D 사운드)
 	SirenSound = UResourceManager::GetInstance().Load<USound>(SirenSoundPath);
 	if (SirenSound)
 	{
-		FAudioDevice::PlaySound3D(SirenSound, FVector::Zero(), 0.7f, false);
+		FAudioDevice::PlaySound2D(SirenSound, 0.7f, false);
 	}
 
 	// 시간 종료 알람 사운드 로드 (재생은 limit 화면에서)

@@ -229,7 +229,7 @@ void AIntroGameMode::InitializeSounds()
     BGMSound = UResourceManager::GetInstance().Load<USound>(BGMSoundPath);
     if (BGMSound)
     {
-        BGMVoice = FAudioDevice::PlaySound3D(BGMSound, FVector::Zero(), 0.5f, true);
+        BGMVoice = FAudioDevice::PlaySound2D(BGMSound, 0.5f, true);
     }
 }
 
@@ -327,7 +327,7 @@ void AIntroGameMode::OnStartButtonClicked()
     // 버튼 사운드 재생
     if (ButtonSound)
     {
-        FAudioDevice::PlaySound3D(ButtonSound, FVector::Zero(), 1.0f, false);
+        FAudioDevice::PlaySound2D(ButtonSound, 1.0f, false);
     }
 
     // 모든 UI 즉시 숨김
