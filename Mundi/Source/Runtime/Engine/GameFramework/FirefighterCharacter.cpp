@@ -24,6 +24,7 @@
 #include "BoneSocketComponent.h"
 #include "SkeletalMesh.h"
 #include "GameObject.h"
+#include "../Audio/Sound.h"
 
 AFirefighterCharacter::AFirefighterCharacter()
 	: bOrientRotationToMovement(true)
@@ -133,6 +134,36 @@ AFirefighterCharacter::AFirefighterCharacter()
 		}
 	}
 
+	// 발먼지 파티클 로드 (공용)
+	UParticleSystem* FootDustEffect = UResourceManager::GetInstance().Load<UParticleSystem>("Data/Particles/FootDust.particle");
+
+	// 왼발 먼지 파티클 컴포넌트 생성
+	LeftFootDustParticle = CreateDefaultSubobject<UParticleSystemComponent>("LeftFootDustParticle");
+	if (LeftFootDustParticle && CapsuleComponent)
+	{
+		LeftFootDustParticle->SetupAttachment(CapsuleComponent);
+		LeftFootDustParticle->bAutoActivate = false;
+		if (FootDustEffect)
+		{
+			LeftFootDustParticle->SetTemplate(FootDustEffect);
+		}
+	}
+
+	// 오른발 먼지 파티클 컴포넌트 생성
+	RightFootDustParticle = CreateDefaultSubobject<UParticleSystemComponent>("RightFootDustParticle");
+	if (RightFootDustParticle && CapsuleComponent)
+	{
+		RightFootDustParticle->SetupAttachment(CapsuleComponent);
+		RightFootDustParticle->bAutoActivate = false;
+		if (FootDustEffect)
+		{
+			RightFootDustParticle->SetTemplate(FootDustEffect);
+		}
+	}
+
+	// 발소리 사운드 로드
+	FootstepSound = UResourceManager::GetInstance().Load<USound>("Data/Audio/FirefighterStep.wav");
+
 	// 왼손 본 소켓 컴포넌트 생성 (사람 들기용 - Neck 부착)
 	LeftHandSocket = CreateDefaultSubobject<UBoneSocketComponent>("LeftHandSocket");
 	if (LeftHandSocket && MeshComponent)
@@ -192,6 +223,16 @@ void AFirefighterCharacter::HandleAnimNotify(const FAnimNotifyEvent& NotifyEvent
 	Super::HandleAnimNotify(NotifyEvent);
 
 	FString NotifyName = NotifyEvent.NotifyName.ToString();
+
+	// 발 착지 노티파이 처리 - 발먼지 파티클 재생
+	if (NotifyName == "LeftFootLanding")
+	{
+		PlayFootDustEffect(true);
+	}
+	else if (NotifyName == "RightFootLanding")
+	{
+		PlayFootDustEffect(false);
+	}
 
 	// Lua 스크립트에 AnimNotify 전달 (애니메이션 제어용)
 	if (LuaScript)
@@ -399,6 +440,49 @@ void AFirefighterCharacter::StopWaterMagicEffect()
 	{
 		WaterMagicParticle->DeactivateSystem();
 	}
+}
+
+void AFirefighterCharacter::PlayFootDustEffect(bool bLeftFoot)
+{
+	UParticleSystemComponent* DustParticle = bLeftFoot ? LeftFootDustParticle : RightFootDustParticle;
+	if (!DustParticle || !CapsuleComponent)
+	{
+		return;
+	}
+
+	// 캡슐 바닥 위치 계산 (액터 위치 - 캡슐 반높이)
+	FVector ActorPos = GetActorLocation();
+	float CapsuleHalfHeight = CapsuleComponent->GetScaledCapsuleHalfHeight();
+	FVector BaseFootPos = ActorPos - FVector(0.0f, 0.0f, CapsuleHalfHeight);
+
+	// 캐릭터 방향 기준 좌/우 오프셋 계산
+	FQuat ActorRot = GetActorRotation();
+	FVector RightDir = ActorRot.RotateVector(FVector(0.0f, 1.0f, 0.0f));  // 캐릭터의 오른쪽 방향
+
+	// 왼발은 왼쪽으로, 오른발은 오른쪽으로 오프셋 (스케일 적용)
+	float FootOffset = 0.15f * CharacterScale;  // 발 간격
+	FVector FootPosition = BaseFootPos + RightDir * (bLeftFoot ? -FootOffset : FootOffset);
+
+	// 월드 좌표로 직접 설정
+	DustParticle->SetWorldLocation(FootPosition);
+
+	// 파티클 재생
+	DustParticle->ResetParticles();
+	DustParticle->ActivateSystem();
+
+	// 발소리 재생
+	PlayFootstepSound(FootPosition);
+}
+
+void AFirefighterCharacter::PlayFootstepSound(const FVector& FootPosition)
+{
+	if (!FootstepSound)
+	{
+		return;
+	}
+
+	// 3D 공간 사운드로 발소리 재생
+	FAudioDevice::PlaySound3D(FootstepSound, FootPosition, 0.5f, false);
 }
 
 void AFirefighterCharacter::DrainExtinguishGauge(float Amount)

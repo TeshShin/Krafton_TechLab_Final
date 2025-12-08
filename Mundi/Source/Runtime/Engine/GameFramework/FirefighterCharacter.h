@@ -7,6 +7,7 @@ class USphereComponent;
 class ULuaScriptComponent;
 class UParticleSystemComponent;
 class UBoneSocketComponent;
+class USound;
 
 UCLASS(DisplayName = "파이어 파이터 캐릭터", Description = "렛츠고 파이어 파이터")
 class AFirefighterCharacter : public ACharacter
@@ -164,6 +165,21 @@ private:
 
     /** 물 마법 파티클 컴포넌트 */
     UParticleSystemComponent* WaterMagicParticle;
+
+    /** 왼발 먼지 파티클 컴포넌트 */
+    UParticleSystemComponent* LeftFootDustParticle;
+
+    /** 오른발 먼지 파티클 컴포넌트 */
+    UParticleSystemComponent* RightFootDustParticle;
+
+    /** 발먼지 파티클 재생 (내부 함수) */
+    void PlayFootDustEffect(bool bLeftFoot);
+
+    /** 발소리 재생 (내부 함수) */
+    void PlayFootstepSound(const FVector& FootPosition);
+
+    /** 발소리 사운드 */
+    USound* FootstepSound = nullptr;
 
     /** 데미지 쿨타임 타이머 */
     float DamageCooldownTimer = 0.0f;

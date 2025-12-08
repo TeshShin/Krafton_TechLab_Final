@@ -1,0 +1,33 @@
+{
+  "FrameRate" : 30.000000,
+  "NotifyTracks" : [{
+      "Name" : "Track 0",
+      "Notifies" : [{
+          "Color" : [1.000000, 1.000000, 1.000000, 1.000000],
+          "Duration" : 0.000000,
+          "NotifyName" : "LeftFootLanding",
+          "SoundPath" : "",
+          "TriggerTime" : 0.258460
+        }, {
+          "Color" : [1.000000, 1.000000, 1.000000, 1.000000],
+          "Duration" : 0.000000,
+          "NotifyName" : "RightFootLanding",
+          "SoundPath" : "",
+          "TriggerTime" : 0.566048
+        }, {
+          "Color" : [1.000000, 1.000000, 1.000000, 1.000000],
+          "Duration" : 0.000000,
+          "NotifyName" : "LeftFootLanding",
+          "SoundPath" : "",
+          "TriggerTime" : 0.880045
+        }, {
+          "Color" : [1.000000, 1.000000, 1.000000, 1.000000],
+          "Duration" : 0.000000,
+          "NotifyName" : "RightFootLanding",
+          "SoundPath" : "",
+          "TriggerTime" : 1.187634
+        }]
+    }],
+  "NumberOfFrames" : 38,
+  "SourceFilePath" : "Data/firefighter/Firefighter_With_Cloth_Running_With_Object_mixamo.com"
+}

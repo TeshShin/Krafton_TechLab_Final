@@ -1,0 +1,21 @@
+{
+  "FrameRate" : 30.000000,
+  "NotifyTracks" : [{
+      "Name" : "Track 0",
+      "Notifies" : [{
+          "Color" : [1.000000, 1.000000, 1.000000, 1.000000],
+          "Duration" : 0.000000,
+          "NotifyName" : "LeftFootLanding",
+          "SoundPath" : "",
+          "TriggerTime" : 0.341299
+        }, {
+          "Color" : [1.000000, 1.000000, 1.000000, 1.000000],
+          "Duration" : 0.000000,
+          "NotifyName" : "RightFootLanding",
+          "SoundPath" : "",
+          "TriggerTime" : 0.802131
+        }]
+    }],
+  "NumberOfFrames" : 31,
+  "SourceFilePath" : "Data/firefighter/Firefighter_Without_Cloth_Walking_mixamo.com"
+}

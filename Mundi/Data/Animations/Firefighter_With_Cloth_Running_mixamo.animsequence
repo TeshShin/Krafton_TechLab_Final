@@ -1,0 +1,21 @@
+{
+  "FrameRate" : 30.000000,
+  "NotifyTracks" : [{
+      "Name" : "Track 0",
+      "Notifies" : [{
+          "Color" : [1.000000, 1.000000, 1.000000, 1.000000],
+          "Duration" : 0.000000,
+          "NotifyName" : "LeftFootLanding",
+          "SoundPath" : "",
+          "TriggerTime" : 0.229623
+        }, {
+          "Color" : [1.000000, 1.000000, 1.000000, 1.000000],
+          "Duration" : 0.000000,
+          "NotifyName" : "RightFootLanding",
+          "SoundPath" : "",
+          "TriggerTime" : 0.527600
+        }]
+    }],
+  "NumberOfFrames" : 19,
+  "SourceFilePath" : "Data/Animations/Firefighter_With_Cloth_Running_mixamo.animsequence"
+}

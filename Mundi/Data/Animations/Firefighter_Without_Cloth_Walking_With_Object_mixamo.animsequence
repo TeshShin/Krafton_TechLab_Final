@@ -1,0 +1,33 @@
+{
+  "FrameRate" : 30.000000,
+  "NotifyTracks" : [{
+      "Name" : "Track 0",
+      "Notifies" : [{
+          "Color" : [1.000000, 1.000000, 1.000000, 1.000000],
+          "Duration" : 0.000000,
+          "NotifyName" : "LeftFootLanding",
+          "SoundPath" : "",
+          "TriggerTime" : 0.424864
+        }, {
+          "Color" : [1.000000, 1.000000, 1.000000, 1.000000],
+          "Duration" : 0.000000,
+          "NotifyName" : "RightFootLanding",
+          "SoundPath" : "",
+          "TriggerTime" : 1.209229
+        }, {
+          "Color" : [1.000000, 1.000000, 1.000000, 1.000000],
+          "Duration" : 0.000000,
+          "NotifyName" : "LeftFootLanding",
+          "SoundPath" : "",
+          "TriggerTime" : 1.956243
+        }, {
+          "Color" : [1.000000, 1.000000, 1.000000, 1.000000],
+          "Duration" : 0.000000,
+          "NotifyName" : "RightFootLanding",
+          "SoundPath" : "",
+          "TriggerTime" : 2.642562
+        }]
+    }],
+  "NumberOfFrames" : 86,
+  "SourceFilePath" : "Data/firefighter/Firefighter_Without_Cloth_Walking_With_Object_mixamo.com"
+}
