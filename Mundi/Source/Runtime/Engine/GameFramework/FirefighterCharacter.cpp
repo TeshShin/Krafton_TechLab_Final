@@ -8,6 +8,7 @@
 #include "AudioComponent.h"
 #include "FAudioDevice.h"
 #include "PlayerController.h"
+#include "PlayerCameraManager.h"
 #include "Controller.h"
 #include "InputComponent.h"
 #include "InputManager.h"
@@ -816,6 +817,16 @@ bool AFirefighterCharacter::PlayDamageEffectsIfReady()
 	bDamageVibrating = true;
 	DamageVibrationTimer = 0.0f;
 	DamageVibrationDuration = 0.2f;
+
+	// 피격 카메라 쉐이크
+	if (APlayerController* PC = Cast<APlayerController>(GetController()))
+	{
+		if (APlayerCameraManager* CamMgr = PC->GetPlayerCameraManager())
+		{
+			// Duration, AmpLoc, AmpRotDeg, Frequency
+			CamMgr->StartCameraShake(0.2f, 0.1f, 1.5f, 15.0f);
+		}
+	}
 
 	return true;
 }
